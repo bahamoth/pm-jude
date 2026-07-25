@@ -426,6 +426,30 @@
         "body": "완료 — `src/runner/local-runner.ts`(로직) + `src/cli/intake.ts`(얇은 배선) + `pnpm intake` 스크립트. 러너 시임 테스트 2건(영속화 관통, 버전 동기화 아이덤포턴시) + 저장소 `findVersionId` 계약 테스트. 사용자 요청(2026-07-25 「좀 더 영속적인 걸 원한다」)으로 보드 외 추가된 작업."
       }
     ]
+  },
+  {
+    "id": 13,
+    "title": "CI — PR 게이트(포맷·린트·타입·테스트) + release-please 버저닝",
+    "state": "closed",
+    "labels": [
+      "ready-for-agent"
+    ],
+    "type": "task",
+    "assignee": "claude",
+    "parent": null,
+    "blockedBy": [
+      1
+    ],
+    "created": "2026-07-25",
+    "updated": "2026-07-25",
+    "body": "## 목표\nwhats-in-my-cc 리포지토리의 CI 규칙을 참고해, PR 게이트와 컨벤셔널 커밋 기반 자동 버저닝을 도입.\n\n## 수용기준\n- PR마다 Prettier·ESLint·typecheck·vitest가 CI에서 실행되고, 같은 PR의 후속 push는 진행 중 run을 취소\n- main push 시 release-please(manifest 방식)가 컨벤셔널 커밋을 해석해 릴리스 PR·태그·CHANGELOG 생성\n- pnpm 버전은 package.json packageManager 필드로 고정\n\n## 참조\nwhats-in-my-cc `.github/workflows/{ci,release-please}.yml`, `.release-please-config.json`",
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-25",
+        "body": "완료 — `.github/workflows/ci.yml`(pull_request 트리거, concurrency cancel-in-progress, pnpm/action-setup→setup-node(cache: pnpm)→frozen-lockfile 설치→format:check·lint·typecheck·test), `.github/workflows/release-please.yml`(main push, googleapis/release-please-action@v4, 토큰 폴백 체인), `.release-please-config.json`(release-type: node)·manifest(0.0.0). 사용자 요청으로 보드 외 추가된 작업."
+      }
+    ]
   }
 ]
 </script>
