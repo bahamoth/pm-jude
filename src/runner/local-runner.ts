@@ -37,7 +37,7 @@ export interface ClarificationRunResult {
 }
 
 /** 카탈로그의 프롬프트 버전과 임시 임계치·슬롯 스키마를 DB 버전 레지스트리에 아이덤포턴트하게 동기화한다. */
-function ensureVersionAxes(store: SessionStore, registry: PromptRegistry) {
+export function ensureVersionAxes(store: SessionStore, registry: PromptRegistry) {
   const clarification = registry.get(CLARIFICATION_V0);
   const promptVersionId =
     store.findVersionId('prompt', clarification.name, clarification.semver) ??
