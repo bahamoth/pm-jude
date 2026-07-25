@@ -6,5 +6,13 @@ export default tseslint.config(
   { ignores: ['node_modules/', 'dist/', 'drizzle/', 'coverage/', 'data/'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  {
+    rules: {
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', ignoreRestSiblings: true },
+      ],
+    },
+  },
   prettier,
 );
