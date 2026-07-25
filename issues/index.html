@@ -258,12 +258,12 @@
   {
     "id": 5,
     "title": "명확화 프롬프트 v0 — 표적 질문 생성",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
     "type": "task",
-    "assignee": null,
+    "assignee": "claude",
     "parent": null,
     "blockedBy": [
       2,
@@ -272,7 +272,13 @@
     "created": "2026-07-25",
     "updated": "2026-07-25",
     "body": "## 목표\nClarifyGPT식 표적 질문 생성 프롬프트. 동일 요청의 해석 후보를 다중 전개하고 갈라지는 지점을 질문으로 전환.\n\n## 수용기준\n- 한 번에 3~5문항, 요청자 언어, 비즈니스 어휘, 예시 선택지 포함\n- 각 질문에 「모르겠다 / 개발팀이 정할 문제」 경로 상시 포함 (US-10)\n- 각 질문이 특정 모호성·공백 슬롯에 매핑됨을 출력 스키마로 강제\n- 레지스트리 등록 + 버전 참조\n\n## 참조\nPRD F2b",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-25",
+        "body": "완료 — `src/prompts/clarification-v0.ts` + `catalog.ts`(clarification@0.1.0). 3~5문항·질문별 슬롯/모호성 매핑·예시 선택지 2개 이상·「모르겠다/개발팀이 정할 문제」 경로를 zod 스키마로 강제(위반 시 게이트웨이가 재시도). 해석 다중 전개는 interpretations 필드로 관측 가능. 스키마 red 테스트 6건 + 조립 smoke(레지스트리→게이트웨이→저장소 관통) 추가. LLM 출력 품질 자체는 #11 골든셋 평가 몫."
+      }
+    ]
   },
   {
     "id": 6,
