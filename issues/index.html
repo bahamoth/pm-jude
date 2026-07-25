@@ -234,12 +234,12 @@
   {
     "id": 4,
     "title": "세션 저장소 스키마 구현",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
     "type": "task",
-    "assignee": null,
+    "assignee": "claude",
     "parent": null,
     "blockedBy": [
       1
@@ -247,7 +247,13 @@
     "created": "2026-07-25",
     "updated": "2026-07-25",
     "body": "## 목표\ndocs/data-model.md의 Phase 0 필요분을 SQLite 스키마로 구현.\n\n## 수용기준\n- session / requester / session_requester / utterance / slot_state / signal / 버전 레지스트리 3종\n- 원문 전사 필드에 삭제 경로 없음 (원칙 7)\n- 신호는 버전 귀속 5축 강제 (F11 — NOT NULL)\n- PoC 세션 export (골든셋 시드용 익명화 뷰)\n\n## 참조\ndocs/data-model.md, ADR-0006",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-25",
+        "body": "완료 — `src/store/`. Drizzle 스키마 9테이블(session/requester/session_requester/utterance/slot_state/signal + 버전 레지스트리 3종), 마이그레이션 2건. 원문 전사는 API에 삭제 경로가 없고 DB 트리거가 우회 SQL의 DELETE/원문 UPDATE도 차단(0001 마이그레이션, 테스트로 실검증). 신호 5축은 NOT NULL+FK 강제. `exportSessions()`가 요청자 식별 정보를 제거한 골든셋 시드 뷰 제공. 실제 SQLite(:memory:/임시 파일)로 테스트 10건."
+      }
+    ]
   },
   {
     "id": 5,
