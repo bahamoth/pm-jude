@@ -93,9 +93,9 @@ describe('세션 저장소', () => {
       'thresholdVersionId',
       'slotSchemaVersionId',
     ] as const) {
-      expect(() =>
-        store.recordSignal({ ...base, [axis]: undefined as unknown as string }),
-      ).toThrow(/NOT NULL/);
+      expect(() => store.recordSignal({ ...base, [axis]: undefined as unknown as string })).toThrow(
+        /NOT NULL/,
+      );
     }
     expect(store.listSignals(session.id)).toHaveLength(0);
   });

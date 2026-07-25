@@ -131,7 +131,10 @@ describe('LLM 게이트웨이 complete()', () => {
     const second = gateway.complete('clarification@0.1.0', {});
     await vi.waitFor(() => expect(backend.requests).toHaveLength(1));
 
-    releaseFirst({ outputText: '{"answer":"첫 번째"}', usage: { inputTokens: 1, outputTokens: 1 } });
+    releaseFirst({
+      outputText: '{"answer":"첫 번째"}',
+      usage: { inputTokens: 1, outputTokens: 1 },
+    });
     await expect(first).resolves.toMatchObject({ output: { answer: '첫 번째' } });
     await expect(second).resolves.toMatchObject({ output: { answer: '두 번째' } });
     expect(backend.requests).toHaveLength(2);
