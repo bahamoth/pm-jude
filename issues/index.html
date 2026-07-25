@@ -164,18 +164,24 @@
   {
     "id": 1,
     "title": "Phase 0 리포지토리 스캐폴딩",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
     "type": "task",
-    "assignee": null,
+    "assignee": "claude",
     "parent": null,
     "blockedBy": [],
     "created": "2026-07-25",
     "updated": "2026-07-25",
     "body": "## 목표\nTypeScript + pnpm 프로젝트 초기화. Phase 0 갈래 A의 공통 기반.\n\n## 수용기준\n- pnpm workspace 없이 단일 패키지 (모노레포는 Phase 1 결정)\n- TypeScript strict, ESLint/Prettier\n- SQLite + 마이그레이션 도구 (Drizzle 권장 — ADR-0006, Postgres 전환 경로 확보)\n- `.env` 규약과 예시 파일\n\n## 참조\ndocs/phase0-plan.md #1, ADR-0005, ADR-0006",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-25",
+        "body": "완료 — 단일 패키지, TypeScript strict(TS6, noUncheckedIndexedAccess), ESLint flat config + Prettier, vitest, Drizzle + better-sqlite3 + drizzle-kit 마이그레이션, `.env.example` 규약(dotenv 대신 `node --env-file`). typescript-eslint가 TS7 미지원이라 TS는 ^6으로 고정."
+      }
+    ]
   },
   {
     "id": 2,
