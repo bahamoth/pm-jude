@@ -186,12 +186,12 @@
   {
     "id": 2,
     "title": "LLM 게이트웨이 인터페이스 + Agent SDK 백엔드",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
     "type": "task",
-    "assignee": null,
+    "assignee": "claude",
     "parent": null,
     "blockedBy": [
       1
@@ -199,7 +199,13 @@
     "created": "2026-07-25",
     "updated": "2026-07-25",
     "body": "## 목표\n게이트웨이 표준 인터페이스 `complete(promptVersion, input) → structuredOutput` 구현. 백엔드는 Claude Agent SDK.\n\n## 수용기준\n- 하네스 호출이 게이트웨이 외부로 누출되지 않음 (F14)\n- 구조화 출력 스키마 검증 (파싱 실패 시 재시도)\n- 파일시스템·셸 도구 비활성화\n- 타임아웃·동시 실행 상한·비용/사용량 로깅\n- 세션 컨텍스트는 저장소에서 조립해 무상태 호출로 주입\n\n## 참조\nPRD F14, ADR-0005",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-25",
+        "body": "완료 — `src/gateway/`. `LlmGateway.complete(promptRef, input)`이 레지스트리 해석 → 백엔드 호출 → JSON 파싱(펜스 허용) → zod 스키마 검증. 검증 실패 재시도(기본 1회), 버전 참조 없는 호출은 백엔드 미호출 거부, 타임아웃(AbortSignal 전파)·동시 실행 상한·호출별 사용량/비용 로깅. 백엔드는 `LlmBackend` 인터페이스 뒤에 격리 — 테스트 14건은 전부 fake 백엔드로 수행, `AgentSdkBackend`는 `tools: []`(전체 도구 비활성)·`maxTurns: 1` 무상태 호출의 얇은 어댑터."
+      }
+    ]
   },
   {
     "id": 3,
