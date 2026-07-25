@@ -316,3 +316,42 @@ describe('세션 저장소', () => {
     expect(dump).not.toContain(requesterId);
   });
 });
+
+describe('채널 스레드 매핑과 상태 전이 (#8 Slack 러너 지원)', () => {
+  it('채널 스레드 키로 세션을 찾을 수 있다 — 재시작 후에도 스레드가 세션에 이어진다', () => {
+    const { store, versionAxes } = makeStore();
+
+    const session = store.createSession({
+      originChannel: 'slack',
+      channelThreadKey: 'slack:C0123:1719999999.000100',
+      ...versionAxes,
+    });
+
+    expect(store.findSessionByThreadKey('slack:C0123:1719999999.000100')?.id).toBe(session.id);
+    expect(store.findSessionByThreadKey('slack:C0123:없는스레드')).toBeNull();
+  });
+
+  it('상태·왕복 수·종결 상태를 갱신할 수 있고, 종결 시 closedAt이 남는다', () => {
+    const { store, versionAxes } = makeStore();
+    const session = store.createSession({ originChannel: 'slack', ...versionAxes });
+
+    store.updateSessionState(session.id, { status: 'clarifying', roundCount: 1 });
+    expect(store.getSession(session.id)).toMatchObject({
+      status: 'clarifying',
+      roundCount: 1,
+      closedAt: null,
+    });
+
+    store.updateSessionState(session.id, {
+      status: 'closed',
+      terminalState: 'on_hold_insufficient_info',
+    });
+    const closed = store.getSession(session.id);
+    expect(closed).toMatchObject({
+      status: 'closed',
+      terminalState: 'on_hold_insufficient_info',
+      roundCount: 1, // 갱신하지 않은 필드는 유지된다
+    });
+    expect(closed?.closedAt).not.toBeNull();
+  });
+});
