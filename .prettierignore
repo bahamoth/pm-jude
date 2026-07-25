@@ -1,0 +1,7 @@
+# 이슈 보드 셸은 편집 금지 대상 (docs/agents/issue-tracker.md) — 포매터도 손대지 않는다
+issues/index.html
+# 산문 문서는 포맷 대상이 아니다
+docs/
+*.md
+pnpm-lock.yaml
+src/store/migrations/

@@ -303,12 +303,12 @@
   {
     "id": 7,
     "title": "requirements 생성 프롬프트 v0",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
     "type": "task",
-    "assignee": null,
+    "assignee": "claude",
     "parent": null,
     "blockedBy": [
       2,
@@ -317,7 +317,13 @@
     "created": "2026-07-25",
     "updated": "2026-07-25",
     "body": "## 목표\n명확화 결과를 requirements 문서로 변환하는 프롬프트.\n\n## 수용기준\n- 문제/사용자/스코프/유저스토리·수용기준(Given-When-Then, EARS)/데이터 소스/오픈이슈 구조\n- 아키텍처·코드·스택 미포함 (원칙 3)\n- 승격 슬롯이 오픈이슈 필드로 들어감\n- 문서는 팀 표준 언어, 원문 전사 첨부 필드 포함\n\n## 참조\nPRD F3",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-25",
+        "body": "완료 — `src/prompts/requirements-v0.ts`(requirements@0.1.0). 문제/사용자/스코프/스토리·수용기준(EARS+GWT)/데이터 소스/오픈이슈 구조를 strict zod 스키마로 강제 — 아키텍처·스택 필드는 스키마 수준에서 거부(원칙 3). 승격 슬롯→오픈이슈 합류와 원문 전사 첨부는 프롬프트가 아니라 `assembleRequirementsDocument()` 코드 강제(원칙 2·7). smoke를 명확화→승격→문서 조립 전 흐름으로 확장."
+      }
+    ]
   },
   {
     "id": 8,

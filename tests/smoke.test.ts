@@ -1,8 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { LlmGateway } from '../src/gateway/gateway';
 import type { BackendRequest, BackendResponse, LlmBackend } from '../src/gateway/backend';
-import { CLARIFICATION_V0, createDefaultRegistry } from '../src/prompts/catalog';
+import { CLARIFICATION_V0, createDefaultRegistry, REQUIREMENTS_V0 } from '../src/prompts/catalog';
 import type { ClarificationOutput } from '../src/prompts/clarification-v0';
+import {
+  assembleRequirementsDocument,
+  type RequirementsOutput,
+} from '../src/prompts/requirements-v0';
 import { SessionStore } from '../src/store/session-store';
 
 /**
@@ -46,6 +50,29 @@ const clarificationResponse = JSON.stringify({
     },
   ],
 } satisfies ClarificationOutput);
+
+const requirementsResponse = JSON.stringify({
+  problem: '영업 실적을 정리해 볼 수단이 없어 매니저가 수작업으로 집계한다',
+  users: ['영업팀 매니저'],
+  scope: { inScope: ['월별 매출 추이 조회'], outOfScope: [] },
+  stories: [
+    {
+      story: '영업팀 매니저로서, 월별 매출 추이를 확인하고 싶다',
+      acceptanceCriteria: [
+        {
+          ears: 'When 매니저가 기간을 선택하면, the system shall 월별 매출 합계를 표시한다',
+          gwt: {
+            given: '매출 데이터가 존재할 때',
+            when: '기간을 선택하면',
+            then: '월별 합계가 표시된다',
+          },
+        },
+      ],
+    },
+  ],
+  dataSources: [],
+  openIssues: [],
+} satisfies RequirementsOutput);
 
 let store: SessionStore | undefined;
 afterEach(() => {
@@ -94,7 +121,7 @@ describe('Phase 0 조립 smoke', () => {
     });
 
     // 게이트웨이는 저장소에서 조립한 컨텍스트를 무상태로 주입받는다 (F14)
-    const backend = new ScriptedBackend([clarificationResponse]);
+    const backend = new ScriptedBackend([clarificationResponse, requirementsResponse]);
     const gateway = new LlmGateway({ backend, registry });
     const result = await gateway.complete<ClarificationOutput>(CLARIFICATION_V0, {
       request: utterance.originalText,
@@ -122,15 +149,70 @@ describe('Phase 0 조립 smoke', () => {
       ...versionAxes,
     });
 
-    // 조립 확인: 프롬프트 본문이 백엔드에 닿았고, export에 전 과정이 남는다
+    // 명확화 결과: target-user는 충족, data-source는 요청자 해소 불가 → 승격 (F2c)
+    store.setSlotState({
+      sessionId: session.id,
+      slotKey: 'target-user',
+      state: 'filled',
+      value: { answer: '영업팀 매니저' },
+      confirmedByRequester: true,
+    });
+    store.setSlotState({
+      sessionId: session.id,
+      slotKey: 'data-source',
+      state: 'promoted',
+      openIssueAssignee: 'dev-lead',
+    });
+
+    // requirements 생성 → 코드 강제 조립 (승격 슬롯 오픈이슈 합류 + 원문 전사 첨부)
+    const reqResult = await gateway.complete<RequirementsOutput>(REQUIREMENTS_V0, {
+      request: utterance.originalText,
+      teamLanguage: 'ko',
+      promotedSlots: [{ key: 'data-source', question: '실적의 진실 원천 테이블은 무엇인가?' }],
+    });
+    const doc = assembleRequirementsDocument({
+      output: reqResult.output,
+      promotedSlots: store
+        .listSlotStates(session.id)
+        .filter((s) => s.state === 'promoted')
+        .map((s) => ({
+          slotKey: s.slotKey,
+          openIssueAssignee: s.openIssueAssignee,
+          question: '실적의 진실 원천 테이블은 무엇인가?',
+        })),
+      utterances: store.listUtterances(session.id).map((u) => ({
+        seq: u.seq,
+        authorType: u.authorType,
+        originalText: u.originalText,
+        originalLanguage: u.originalLanguage,
+      })),
+    });
+
+    // 조립 확인: 프롬프트 본문이 백엔드에 닿았고, 문서와 export에 전 과정이 남는다
     expect(backend.requests[0]?.promptBody).toBe(clarification.body);
+    expect(backend.requests[1]?.promptBody).toBe(registry.get(REQUIREMENTS_V0).body);
+    expect(doc.content.openIssues).toEqual([
+      {
+        slotKey: 'data-source',
+        question: '실적의 진실 원천 테이블은 무엇인가?',
+        assignee: 'dev-lead',
+      },
+    ]);
+    expect(doc.originalTranscript).toEqual([
+      {
+        seq: 1,
+        authorType: 'requester',
+        originalText: '영업 실적 대시보드 하나 만들어 주세요',
+        originalLanguage: 'ko',
+      },
+    ]);
     const exported = store.exportSessions();
     expect(exported[0]).toMatchObject({
       session: { id: session.id, promptVersionId },
       utterances: [{ originalText: '영업 실적 대시보드 하나 만들어 주세요' }],
       slotStates: [
-        { slotKey: 'data-source', state: 'unfilled' },
-        { slotKey: 'target-user', state: 'unfilled' },
+        { slotKey: 'data-source', state: 'promoted', openIssueAssignee: 'dev-lead' },
+        { slotKey: 'target-user', state: 'filled', confirmedByRequester: true },
       ],
       signals: [{ type: 'clarification_round', payload: { questionCount: 3 } }],
     });
