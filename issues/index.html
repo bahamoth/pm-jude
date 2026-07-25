@@ -204,12 +204,12 @@
   {
     "id": 3,
     "title": "프롬프트 레지스트리 v0",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
     "type": "task",
-    "assignee": null,
+    "assignee": "claude",
     "parent": null,
     "blockedBy": [
       1
@@ -217,7 +217,13 @@
     "created": "2026-07-25",
     "updated": "2026-07-25",
     "body": "## 목표\n프롬프트 버전 관리의 최소 구현. 런타임 세션은 항상 명시적 버전을 참조한다.\n\n## 수용기준\n- 프롬프트 본문 + semver + `regression_passed` 플래그 저장\n- 게이트웨이가 버전 참조 없는 호출을 거부\n- 플래그 강제는 Phase 2 발효지만 필드는 지금부터 존재 (F12)\n\n## 참조\nPRD F12, F14",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-25",
+        "body": "완료 — `src/prompts/registry.ts`. `PromptVersion`(name·semver·body·outputSchema·regressionPassed) 등록/`name@semver` 조회, 형식·중복·미등록 거부를 타입 구분된 에러로 처리. `regression_passed` 필드는 존재하되 강제는 Phase 2(F12) 대기. 「버전 참조 없는 호출 거부」는 게이트웨이 시임이므로 #2 테스트에서 검증."
+      }
+    ]
   },
   {
     "id": 4,
