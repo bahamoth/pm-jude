@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  pull_request:
+
+# 같은 PR에 push가 이어지면 진행 중이던 run을 취소한다(최신 commit만 검사).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Node (format + lint + typecheck + vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # package.json의 packageManager 필드로 pnpm 버전을 고정한다
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prettier
+        run: pnpm format:check
+
+      - name: ESLint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Vitest
+        run: pnpm test
