@@ -399,6 +399,33 @@
     "updated": "2026-07-25",
     "body": "## 목표\nPoC 세션을 익명화 큐레이션해 골든셋 시드를 만들고, Phase 0 판정 리포트를 작성.\n\n## 수용기준\n- 성공·실패 사례 포함, 개인·민감 정보 익명화\n- 리포트: 개발자 검토 통과율 / 세션 완주율 / 요청자 해소 불가 비율\n- 중단·전환 기준 (a)(b)(c) 판정과 Phase 1 착수 여부 권고\n\n## 참조\ndocs/phase0-plan.md, PRD §9·§12-10",
     "comments": []
+  },
+  {
+    "id": 12,
+    "title": "로컬 CLI 러너 — 영속 인테이크 세션",
+    "state": "closed",
+    "labels": [
+      "ready-for-agent"
+    ],
+    "type": "task",
+    "assignee": "claude",
+    "parent": null,
+    "blockedBy": [
+      2,
+      3,
+      4,
+      5
+    ],
+    "created": "2026-07-25",
+    "updated": "2026-07-25",
+    "body": "## 목표\n일회성 데모 스크립트 대신, 실행마다 세션이 저장소에 영속되는 채널 무관 CLI 러너. #8 Slack 러너의 전신.\n\n## 수용기준\n- `pnpm intake \"<요청>\"` — 세션 생성 → 원문 기록 → 명확화 질문 생성 → 슬롯·신호 기록이 SQLite에 버전 귀속으로 남음\n- 카탈로그 프롬프트 버전의 DB 동기화가 아이덤포턴트 (반복 실행 시 같은 버전 행 재사용)\n- `pnpm intake --export` — 저장된 전 세션의 익명화 JSON (골든셋 시드 경로)\n- 슬롯 목록은 #10 전까지 임시 목록 사용\n\n## 참조\nPRD F14 운영 규약, ADR-0006",
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-25",
+        "body": "완료 — `src/runner/local-runner.ts`(로직) + `src/cli/intake.ts`(얇은 배선) + `pnpm intake` 스크립트. 러너 시임 테스트 2건(영속화 관통, 버전 동기화 아이덤포턴시) + 저장소 `findVersionId` 계약 테스트. 사용자 요청(2026-07-25 「좀 더 영속적인 걸 원한다」)으로 보드 외 추가된 작업."
+      }
+    ]
   }
 ]
 </script>

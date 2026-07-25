@@ -222,6 +222,21 @@ describe('세션 저장소', () => {
     ).toThrow(/슬롯 상태/);
   });
 
+  it('버전 레지스트리 3종을 name+semver로 조회하고, 미등록이면 null을 돌려준다', () => {
+    const { store, versionAxes } = makeStore();
+
+    expect(store.findVersionId('prompt', 'clarification', '0.1.0')).toBe(
+      versionAxes.promptVersionId,
+    );
+    expect(store.findVersionId('threshold', 'completeness-rubric', '0.1.0')).toBe(
+      versionAxes.thresholdVersionId,
+    );
+    expect(store.findVersionId('slot_schema', 'required-slots', '0.1.0')).toBe(
+      versionAxes.slotSchemaVersionId,
+    );
+    expect(store.findVersionId('prompt', 'clarification', '9.9.9')).toBeNull();
+  });
+
   it('요청자는 역할·구독 여부와 함께 세션에 N:M으로 연결된다', () => {
     const { store, versionAxes } = makeStore();
     const session = store.createSession({ originChannel: 'slack', ...versionAxes });

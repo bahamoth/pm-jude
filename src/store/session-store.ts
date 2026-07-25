@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import * as schema from './schema';
@@ -140,6 +140,25 @@ export class SessionStore {
       .where(eq(schema.utterance.sessionId, sessionId))
       .orderBy(schema.utterance.seq)
       .all();
+  }
+
+  /** 버전 레지스트리 3종에서 name+semver로 id를 찾는다. 미등록이면 null. */
+  findVersionId(
+    kind: 'prompt' | 'threshold' | 'slot_schema',
+    name: string,
+    semver: string,
+  ): string | null {
+    const table = {
+      prompt: schema.promptVersion,
+      threshold: schema.thresholdVersion,
+      slot_schema: schema.slotSchemaVersion,
+    }[kind];
+    const row = this.db
+      .select({ id: table.id })
+      .from(table)
+      .where(and(eq(table.name, name), eq(table.semver, semver)))
+      .get();
+    return row?.id ?? null;
   }
 
   addRequester(input: {
