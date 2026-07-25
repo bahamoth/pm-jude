@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { BackendRequest, BackendResponse, LlmBackend } from '../src/gateway/backend';
 import { createDefaultRegistry } from '../src/prompts/catalog';
+import { COMPLETENESS_RUBRIC_V0 } from '../src/prompts/completeness-v0';
 import { runClarificationSession } from '../src/runner/local-runner';
 import { SessionStore } from '../src/store/session-store';
 
@@ -93,5 +94,27 @@ describe('로컬 러너 — 영속 인테이크 세션', () => {
     expect(exported[1]?.session.promptVersionId).toBe(exported[0]?.session.promptVersionId);
     expect(exported[1]?.session.thresholdVersionId).toBe(exported[0]?.session.thresholdVersionId);
     expect(exported[1]?.session.slotSchemaVersionId).toBe(exported[0]?.session.slotSchemaVersionId);
+  });
+
+  it('세션은 완결성 루브릭 v0 임계치 버전에 귀속된다 (#6 — 플레이스홀더 아님)', async () => {
+    store = SessionStore.open(':memory:');
+
+    await runClarificationSession(
+      {
+        store,
+        backend: new ScriptedBackend([clarificationResponse]),
+        registry: createDefaultRegistry(),
+        modelVersion: 'claude-sonnet-5',
+      },
+      { request: '요청', requesterLanguage: 'ko', channel: 'web' },
+    );
+
+    const thresholdVersionId = store.findVersionId(
+      'threshold',
+      COMPLETENESS_RUBRIC_V0.name,
+      COMPLETENESS_RUBRIC_V0.semver,
+    );
+    expect(thresholdVersionId).not.toBeNull();
+    expect(store.exportSessions()[0]?.session.thresholdVersionId).toBe(thresholdVersionId);
   });
 });

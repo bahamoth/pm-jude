@@ -283,12 +283,12 @@
   {
     "id": 6,
     "title": "완결성 판정 프롬프트 v0 + 룰 층 초안",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
     "type": "task",
-    "assignee": null,
+    "assignee": "claude",
     "parent": null,
     "blockedBy": [
       2,
@@ -298,7 +298,18 @@
     "created": "2026-07-25",
     "updated": "2026-07-25",
     "body": "## 목표\n2층 판정의 PoC 구현 — LLM 층(슬롯 3상태 판정 + 루브릭 점수)과 룰 층(결정론적 백스톱) 초안.\n\n## 수용기준\n- 슬롯별 충족/미충족/승격 판정을 구조화 출력으로\n- 룰 층: 모든 필수 슬롯 충족·승격 검사 + 금칙 모호어 사전 초안\n- 룰 미통과 시 LLM 점수와 무관하게 미정제 판정\n- 슬롯 목록은 #10 초안을 소비 (그 전까지는 임시 목록으로 개발)\n\n## 참조\nPRD F2c, F2e",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-25",
+        "body": "완료 — `src/prompts/completeness-v0.ts`. LLM 층은 completeness@0.1.0 — 슬롯 3상태 판정·판정 근거·루브릭 0~100 정수 점수를 strict zod 스키마로 강제(위반 시 게이트웨이 재시도). 룰 층 `runRuleLayer()`는 「모든 필수 슬롯 충족·승격」 검사(판정 없는 슬롯은 미충족 취급) + 금칙 모호어 사전 초안 — 팀이 한국어·영어권 혼성이므로(운영자 확인, F2d) 두 언어를 수록하고 한국어는 부분 문자열·영어는 단어 경계 매칭으로 오검출을 차단. `judgeCompleteness()`가 2층 결합 — 룰 미통과면 LLM 만점이어도 미정제(코드 강제). 러너의 threshold 플레이스홀더(completeness-rubric@0.0.0 「미정」)를 completeness-rubric@0.1.0(minScore 80, 수치는 PoC 중 확정·F12 회귀로 튜닝)으로 교체. 시임 테스트 18건 + 러너 귀속 1건 + 조립 smoke 확장(명확화→완결성 판정→requirements 관통). 슬롯 목록은 여전히 TEMP_REQUIRED_SLOTS — #10 합류 시 교체한다."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-25",
+        "body": "2축 코드 리뷰(Standards/Spec) 반영 — ① `judgeCompleteness()`가 LLM 슬롯 판정을 소비하도록 수정: 미충족 판정 슬롯이 있으면 점수가 만점이어도 미정제(모순 출력의 보수 결합, `llmUnfilledSlotKeys`로 관측 가능). ② 슬롯 3상태 리터럴 중복을 `SLOT_TRI_STATE`/`SlotTriState`로 통합(신규 파일 내). ③ 프롬프트 본문의 「항목」→「슬롯」 용어 정정(CONTEXT.md _Avoid_). **이연 지적(오케스트레이션 #8/Phase 1 몫)**: EARS 「구문 충족」의 결정론 검사 부재(현재 `ears`는 비어있지 않음만 검사), 금칙 모호어 검사의 문서 생성 경로 배선(requirements 산출 후 `acceptanceCriteriaTexts` 재검사 필요), `completeness_check` 신호에 룰 실패 목록·LLM 슬롯별 판정 기록, LLM promoted 판정→세션 슬롯 승격 트리거(US-10), `SlotTriState`의 store 스키마 공유."
+      }
+    ]
   },
   {
     "id": 7,
