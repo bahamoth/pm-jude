@@ -26,6 +26,7 @@
     "format:check": "prettier --check .",
     "db:generate": "drizzle-kit generate",
     "intake": "tsx src/cli/intake.ts",
+    "retro": "tsx src/cli/retro.ts",
     "slack": "tsx src/cli/slack.ts"
   },
   "dependencies": {

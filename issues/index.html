@@ -375,7 +375,13 @@
     "created": "2026-07-25",
     "updated": "2026-07-25",
     "body": "## 목표\n최근 6~12개월 Linear 아카이브에서 개발자의 명확화성 코멘트·reopen·스펙 편집을 추출.\n\n## 인간 개입 필요\nLinear API 토큰·대상 팀 선정은 운영자 작업. 분류 자체는 LLM 보조 + 운영자 검수.\n\n## 수용기준\n- (a) 재질문 빈도 베이스라인 — §10 감소율 지표의 분모\n- (b) 재질문 유형 분류표 — 유형별 빈도 포함\n- 요청자 해소 가능/불가 구분 포함 (§2.1 전제 검증 — 중단 기준 (c)의 입력)\n\n## 참조\nADR-0004, PRD §9",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-26",
+        "body": "도구 완료 — 실데이터 실행만 남음. `src/analysis/` 3모듈 + `pnpm retro` CLI. ① **extract**: Linear GraphQL(주입 fetch로 무네트워크 테스트)에서 이슈·코멘트·reopen(completed→미완료 전이)·스펙 편집(updatedDescription) 추출, 페이지네이션, 코멘트 절단 시 경고(침묵 절단 방지). ② **classify**: requestion-classification@0.1.0 프롬프트(분석 전용 레지스트리 — 런타임 카탈로그와 분리)로 재질문 탐지·kebab 유형 키·해소 가능/불가(resolvable/unresolvable/unclear) 판정, 중간 JSON에 저장해 **운영자 검수·수정 가능**. ③ **report**: 결정론적 집계로 베이스라인(재질문 발생 이슈 비율·이슈당 재질문 수·reopen·스펙 편집)과 유형 분류표(빈도 내림차순, 해소 구분), 해소 불가 비율(§2.1 전제 검증)을 마크다운으로 — 수치는 LLM이 아니라 코드가 낸다. 시임 테스트 9건. **남은 운영자 단계**: ① Linear 개인 API 키 발급, `.env`에 LINEAR_API_KEY ② 대상 팀 키 결정 ③ `pnpm retro extract --team <KEY> --months 9` → `pnpm retro classify` → classifications.json 검수 → `pnpm retro report --out data/retro/report.md`. 산출 분류표가 #10의 입력이 된다."
+      }
+    ]
   },
   {
     "id": 10,
