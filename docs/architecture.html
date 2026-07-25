@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>pm-jude · Architecture Map</title>
+<style>
+  :root{
+    --paper:#f5f2ec; --ink:#211d18; --ink-soft:#6b6357; --hairline:#d9d2c4;
+    --card:#fdfbf7; --card-edge:#e4ddd0; --accent:#b4430e;
+    --chip-bg:#ece7dc; --shadow:0 1px 2px rgba(33,29,24,.06),0 8px 24px rgba(33,29,24,.07);
+    --c-adapter:#295bb8; --c-core:#b4430e; --c-gateway:#0e7268; --c-eval:#976a08; --c-ext:#8a8274;
+    --c-terminal:#8a8274; --c-active:#b4430e;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --paper:#161310; --ink:#e9e2d4; --ink-soft:#968d7d; --hairline:#332d25;
+      --card:#1f1b16; --card-edge:#383127; --accent:#e8703a;
+      --chip-bg:#2a251e; --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.35);
+      --c-adapter:#6f97e8; --c-core:#e8703a; --c-gateway:#3aa89a; --c-eval:#d1a12e; --c-ext:#7d7669;
+      --c-terminal:#7d7669; --c-active:#e8703a;
+    }
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{color-scheme:light dark;word-break:keep-all;overflow-wrap:break-word}
+  body{
+    font:15px/1.55 "Avenir Next","Avenir","Segoe UI",system-ui,sans-serif;
+    background:var(--paper);color:var(--ink);min-height:100vh;
+    background-image:repeating-linear-gradient(45deg,transparent 0 11px,rgba(128,110,80,.025) 11px 12px);
+  }
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+
+  header{
+    border-top:3px solid var(--ink);border-bottom:1px solid var(--hairline);
+    padding:24px 32px 0;display:flex;flex-wrap:wrap;gap:8px 28px;align-items:baseline;
+  }
+  .wordmark{font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;font-size:25px;font-weight:600}
+  .wordmark em{font-style:italic;color:var(--accent)}
+  .src{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;letter-spacing:.1em;color:var(--ink-soft)}
+  .tabs{display:flex;gap:4px;margin-left:auto;align-self:flex-end}
+  .tab{
+    font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:12px;letter-spacing:.12em;
+    background:none;border:1px solid var(--hairline);border-bottom:none;color:var(--ink-soft);
+    padding:9px 18px 8px;cursor:pointer;
+  }
+  .tab.on{background:var(--card);color:var(--accent);border-color:var(--card-edge);font-weight:600}
+
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:24px;padding:26px 32px 48px;align-items:start}
+  @media (max-width:900px){.layout{grid-template-columns:1fr}}
+
+  .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:16px}
+  .toolbar .lbl{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;letter-spacing:.14em;color:var(--ink-soft);text-transform:uppercase}
+  .pbtn{
+    font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;letter-spacing:.08em;
+    background:none;border:1px solid var(--hairline);color:var(--ink-soft);padding:5px 12px;cursor:pointer;border-radius:2px;
+  }
+  .pbtn.on{border-color:var(--accent);color:var(--accent);font-weight:600}
+
+  .layer{margin-bottom:18px;animation:rise .5s cubic-bezier(.22,1,.36,1) both}
+  .layer-head{display:flex;align-items:center;gap:8px;padding-bottom:8px;margin-bottom:10px;border-bottom:2px solid var(--layer-accent)}
+  .layer-head .dot{width:8px;height:8px;border-radius:50%;background:var(--layer-accent)}
+  .layer-head h2{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11.5px;font-weight:600;letter-spacing:.16em;text-transform:uppercase}
+  .layer-head .n{margin-left:auto;font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;color:var(--ink-soft)}
+  .layer-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+  .flow{
+    text-align:center;color:var(--ink-soft);font-family:ui-monospace,"SF Mono",Menlo,monospace;
+    font-size:11px;letter-spacing:.2em;padding:2px 0 14px;opacity:.7;
+  }
+
+  .comp{
+    background:var(--card);border:1px solid var(--card-edge);border-left:3px solid var(--layer-accent);
+    padding:10px 12px;cursor:pointer;box-shadow:var(--shadow);
+    transition:transform .15s cubic-bezier(.22,1,.36,1),opacity .2s,box-shadow .15s;
+  }
+  .comp:hover{transform:translateY(-2px)}
+  .comp.sel{outline:2px solid var(--layer-accent);outline-offset:1px}
+  .comp.dim{opacity:.28;filter:grayscale(.6)}
+  .comp h3{font-size:13.5px;font-weight:600;line-height:1.35;margin-bottom:5px}
+  .comp .meta{display:flex;flex-wrap:wrap;gap:4px}
+  .chip{
+    font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:10px;letter-spacing:.05em;
+    background:var(--chip-bg);color:var(--ink-soft);padding:2px 6px;border-radius:2px;
+  }
+  .chip.phase{color:var(--layer-accent,var(--accent))}
+
+  .l-adapter{--layer-accent:var(--c-adapter)}
+  .l-core{--layer-accent:var(--c-core)}
+  .l-gateway{--layer-accent:var(--c-gateway)}
+  .l-eval{--layer-accent:var(--c-eval)}
+  .l-ext{--layer-accent:var(--c-ext)}
+
+  aside{
+    position:sticky;top:20px;background:var(--card);border:1px solid var(--card-edge);
+    border-top:3px solid var(--accent);box-shadow:var(--shadow);padding:20px 22px 24px;
+    animation:rise .4s cubic-bezier(.22,1,.36,1) both;
+  }
+  aside .kicker{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px}
+  aside h2{font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;font-size:20px;font-weight:600;line-height:1.3;margin-bottom:12px}
+  aside .desc{font-size:13.5px;color:var(--ink);margin-bottom:14px}
+  aside .facts{display:grid;grid-template-columns:max-content 1fr;gap:5px 14px;font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;border-block:1px solid var(--hairline);padding:10px 0;margin-bottom:12px}
+  aside .facts dt{color:var(--ink-soft);text-transform:uppercase;letter-spacing:.1em}
+  aside .empty{color:var(--ink-soft);font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:12px;line-height:2}
+  .tlist{list-style:none;font-size:12.5px}
+  .tlist li{padding:5px 0;border-bottom:1px dashed var(--hairline);cursor:pointer}
+  .tlist li:hover{color:var(--accent)}
+  .tlist .arrow{color:var(--accent);font-family:ui-monospace,"SF Mono",Menlo,monospace}
+  .sect{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft);margin:14px 0 4px}
+
+  .stategrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:22px}
+  .snode{
+    background:var(--card);border:1px solid var(--card-edge);border-left:3px solid var(--c-active);
+    padding:10px 12px;cursor:pointer;box-shadow:var(--shadow);transition:transform .15s,outline .1s;
+  }
+  .snode:hover{transform:translateY(-2px)}
+  .snode.terminal{border-left-color:var(--c-terminal)}
+  .snode.terminal h3{color:var(--ink-soft)}
+  .snode.sel{outline:2px solid var(--accent);outline-offset:1px}
+  .snode.rel-in{outline:2px dashed var(--c-adapter);outline-offset:1px}
+  .snode.rel-out{outline:2px dashed var(--c-gateway);outline-offset:1px}
+  .snode h3{font-size:13.5px;font-weight:600;line-height:1.35;margin-bottom:4px}
+  .snode .k{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:10px;color:var(--ink-soft);letter-spacing:.08em}
+  .rules{
+    background:var(--card);border:1px solid var(--card-edge);border-left:3px solid var(--accent);
+    padding:14px 16px;box-shadow:var(--shadow);font-size:13px;
+  }
+  .rules h3{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
+  .rules li{margin-left:18px;margin-bottom:4px}
+
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wordmark">pm-jude <em>· architecture</em></div>
+  <div class="src">PRD v1.4 §7 · 정본: ARCHITECTURE.md</div>
+  <nav class="tabs">
+    <button class="tab on" data-view="map">시스템 맵</button>
+    <button class="tab" data-view="sm">상태 머신</button>
+  </nav>
+</header>
+
+<div class="layout">
+  <main>
+    <div id="view-map">
+      <div class="toolbar">
+        <span class="lbl">Phase</span>
+        <button class="pbtn on" data-phase="all">전체</button>
+        <button class="pbtn" data-phase="0">Phase 0</button>
+        <button class="pbtn" data-phase="1">Phase 1</button>
+        <button class="pbtn" data-phase="2">Phase 2</button>
+      </div>
+      <div id="layers"></div>
+    </div>
+    <div id="view-sm" style="display:none">
+      <div id="states"></div>
+      <div class="rules">
+        <h3>코드로 강제되는 하드 제약</h3>
+        <ul>
+          <li>승인 없는 Linear 이슈 생성 불가 — 게이트 승인이 유일한 생성 경로</li>
+          <li>룰 층 미통과 시 게이트 진입 불가 (승격 경로만 예외)</li>
+          <li>회귀 미통과 프롬프트·스키마 버전의 런타임 로드 불가 (F12)</li>
+          <li>종결 상태 전이 시 회신 발송 없이는 세션 종료 불가 (원칙 5)</li>
+          <li>목업 코드의 개발팀 전달 불가 — 이미지·URL 형태만</li>
+        </ul>
+      </div>
+    </div>
+  </main>
+  <aside id="panel"></aside>
+</div>
+
+<script>
+'use strict';
+const LAYERS = [
+  { id:'adapter', name:'채널 어댑터', note:'모든 어댑터는 동일한 코어 API만 호출' },
+  { id:'core',    name:'채널 비의존 코어', note:'단계 전이는 상태 머신이 결정 (ADR-0001)' },
+  { id:'gateway', name:'LLM 게이트웨이', note:'외부는 백엔드 종류를 모름' },
+  { id:'eval',    name:'평가·개선 서브시스템', note:'계측 없는 기능은 만들지 않음 (원칙 6)' },
+  { id:'ext',     name:'외부 시스템', note:'' },
+];
+
+const COMPONENTS = [
+  { id:'slack-a', layer:'adapter', name:'Slack 어댑터', intro:0,
+    desc:'멘션·DM·이모지 인테이크, 스레드 명확화, 버튼 게이트, DM 역보고. Bolt for TypeScript + Assistant 스레드. Phase 0 PoC와 Phase 1의 1차 표면.',
+    funcs:['F1'], extra:'스테이크홀더의 서식지가 Slack이므로 전달 순서 1순위 (§9)' },
+  { id:'web-a', layer:'adapter', name:'웹 어댑터', intro:1,
+    desc:'Phase 1은 매직링크 경량 뷰어(긴 문서 열람·게이트), Phase 2에 채팅 인테이크·대시보드·SSO로 완결 표면화. 채널 비의존 원칙의 완성.',
+    funcs:['F1','F9'], extra:'' },
+  { id:'intake', layer:'core', name:'인테이크 API', intro:1,
+    desc:'채널 무관 수신, 통합 프로필·세션 생성, 3초 이내 확인 응답. 세션은 요청자 ≠ 실사용자와 N명 요청자를 표현.',
+    funcs:['F1'], extra:'' },
+  { id:'sm', layer:'core', name:'상태 머신', intro:1,
+    desc:'단계 전이 결정과 하드 제약 강제의 주체. 게이트 라우터(영역 담당 → 기본 승인자 → 대체자)와 SLA 스케줄러(리마인더 → 대체자 통보 → 자동 백로그)를 포함.',
+    funcs:['F5'], extra:'원칙 2·5의 구현 지점 (ADR-0001)' },
+  { id:'clarify', layer:'core', name:'명확화 엔진', intro:0,
+    desc:'표적 질문 생성(해석 발산 지점 공략), 2층 완결성 판정(룰 백스톱 + LLM 의미 판정), 슬롯 3상태와 승격 판정. 질문은 요청자 언어로 3~5개.',
+    funcs:['F2b','F2c','F2e'], extra:'Phase 0에서 프롬프트 v0 검증' },
+  { id:'search', layer:'core', name:'컨텍스트 검색기', intro:1,
+    desc:'질문 생성 전에 기존 이슈·과거 문서·종결 세션·거절 이력을 검색. 시스템 유일의 LLM 자율 툴콜 지점(도구·횟수 제한). 중복 후보 제시의 출처.',
+    funcs:['F2a'], extra:'거절 이력은 차단이 아니라 참고 정보로만 제시' },
+  { id:'docgen', layer:'core', name:'문서 생성기 + UI 분류기', intro:0,
+    desc:'requirements/tasks 생성(EARS·Given-When-Then), 슬롯 단위 요청자 확인, 원문 전사 첨부. 명확화 종료 시 UI 변화 여부를 분류해 목업 실행을 결정.',
+    funcs:['F3'], extra:'문서 단일 진실 원천 (ADR-0002)' },
+  { id:'mock', layer:'core', name:'목업 서비스 + 역주입기', intro:2,
+    desc:'UI 요청에 한해 self-contained 인터랙티브 HTML 목업 생성·호스팅. 요구사항 vN ↔ 목업 vN 매핑, 승인 시 어노테이션 확정 사항을 문서 vN+1로 역주입.',
+    funcs:['F4'], extra:'워터마크 상시 · 코드 형태 비전달' },
+  { id:'connector', layer:'core', name:'Linear 커넥터', intro:0,
+    desc:'승인 시 issueCreate. 본문에 스펙 + 원문 전사 + 오픈이슈 섹션, 모든 이슈에 세션 provenance 부착. 병합 세션은 이슈 생성 없이 구독자 등록 + 코멘트 첨부.',
+    funcs:['F6'], extra:'Phase 0은 issueCreate 1개 또는 수동' },
+  { id:'notify', layer:'core', name:'알림 서비스', intro:1,
+    desc:'회신·역보고·리마인더 발송. 수신자 언어·시간대 인지, 요청자 N명 팬아웃, 채널 해제 시 웹·이메일 폴백.',
+    funcs:['F7','F8'], extra:'침묵 방지(원칙 5)의 실행 지점' },
+  { id:'store', layer:'core', name:'세션·버전 저장소', intro:0,
+    desc:'세션·원문 전사·슬롯 상태·신호·버전 레지스트리 저장. Phase 0은 SQLite, Phase 1에 Postgres 전환 전제.',
+    funcs:['F11'], extra:'ADR-0006 · 버전 귀속 5축의 기반' },
+  { id:'iface', layer:'gateway', name:'게이트웨이 인터페이스', intro:0,
+    desc:'complete(promptVersion, input) → structuredOutput. 폭주 방지 상한(세션당 토큰·목업 횟수·월 총액)과 회귀 통과 버전만 로드하는 배포 게이트를 겸함.',
+    funcs:['F12','F14'], extra:'모델 중립 원칙 4 — 단, 얇게' },
+  { id:'harness', layer:'gateway', name:'Claude Agent SDK 백엔드', intro:0,
+    desc:'Phase 0 한정 하네스. 파일시스템·셸 도구 비활성, 서버 측 격리, 무상태 호출. PoC 목표 달성 시 직접 API로 교체(Exit 기준).',
+    funcs:['F14'], extra:'ADR-0005 · TypeScript' },
+  { id:'direct', layer:'gateway', name:'직접 API 백엔드', intro:1,
+    desc:'Phase 1+ 백엔드. 프로바이더 추상화 구현체는 벤치마크 없이 하나를 확정(후보: Vercel AI SDK / LiteLLM / Bedrock Converse). 모델 라우팅 로직은 범위 밖.',
+    funcs:[], extra:'전환 시 골든셋 시드로 출력 동등성 확인' },
+  { id:'signals', layer:'eval', name:'신호 수집기', intro:1,
+    desc:'게이트 결정·재질문·reopen·스펙 변경·목업 반복·후행 피드백을 수집하고 세션 × 프롬프트 × 모델 × 임계치 × 슬롯 스키마 버전에 귀속.',
+    funcs:['F11'], extra:'Phase 1부터 내장 — 계측 없는 기능 금지' },
+  { id:'scanner', layer:'eval', name:'우회 스캐너', intro:1,
+    desc:'provenance 없는 기능 요청 이슈를 전수 집계. 개발자 액션 0. 정책 발효 후에는 컴플라이언스 지표.',
+    funcs:['F6'], extra:'ADR-0003' },
+  { id:'evaltool', layer:'eval', name:'평가 도구 (채택)', intro:2,
+    desc:'트레이싱·프롬프트 레지스트리·회귀 평가는 기존 도구 채택(후보: Langfuse·promptfoo). 자체 구축은 신호 귀속 스키마·골든셋 절차·배포 게이트 연동만.',
+    funcs:['F12'], extra:'구축이 아니라 채택' },
+  { id:'workbench', layer:'eval', name:'판독 워크벤치', intro:2,
+    desc:'전 세션 판독 큐(저볼륨 1차 평가 수단), 실패 유형 분류(프롬프트 결함 vs 스키마 결손), 재질문↔슬롯 매핑 현황, 카나리 관리.',
+    funcs:['F13'], extra:'판독 기록 = 미래 judge 보정 라벨' },
+  { id:'linear', layer:'ext', name:'Linear', intro:0,
+    desc:'이슈 생성 대상 + 웹훅 소스(HMAC 서명·타임스탬프 검증·중복 제거). 이슈 라이프사이클 신호(재질문·reopen·스펙 변경)의 출처.',
+    funcs:['F6','F7'], extra:'Agents API 네이티브화는 Phase 3 검토' },
+  { id:'slack', layer:'ext', name:'Slack', intro:0,
+    desc:'스테이크홀더의 서식지. 인테이크·명확화·게이트·역보고가 스레드와 DM으로 흐른다.',
+    funcs:['F1'], extra:'' },
+  { id:'hosting', layer:'ext', name:'목업 호스팅', intro:2,
+    desc:'앱 도메인과 분리된 샌드박스 usercontent 도메인(R2 + Workers 권장선). 만료 서명 URL, CSP sandbox, 외부 네트워크 차단.',
+    funcs:['F4'], extra:'다층 방어 §6' },
+];
+
+const STATES = [
+  { id:'s-intake', name:'인테이크', kind:'진행', funcs:['F1'],
+    desc:'요청 수신과 세션 생성. 접수 확인은 3초 이내.' },
+  { id:'s-search', name:'컨텍스트 검색', kind:'진행', funcs:['F2a'],
+    desc:'기존 이슈·문서·종결 세션·거절 이력 검색. 유사 요청 발견 시 중복 후보 제시. 검색 결과는 세션에 기록.' },
+  { id:'s-clarify', name:'명확화 루프', kind:'진행', funcs:['F2b','F2c'],
+    desc:'표적 질문 3~5개(요청자 언어) ↔ 답변 반복. 각 질문에 「모르겠다 / 개발팀이 정할 문제」 경로 상시 제공. 왕복 상한 존재.' },
+  { id:'s-promotion', name:'승격 판정', kind:'진행', funcs:['F2c'],
+    desc:'왕복 상한 도달 시 남은 미충족 슬롯의 승격 가능 여부 판정. v1.3 데드락(진행도 종결도 불가)을 해소한 경로.' },
+  { id:'s-docgen', name:'문서 생성 + 슬롯 확인', kind:'진행', funcs:['F3'],
+    desc:'requirements/tasks 생성. 요청자 확인은 산문 번역이 아니라 슬롯 값 단위·요청자 언어. 원문 전사 첨부.' },
+  { id:'s-mockup', name:'목업 반복', kind:'진행', funcs:['F4'],
+    desc:'UI 요청에만 실행. 최대 2~3회 반복 수렴, 승인 시 어노테이션 확정 사항을 문서 vN+1로 역주입.' },
+  { id:'s-gate', name:'승인 게이트', kind:'진행', funcs:['F5'],
+    desc:'4버튼(승인/질문/백로그/거절), 비동기. 라우팅 근거와 SLA 잔여 표시. 조건부 상정 건은 시각적 구분.' },
+  { id:'s-issue', name:'이슈 생성', kind:'종결', funcs:['F6'],
+    desc:'종결 상태 ①. 승인 시에만 도달하는 유일한 이슈 생성 경로. provenance 부착.' },
+  { id:'s-merge', name:'중복 병합', kind:'종결', funcs:['F8'],
+    desc:'종결 상태 ②. 새 이슈 없이 기존 이슈에 구독자 등록 + 원문 코멘트 첨부. 역보고는 동일 수신.' },
+  { id:'s-backlog', name:'백로그', kind:'종결', funcs:['F8'],
+    desc:'종결 상태 ③. 통제된 사유 회신 + 재부상 트리거(유사 요청 누적·정기 리뷰) 안내. SLA 초과 자동 전환 포함.' },
+  { id:'s-reject', name:'거절', kind:'종결', funcs:['F5','F8'],
+    desc:'종결 상태 ④. 통제된 사유 목록(우선순위/스코프 밖/중복/기술적 불가/정보 부족) + 이의 경로(팀 리드 재검토) 안내.' },
+  { id:'s-onhold', name:'보류(정보 부족)', kind:'종결', funcs:['F2c','F8'],
+    desc:'종결 상태 ⑤. 승격조차 불가한 요청의 종결. 요청자는 언제든 재개 가능.' },
+  { id:'s-track', name:'추적·역보고', kind:'진행', funcs:['F7'],
+    desc:'Linear 웹훅 기반 상태 추적. 요청자 N명에게 각자 언어·시간대로 팬아웃. 완료 시 CSAT 1클릭.' },
+];
+
+const TRANSITIONS = [
+  ['s-intake','s-search','접수 → 검색'],
+  ['s-search','s-merge','중복 후보 수락'],
+  ['s-search','s-clarify','검색 완료'],
+  ['s-clarify','s-docgen','완결성 통과 (전 슬롯 충족·승격)'],
+  ['s-clarify','s-promotion','왕복 상한 도달'],
+  ['s-promotion','s-docgen','승격 가능 → 오픈이슈 + 조건부 상정'],
+  ['s-promotion','s-onhold','승격 불가'],
+  ['s-docgen','s-mockup','UI 요청'],
+  ['s-docgen','s-gate','비 UI 요청'],
+  ['s-mockup','s-gate','수렴 → 역주입 → 문서 vN+1'],
+  ['s-gate','s-issue','승인'],
+  ['s-gate','s-clarify','질문 → 요청자 되물음'],
+  ['s-gate','s-backlog','백로그 선택 / SLA 초과 자동 전환'],
+  ['s-gate','s-reject','거절'],
+  ['s-backlog','s-gate','재부상 트리거'],
+  ['s-onhold','s-clarify','요청자 재개'],
+  ['s-issue','s-track','이슈 생성 완료'],
+  ['s-merge','s-track','구독 등록'],
+];
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let phaseFilter = 'all', selComp = null, selState = null;
+
+function phaseChip(intro){
+  return intro === 0 ? 'Phase 0~' : intro === 1 ? 'Phase 1~' : 'Phase 2~';
+}
+
+function renderLayers(){
+  const root = $('#layers');
+  root.innerHTML = '';
+  LAYERS.forEach((layer, li) => {
+    const comps = COMPONENTS.filter(c => c.layer === layer.id);
+    const sec = document.createElement('section');
+    sec.className = 'layer l-' + layer.id;
+    sec.style.animationDelay = (li * 60) + 'ms';
+    sec.innerHTML = `<div class="layer-head"><span class="dot"></span><h2>${esc(layer.name)}</h2><span class="n">${comps.length}</span></div>`;
+    const grid = document.createElement('div');
+    grid.className = 'layer-grid';
+    comps.forEach(c => {
+      const el = document.createElement('article');
+      const dimmed = phaseFilter !== 'all' && c.intro > Number(phaseFilter);
+      el.className = 'comp' + (dimmed ? ' dim' : '') + (selComp === c.id ? ' sel' : '');
+      el.innerHTML = `<h3>${esc(c.name)}</h3><div class="meta">${c.funcs.map(f=>`<span class="chip">${esc(f)}</span>`).join('')}<span class="chip phase">${phaseChip(c.intro)}</span></div>`;
+      el.onclick = () => { selComp = c.id; renderLayers(); showComp(c); };
+      grid.appendChild(el);
+    });
+    sec.appendChild(grid);
+    root.appendChild(sec);
+    if (li < LAYERS.length - 1) root.insertAdjacentHTML('beforeend','<div class="flow">▼</div>');
+  });
+}
+
+function showComp(c){
+  const layer = LAYERS.find(l => l.id === c.layer);
+  $('#panel').innerHTML = `
+    <div class="kicker">${esc(layer.name)}</div>
+    <h2>${esc(c.name)}</h2>
+    <p class="desc">${esc(c.desc)}</p>
+    <dl class="facts">
+      <dt>기능</dt><dd>${c.funcs.length ? c.funcs.map(esc).join(' · ') : '—'}</dd>
+      <dt>도입</dt><dd>${phaseChip(c.intro)}</dd>
+      ${layer.note ? `<dt>레이어</dt><dd>${esc(layer.note)}</dd>` : ''}
+    </dl>
+    ${c.extra ? `<p class="desc" style="color:var(--ink-soft);font-size:12.5px">${esc(c.extra)}</p>` : ''}`;
+}
+
+function renderStates(){
+  const root = $('#states');
+  root.innerHTML = '';
+  const grid = document.createElement('div');
+  grid.className = 'stategrid';
+  const relIn  = selState ? TRANSITIONS.filter(t => t[1] === selState).map(t => t[0]) : [];
+  const relOut = selState ? TRANSITIONS.filter(t => t[0] === selState).map(t => t[1]) : [];
+  STATES.forEach((s, i) => {
+    const el = document.createElement('article');
+    el.className = 'snode' + (s.kind === '종결' ? ' terminal' : '')
+      + (selState === s.id ? ' sel' : relIn.includes(s.id) ? ' rel-in' : relOut.includes(s.id) ? ' rel-out' : '');
+    el.style.animationDelay = (Math.min(i,12) * 30) + 'ms';
+    el.innerHTML = `<h3>${esc(s.name)}</h3><span class="k">${esc(s.kind)}${s.funcs.length ? ' · ' + s.funcs.join('·') : ''}</span>`;
+    el.onclick = () => { selState = s.id; renderStates(); showState(s); };
+    grid.appendChild(el);
+  });
+  root.appendChild(grid);
+}
+
+function showState(s){
+  const inbound  = TRANSITIONS.filter(t => t[1] === s.id);
+  const outbound = TRANSITIONS.filter(t => t[0] === s.id);
+  const nameOf = id => STATES.find(x => x.id === id).name;
+  const row = (t, dir) => {
+    const other = dir === 'in' ? t[0] : t[1];
+    return `<li data-goto="${other}"><span class="arrow">${dir === 'in' ? '←' : '→'}</span> ${esc(nameOf(other))} <span style="color:var(--ink-soft)">· ${esc(t[2])}</span></li>`;
+  };
+  $('#panel').innerHTML = `
+    <div class="kicker">${esc(s.kind)} 상태${s.kind === '종결' ? ' · 회신 필수 (원칙 5)' : ''}</div>
+    <h2>${esc(s.name)}</h2>
+    <p class="desc">${esc(s.desc)}</p>
+    <dl class="facts"><dt>기능</dt><dd>${s.funcs.length ? s.funcs.map(esc).join(' · ') : '—'}</dd></dl>
+    ${inbound.length ? `<div class="sect">들어오는 전이 (파란 점선)</div><ul class="tlist">${inbound.map(t=>row(t,'in')).join('')}</ul>` : ''}
+    ${outbound.length ? `<div class="sect">나가는 전이 (초록 점선)</div><ul class="tlist">${outbound.map(t=>row(t,'out')).join('')}</ul>` : ''}`;
+  $('#panel').querySelectorAll('[data-goto]').forEach(li => {
+    li.onclick = () => {
+      const target = STATES.find(x => x.id === li.dataset.goto);
+      selState = target.id; renderStates(); showState(target);
+    };
+  });
+}
+
+function showIntro(view){
+  $('#panel').innerHTML = view === 'map'
+    ? `<div class="kicker">시스템 맵</div><h2>컴포넌트 조감</h2>
+       <p class="empty">컴포넌트 클릭 → 책임 · 관련 기능 · 도입 Phase<br>
+       Phase 버튼 → 해당 시점의 활성 컴포넌트만 강조<br><br>
+       상세 정본: ARCHITECTURE.md</p>`
+    : `<div class="kicker">상태 머신</div><h2>요청 라이프사이클</h2>
+       <p class="empty">상태 클릭 → 설명과 전이 목록<br>
+       파란 점선 = 이 상태로 들어오는 상태<br>
+       초록 점선 = 이 상태에서 가는 상태<br><br>
+       전이 결정 주체: 코드 상태 머신 (ADR-0001)</p>`;
+}
+
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === t));
+  const v = t.dataset.view;
+  $('#view-map').style.display = v === 'map' ? '' : 'none';
+  $('#view-sm').style.display  = v === 'sm'  ? '' : 'none';
+  showIntro(v);
+});
+document.querySelectorAll('.pbtn').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.pbtn').forEach(x => x.classList.toggle('on', x === b));
+  phaseFilter = b.dataset.phase;
+  renderLayers();
+});
+
+renderLayers();
+renderStates();
+showIntro('map');
+</script>
+</body>
+</html>
