@@ -2,6 +2,7 @@ import type { LlmBackend } from '../gateway/backend';
 import { LlmGateway, type UsageLogger } from '../gateway/gateway';
 import { CLARIFICATION_V0 } from '../prompts/catalog';
 import type { ClarificationOutput } from '../prompts/clarification-v0';
+import { COMPLETENESS_RUBRIC_V0 } from '../prompts/completeness-v0';
 import type { PromptRegistry } from '../prompts/registry';
 import type { SessionStore } from '../store/session-store';
 
@@ -47,11 +48,11 @@ function ensureVersionAxes(store: SessionStore, registry: PromptRegistry) {
       regressionPassed: clarification.regressionPassed,
     });
   const thresholdVersionId =
-    store.findVersionId('threshold', 'completeness-rubric', '0.0.0') ??
+    store.findVersionId('threshold', COMPLETENESS_RUBRIC_V0.name, COMPLETENESS_RUBRIC_V0.semver) ??
     store.registerThresholdVersion({
-      name: 'completeness-rubric',
-      semver: '0.0.0',
-      bodyRef: '미정 — 완결성 판정(#6)에서 도입',
+      name: COMPLETENESS_RUBRIC_V0.name,
+      semver: COMPLETENESS_RUBRIC_V0.semver,
+      bodyRef: 'src/prompts/completeness-v0.ts',
       regressionPassed: false,
     });
   const slotSchemaVersionId =
