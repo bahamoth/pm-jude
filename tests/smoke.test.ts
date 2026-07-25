@@ -1,8 +1,18 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { LlmGateway } from '../src/gateway/gateway';
 import type { BackendRequest, BackendResponse, LlmBackend } from '../src/gateway/backend';
-import { CLARIFICATION_V0, createDefaultRegistry, REQUIREMENTS_V0 } from '../src/prompts/catalog';
+import {
+  CLARIFICATION_V0,
+  COMPLETENESS_V0,
+  createDefaultRegistry,
+  REQUIREMENTS_V0,
+} from '../src/prompts/catalog';
 import type { ClarificationOutput } from '../src/prompts/clarification-v0';
+import {
+  judgeCompleteness,
+  runRuleLayer,
+  type CompletenessOutput,
+} from '../src/prompts/completeness-v0';
 import {
   assembleRequirementsDocument,
   type RequirementsOutput,
@@ -50,6 +60,23 @@ const clarificationResponse = JSON.stringify({
     },
   ],
 } satisfies ClarificationOutput);
+
+const completenessResponse = JSON.stringify({
+  slots: [
+    {
+      slotKey: 'target-user',
+      verdict: 'filled',
+      rationale: '요청자가 「영업팀 매니저」라고 확답함',
+    },
+    {
+      slotKey: 'data-source',
+      verdict: 'promoted',
+      rationale: '요청자가 「모르겠어요 — 개발팀이 정해 주세요」 경로를 택함',
+    },
+  ],
+  remainingAmbiguities: [],
+  rubric: { score: 85, rationale: '핵심 슬롯이 모두 충족 또는 승격됨' },
+} satisfies CompletenessOutput);
 
 const requirementsResponse = JSON.stringify({
   problem: '영업 실적을 정리해 볼 수단이 없어 매니저가 수작업으로 집계한다',
@@ -121,7 +148,11 @@ describe('Phase 0 조립 smoke', () => {
     });
 
     // 게이트웨이는 저장소에서 조립한 컨텍스트를 무상태로 주입받는다 (F14)
-    const backend = new ScriptedBackend([clarificationResponse, requirementsResponse]);
+    const backend = new ScriptedBackend([
+      clarificationResponse,
+      completenessResponse,
+      requirementsResponse,
+    ]);
     const gateway = new LlmGateway({ backend, registry });
     const result = await gateway.complete<ClarificationOutput>(CLARIFICATION_V0, {
       request: utterance.originalText,
@@ -164,6 +195,28 @@ describe('Phase 0 조립 smoke', () => {
       openIssueAssignee: 'dev-lead',
     });
 
+    // 2층 완결성 판정: LLM 층(슬롯 3상태 + 루브릭) → 룰 층(결정론적 백스톱) → 결합 (F2c)
+    const requiredSlots = [{ key: 'target-user' }, { key: 'data-source' }];
+    const completenessResult = await gateway.complete<CompletenessOutput>(COMPLETENESS_V0, {
+      request: utterance.originalText,
+      teamLanguage: 'ko',
+      requiredSlots,
+      conversation: [
+        { question: '누가 보나요?', answer: '영업팀 매니저요', slotKey: 'target-user' },
+      ],
+    });
+    const verdict = judgeCompleteness({
+      rule: runRuleLayer({ requiredSlots, slotStates: store.listSlotStates(session.id) }),
+      llm: completenessResult.output,
+    });
+    store.recordSignal({
+      sessionId: session.id,
+      type: 'completeness_check',
+      payload: { refined: verdict.refined, llmScore: verdict.llmScore },
+      ...versionAxes,
+    });
+    expect(verdict.refined).toBe(true); // 정제 완료 — requirements 생성으로 진행 가능
+
     // requirements 생성 → 코드 강제 조립 (승격 슬롯 오픈이슈 합류 + 원문 전사 첨부)
     const reqResult = await gateway.complete<RequirementsOutput>(REQUIREMENTS_V0, {
       request: utterance.originalText,
@@ -190,7 +243,8 @@ describe('Phase 0 조립 smoke', () => {
 
     // 조립 확인: 프롬프트 본문이 백엔드에 닿았고, 문서와 export에 전 과정이 남는다
     expect(backend.requests[0]?.promptBody).toBe(clarification.body);
-    expect(backend.requests[1]?.promptBody).toBe(registry.get(REQUIREMENTS_V0).body);
+    expect(backend.requests[1]?.promptBody).toBe(registry.get(COMPLETENESS_V0).body);
+    expect(backend.requests[2]?.promptBody).toBe(registry.get(REQUIREMENTS_V0).body);
     expect(doc.content.openIssues).toEqual([
       {
         slotKey: 'data-source',
@@ -214,7 +268,10 @@ describe('Phase 0 조립 smoke', () => {
         { slotKey: 'data-source', state: 'promoted', openIssueAssignee: 'dev-lead' },
         { slotKey: 'target-user', state: 'filled', confirmedByRequester: true },
       ],
-      signals: [{ type: 'clarification_round', payload: { questionCount: 3 } }],
+      signals: [
+        { type: 'clarification_round', payload: { questionCount: 3 } },
+        { type: 'completeness_check', payload: { refined: true, llmScore: 85 } },
+      ],
     });
   });
 });
