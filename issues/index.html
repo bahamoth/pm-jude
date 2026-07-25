@@ -453,6 +453,11 @@
         "author": "claude",
         "date": "2026-07-25",
         "body": "개선 — 릴리스 PR(`release-please--*` 브랜치)은 이미 CI를 통과한 커밋들의 버전 범프 집계이므로 CI 잡을 건너뛰도록 조건 추가. skipped 잡은 required check를 충족하므로 브랜치 보호와도 호환되고, 릴리스 PR용 PAT가 불필요해짐."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-25",
+        "body": "정정 — release-please 기본값이 첫 릴리스를 1.0.0으로 잡아 v1.0.0 태그·릴리스가 생성됐으나, Phase 0 PoC이므로 0.1.0에서 시작하기로 결정(운영자). v1.0.0 태그·GitHub 릴리스 삭제 후 package.json·manifest·CHANGELOG를 0.1.0으로 정정하고 config에 `initial-version: 0.1.0` 명시. v0.1.0 태그·릴리스는 정정 커밋 머지 후 재생성."
       }
     ]
   }
