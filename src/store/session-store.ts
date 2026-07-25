@@ -22,6 +22,8 @@ export interface SlotSchemaVersionInput extends VersionInput {
 
 export interface CreateSessionInput {
   originChannel: 'web' | 'slack';
+  /** 채널 스레드 ↔ 세션 매핑 키 (예: `slack:<channel>:<thread_ts>`). */
+  channelThreadKey?: string;
   promptVersionId: string;
   modelVersion: string;
   thresholdVersionId: string;
@@ -96,6 +98,32 @@ export class SessionStore {
 
   getSession(id: string): typeof schema.session.$inferSelect | null {
     return this.db.select().from(schema.session).where(eq(schema.session.id, id)).get() ?? null;
+  }
+
+  findSessionByThreadKey(channelThreadKey: string): typeof schema.session.$inferSelect | null {
+    return (
+      this.db
+        .select()
+        .from(schema.session)
+        .where(eq(schema.session.channelThreadKey, channelThreadKey))
+        .get() ?? null
+    );
+  }
+
+  /** 상태 값 집합과 전이 규칙은 호출하는 상태 머신의 것 (ADR-0001). 종결 상태를 넣으면 closedAt이 찍힌다. */
+  updateSessionState(
+    id: string,
+    patch: { status?: string; roundCount?: number; terminalState?: string },
+  ): void {
+    this.db
+      .update(schema.session)
+      .set({
+        ...patch,
+        updatedAt: now(),
+        ...(patch.terminalState ? { closedAt: now() } : {}),
+      })
+      .where(eq(schema.session.id, id))
+      .run();
   }
 
   /** 발화 기록. 세션 내 순번(seq)을 자동 부여하며, 원문은 이후 삭제·수정할 수 없다 (원칙 7). */

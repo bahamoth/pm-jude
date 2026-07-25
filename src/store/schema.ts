@@ -36,6 +36,8 @@ export const session = sqliteTable('session', {
   status: text('status').notNull(),
   terminalState: text('terminal_state'),
   originChannel: text('origin_channel', { enum: ['web', 'slack'] }).notNull(),
+  /** 채널 스레드 ↔ 세션 매핑 키 (예: `slack:<channel>:<thread_ts>`) — 어댑터 재시작에도 스레드가 세션에 이어진다. */
+  channelThreadKey: text('channel_thread_key').unique(),
   isUiRequest: integer('is_ui_request', { mode: 'boolean' }),
   roundCount: integer('round_count').notNull().default(0),
   // 버전 귀속 5축 — 세션 생성 시점의 버전을 고정 기록 (F11)
