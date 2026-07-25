@@ -448,6 +448,11 @@
         "author": "claude",
         "date": "2026-07-25",
         "body": "완료 — `.github/workflows/ci.yml`(pull_request 트리거, concurrency cancel-in-progress, pnpm/action-setup→setup-node(cache: pnpm)→frozen-lockfile 설치→format:check·lint·typecheck·test), `.github/workflows/release-please.yml`(main push, googleapis/release-please-action@v4, 토큰 폴백 체인), `.release-please-config.json`(release-type: node)·manifest(0.0.0). 사용자 요청으로 보드 외 추가된 작업."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-25",
+        "body": "개선 — 릴리스 PR(`release-please--*` 브랜치)은 이미 CI를 통과한 커밋들의 버전 범프 집계이므로 CI 잡을 건너뛰도록 조건 추가. skipped 잡은 required check를 충족하므로 브랜치 보호와도 호환되고, 릴리스 PR용 PAT가 불필요해짐."
       }
     ]
   }

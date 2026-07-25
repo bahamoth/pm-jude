@@ -11,6 +11,9 @@ concurrency:
 jobs:
   checks:
     name: Node (format + lint + typecheck + vitest)
+    # release-please가 만드는 릴리스 PR은 버전 범프·CHANGELOG뿐이므로 CI를 건너뛴다
+    # (이미 CI를 통과한 커밋들의 집계다). skipped 잡은 required check도 충족한다.
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
