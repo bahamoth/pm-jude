@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.5.0](https://github.com/bahamoth/pm-jude/compare/v0.4.0...v0.5.0) (2026-07-26)
+
+
+### Features
+
+* web-ui 스캐폴드 — Next.js 16 + shadcn/ui + API 프록시 ([#22](https://github.com/bahamoth/pm-jude/issues/22)) ([26919e3](https://github.com/bahamoth/pm-jude/commit/26919e3d1f2f4d9d84c65a0371bcfe37009c9aaf))
+* 마법사 복원·데모 기반 — 질문 구조 신호 영속, latestQuestions, 가짜 백엔드 ([#22](https://github.com/bahamoth/pm-jude/issues/22)) ([c13fb41](https://github.com/bahamoth/pm-jude/commit/c13fb41f390e52fe8e94540f1a03ed918482c0ca))
+* 명확화 마법사 UI — 객관식 동선·대기 상태·문서 뷰·세션 재개 ([#22](https://github.com/bahamoth/pm-jude/issues/22)) ([8069e5c](https://github.com/bahamoth/pm-jude/commit/8069e5c6e7b6516c2848bb4e6cf8e9b1513811c9))
+
 ## [0.4.0](https://github.com/bahamoth/pm-jude/compare/v0.3.1...v0.4.0) (2026-07-26)
 
 
