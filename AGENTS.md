@@ -1,5 +1,9 @@
 # pm-jude
 
+## Collaboration workflow
+
+One directive = one branch = one PR with issue-unit commits. No stacked PRs; registry-like files (`package.json`, `.env.example`, `issues/index.html`, catalog) are edited only at integration time; claim tickets on the board before starting. See `docs/agents/workflow.md`.
+
 ## Agent skills
 
 ### Issue tracker
