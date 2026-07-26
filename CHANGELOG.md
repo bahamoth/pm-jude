@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.0](https://github.com/bahamoth/pm-jude/compare/v0.1.0...v0.2.0) (2026-07-26)
+
+
+### Features
+
+* Slack PoC 러너 — 스레드 인테이크·명확화·문서 게시 ([#8](https://github.com/bahamoth/pm-jude/issues/8)) ([817febc](https://github.com/bahamoth/pm-jude/commit/817febc9a40bbe5775f5859523b89ec3ad9d9627))
+* 소급 아카이브 분석 도구 — 추출·분류·집계 파이프라인 ([#9](https://github.com/bahamoth/pm-jude/issues/9)) ([dfa2a5e](https://github.com/bahamoth/pm-jude/commit/dfa2a5edcd696be810a3aad82329582c471e82f7))
+* 완결성 판정 프롬프트 v0 + 룰 층 초안 — 2층 판정 결합 ([#6](https://github.com/bahamoth/pm-jude/issues/6)) ([cdbd655](https://github.com/bahamoth/pm-jude/commit/cdbd65589ab3cd604695a5c17e7b078cb0898447))
+
 ## 0.1.0 (2026-07-25)
 
 
