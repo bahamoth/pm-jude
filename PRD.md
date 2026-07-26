@@ -1,6 +1,6 @@
 # PRD — AI PM 인테이크 에이전트 "PM Jude"
 
-본 문서는 §2 제품 개요와 §3 핵심 원칙만 담는다. 나머지 섹션은 `docs/prd/` 아래 파일로 분할되어 있으며, 본문 텍스트는 v1.4 원문과 동일하다. 버전·변경 이력은 [docs/prd/document-info.md](docs/prd/document-info.md).
+본 문서는 §2 제품 개요와 §3 핵심 원칙만 담는다. 나머지 섹션은 `docs/prd/` 아래 파일로 분할되어 있다. 버전·변경 이력은 [docs/prd/document-info.md](docs/prd/document-info.md).
 
 ## 목차
 
