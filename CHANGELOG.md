@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/bahamoth/pm-jude/compare/v0.3.0...v0.3.1) (2026-07-26)
+
+
+### Bug Fixes
+
+* Release Please 동시 실행 직렬화 — 연속 푸시 레이스로 인한 라벨 404 방지 ([#21](https://github.com/bahamoth/pm-jude/issues/21)) ([0acba32](https://github.com/bahamoth/pm-jude/commit/0acba3299c9eec5ea4b8e26cf15829aedee6f288))
+
 ## [0.3.0](https://github.com/bahamoth/pm-jude/compare/v0.2.0...v0.3.0) (2026-07-26)
 
 
