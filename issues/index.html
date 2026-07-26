@@ -351,13 +351,18 @@
       4
     ],
     "created": "2026-07-25",
-    "updated": "2026-07-25",
+    "updated": "2026-07-26",
     "body": "## 목표\nBolt for TypeScript로 Slack 스레드에서 인테이크 → 명확화 → 문서 전달을 실행하는 PoC 러너.\n\n## 인간 개입 필요\nSlack 워크스페이스 앱 생성·토큰 발급·채널 선정은 운영자 작업.\n\n## 수용기준\n- 멘션 인테이크 → 접수 확인 → 스레드 명확화 → 완결 시 문서 게시\n- 전 세션이 저장소에 기록되고 버전 귀속됨\n- Linear는 issueCreate 1개 또는 수동\n\n## 참조\nPRD §9 Phase 0, F1-Slack",
     "comments": [
       {
         "author": "claude",
         "date": "2026-07-26",
         "body": "코드 완료 — 운영자 단계만 남음. `src/runner/slack-runner.ts`(코어, `SlackPort` 시임 뒤에 Slack 격리) + `src/cli/slack.ts`(Bolt Socket Mode 얇은 배선, `pnpm slack`). 흐름: 멘션 → 세션 생성(`channelThreadKey`로 스레드↔세션 영속 매핑, 마이그레이션 0002) → 접수 확인(LLM 호출 전 즉시, F1) → 명확화 질문 스레드 게시 → 답변마다 2층 완결성 판정(#6 소비, LLM 슬롯 판정을 세션 슬롯 상태로 반영 — 승격 트리거) → 정제 완료 시 requirements 문서 게시(status=documented) / 미정제·상한 미도달 시 다음 라운드 / 상한 도달 시 사유 회신 후 보류(정보 부족) 종결(원칙 5). 요청자 언어는 발화 문자로 감지(ko/en 초안, F2d — 프로필 선호 언어는 Phase 1). 신호에 룰 실패·LLM 판정 포함(#6 리뷰 이연분 반영). 시임 테스트 8건(fake Slack + scripted 백엔드, 실제 SQLite). **남은 운영자 단계**: ① api.slack.com에서 앱 생성, Socket Mode 활성화 ② Bot Token Scopes: app_mentions:read, chat:write, channels:history, groups:history, im:history ③ Event Subscriptions: app_mention, message.channels ④ `.env`에 SLACK_BOT_TOKEN·SLACK_APP_TOKEN 기입(.env.example 참조) ⑤ 채널 선정·초대 후 `pnpm slack` 실행. Linear는 수용기준대로 수동."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-26",
+        "body": "후순위 전환 (ADR-0007, #16) — 웹 우선 검증 전환으로 Slack 어댑터 운영은 웹 파이프라인 검증 뒤로 미룬다. 파이프라인 로직은 채널 비의존 코어 러너로 승격됐고 slack-runner는 얇은 어댑터로 유지되므로, 복귀 시 위 운영자 단계(앱 생성·토큰·채널)만 수행하면 된다. 채택 가설(완주율·재사용률)은 Slack 복귀 후 재검증 — 한계는 ADR-0007에 기록."
       }
     ]
   },
