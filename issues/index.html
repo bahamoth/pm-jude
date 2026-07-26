@@ -517,6 +517,28 @@
         "body": "완료. 분할 결과: document-info(13줄)·user-stories(45)·functional-requirements(158)·system(49)·scope-and-milestones(49)·metrics-and-risks(59)·pending-decisions(27)·glossary(41). PRD.md 79줄. 분할 전후 본문 텍스트 동일성 스크립트 검증 통과. §12 파일명은 CONTEXT.md 용어 \"오픈이슈\"(승격 슬롯 필드)와의 충돌을 피해 pending-decisions.md로 명명."
       }
     ]
+  },
+  {
+    "id": 15,
+    "title": "아키텍처 가시화 개선 — SVG 상태 머신 + 데이터 아일랜드",
+    "state": "closed",
+    "labels": [
+      "ready-for-agent"
+    ],
+    "type": "task",
+    "assignee": "claude",
+    "parent": null,
+    "blockedBy": [],
+    "created": "2026-07-26",
+    "updated": "2026-07-26",
+    "body": "docs/architecture.html의 아키텍처·상태 머신 가시성 개선 지시. 기존 카드 그리드에는 엣지(전이·호출 관계)가 그려지지 않았다. 개선: ① 상태 머신을 결정적 레이아웃의 SVG 그래프로 재구성(화살표·엣지 라벨·복귀/에스컬레이션 구분·종결 이중 테두리·시나리오 재생 애니메이션 5종), ② 시스템 맵에 ARCHITECTURE.md 시스템 구성도의 호출 엣지 24개를 DOM 좌표 기반 SVG 오버레이로 추가(선택 시 in/out 하이라이트), ③ 모든 모델 데이터를 #arch-data JSON data island로 분리(issues/index.html과 동일 규약 — 머신 가독). 라이브러리 미사용(d3·mermaid 배제 근거는 PR 본문).",
+    "comments": [
+      {
+        "author": "jude",
+        "date": "2026-07-26",
+        "body": "완료. Chrome 실렌더링 검증: 맵 선택 하이라이트·전체 표시, 상태 머신 라벨 배치(3회 튜닝), 시나리오 재생(rAF 시간 기반 — 백그라운드 창 스로틀 시에도 프레임당 엣지 단위로 진행), 게이트 선택 시 in/out 전이 구분. 콘솔 오류 0. arch-data JSON 파스 검증 통과."
+      }
+    ]
   }
 ]
 </script>
