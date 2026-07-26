@@ -49,13 +49,26 @@
   .layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:24px;padding:26px 32px 48px;align-items:start}
   @media (max-width:900px){.layout{grid-template-columns:1fr}}
 
-  .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:16px}
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px}
   .toolbar .lbl{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;letter-spacing:.14em;color:var(--ink-soft);text-transform:uppercase}
   .pbtn{
     font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;letter-spacing:.08em;
     background:none;border:1px solid var(--hairline);color:var(--ink-soft);padding:5px 12px;cursor:pointer;border-radius:2px;
   }
   .pbtn.on{border-color:var(--accent);color:var(--accent);font-weight:600}
+  .pbtn:focus-visible,.tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  /* ── 시스템 맵 (HTML 카드 + SVG 엣지 오버레이) ─────────────── */
+  #mapwrap{position:relative}
+  #map-edges{position:absolute;inset:0;pointer-events:none;overflow:visible;z-index:2}
+  .medge{fill:none;stroke-width:1.7;opacity:0;transition:opacity .25s}
+  .medge.on{opacity:1}
+  .medge.all{opacity:.3}
+  .medge.e-out{stroke:var(--c-gateway);marker-end:url(#m-out)}
+  .medge.e-in{stroke:var(--c-adapter);marker-end:url(#m-in)}
+  .medge.dashed{stroke-dasharray:5 4}
+  .mlabel{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:10.5px;fill:var(--ink);
+    paint-order:stroke;stroke:var(--paper);stroke-width:4px;stroke-linejoin:round}
 
   .layer{margin-bottom:18px;animation:rise .5s cubic-bezier(.22,1,.36,1) both}
   .layer-head{display:flex;align-items:center;gap:8px;padding-bottom:8px;margin-bottom:10px;border-bottom:2px solid var(--layer-accent)}
@@ -74,8 +87,10 @@
     transition:transform .15s cubic-bezier(.22,1,.36,1),opacity .2s,box-shadow .15s;
   }
   .comp:hover{transform:translateY(-2px)}
+  .comp:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   .comp.sel{outline:2px solid var(--layer-accent);outline-offset:1px}
   .comp.dim{opacity:.28;filter:grayscale(.6)}
+  .comp.rel{box-shadow:0 0 0 1px var(--layer-accent),var(--shadow)}
   .comp h3{font-size:13.5px;font-weight:600;line-height:1.35;margin-bottom:5px}
   .comp .meta{display:flex;flex-wrap:wrap;gap:4px}
   .chip{
@@ -104,28 +119,58 @@
   .tlist{list-style:none;font-size:12.5px}
   .tlist li{padding:5px 0;border-bottom:1px dashed var(--hairline);cursor:pointer}
   .tlist li:hover{color:var(--accent)}
-  .tlist .arrow{color:var(--accent);font-family:ui-monospace,"SF Mono",Menlo,monospace}
+  .tlist .arrow{font-family:ui-monospace,"SF Mono",Menlo,monospace}
+  .tlist .arrow.in{color:var(--c-adapter)}
+  .tlist .arrow.out{color:var(--c-gateway)}
   .sect{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft);margin:14px 0 4px}
 
-  .stategrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:22px}
-  .snode{
-    background:var(--card);border:1px solid var(--card-edge);border-left:3px solid var(--c-active);
-    padding:10px 12px;cursor:pointer;box-shadow:var(--shadow);transition:transform .15s,outline .1s;
-  }
-  .snode:hover{transform:translateY(-2px)}
-  .snode.terminal{border-left-color:var(--c-terminal)}
-  .snode.terminal h3{color:var(--ink-soft)}
-  .snode.sel{outline:2px solid var(--accent);outline-offset:1px}
-  .snode.rel-in{outline:2px dashed var(--c-adapter);outline-offset:1px}
-  .snode.rel-out{outline:2px dashed var(--c-gateway);outline-offset:1px}
-  .snode h3{font-size:13.5px;font-weight:600;line-height:1.35;margin-bottom:4px}
-  .snode .k{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:10px;color:var(--ink-soft);letter-spacing:.08em}
+  /* ── 상태 머신 (SVG 그래프) ─────────────────────────────── */
+  .smwrap{overflow-x:auto;margin-bottom:18px}
+  #sm-svg{display:block;min-width:1240px;width:100%;height:auto}
+  .snodeG{cursor:pointer}
+  .snodeG rect.body{fill:var(--card);stroke:var(--card-edge);transition:stroke .15s}
+  .snodeG rect.ring{fill:none;stroke:var(--card-edge)}
+  .snodeG rect.bar{fill:var(--c-active)}
+  .snodeG.terminal rect.bar{fill:var(--c-terminal)}
+  .snodeG text.nm{fill:var(--ink);font:600 13px "Avenir Next","Avenir","Segoe UI",system-ui,sans-serif}
+  .snodeG.terminal text.nm{fill:var(--ink-soft)}
+  .snodeG text.sub{fill:var(--ink-soft);font:10px ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.06em}
+  .snodeG:hover rect.body,.snodeG:focus-visible rect.body{stroke:var(--accent)}
+  .snodeG:focus-visible{outline:none}
+  .snodeG.sel rect.body{stroke:var(--accent);stroke-width:2}
+  .snodeG.rel-in rect.body{stroke:var(--c-adapter);stroke-width:1.8;stroke-dasharray:5 3}
+  .snodeG.rel-out rect.body{stroke:var(--c-gateway);stroke-width:1.8;stroke-dasharray:5 3}
+  .snodeG.lit rect.body{stroke:var(--accent);stroke-width:2.2}
+  .snodeG.lit rect.bar{fill:var(--accent)}
+  .snodeG.dimmed,.edge.dimmed,.elabel.dimmed{opacity:.13}
+
+  .edge{fill:none;stroke:var(--ink-soft);stroke-width:1.4;marker-end:url(#m-n);transition:opacity .2s}
+  .edge.return{stroke-dasharray:6 4}
+  .edge.alt{stroke-dasharray:2 4}
+  .edge.e-in{stroke:var(--c-adapter);stroke-width:2;marker-end:url(#m-in)}
+  .edge.e-out{stroke:var(--c-gateway);stroke-width:2;marker-end:url(#m-out)}
+  .edge.lit{stroke:var(--accent);stroke-width:2.2;marker-end:url(#m-lit)}
+  .ehit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer}
+  .elabel{font:10.5px ui-monospace,"SF Mono",Menlo,monospace;fill:var(--ink-soft);
+    paint-order:stroke;stroke:var(--paper);stroke-width:4px;stroke-linejoin:round;pointer-events:none;transition:opacity .2s}
+  .elabel.hl{fill:var(--ink)}
+  .token{fill:var(--accent);stroke:var(--paper);stroke-width:2}
+
+  .legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-family:ui-monospace,"SF Mono",Menlo,monospace;
+    font-size:10.5px;color:var(--ink-soft);letter-spacing:.05em;padding:4px 2px 14px}
+  .legend .sw{display:inline-block;vertical-align:middle;width:26px;height:0;border-top:2px solid var(--ink-soft);margin-right:6px}
+  .legend .sw.ret{border-top-style:dashed}
+  .legend .sw.alt{border-top-style:dotted}
+  .legend .sw.term{width:14px;height:12px;border:1px solid var(--ink-soft);border-top:1px solid var(--ink-soft);box-shadow:inset 0 0 0 2px var(--paper),inset 0 0 0 3px var(--ink-soft)}
+
   .rules{
     background:var(--card);border:1px solid var(--card-edge);border-left:3px solid var(--accent);
     padding:14px 16px;box-shadow:var(--shadow);font-size:13px;
   }
   .rules h3{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
   .rules li{margin-left:18px;margin-bottom:4px}
+
+  .dataerr{background:var(--card);border:1px solid var(--accent);padding:16px 20px;margin:24px 32px;font-family:ui-monospace,monospace;font-size:12px;white-space:pre-wrap}
 
   @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
   @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
@@ -135,7 +180,7 @@
 
 <header>
   <div class="wordmark">pm-jude <em>· architecture</em></div>
-  <div class="src">PRD v1.4 §7 · 정본: ARCHITECTURE.md</div>
+  <div class="src">PRD v1.4 §7 · 정본: ARCHITECTURE.md · 데이터: #arch-data</div>
   <nav class="tabs">
     <button class="tab on" data-view="map">시스템 맵</button>
     <button class="tab" data-view="sm">상태 머신</button>
@@ -151,160 +196,248 @@
         <button class="pbtn" data-phase="0">Phase 0</button>
         <button class="pbtn" data-phase="1">Phase 1</button>
         <button class="pbtn" data-phase="2">Phase 2</button>
+        <span class="lbl" style="margin-left:14px">연결</span>
+        <button class="pbtn" id="btn-alledges">전체 표시</button>
       </div>
-      <div id="layers"></div>
+      <div id="mapwrap">
+        <div id="layers"></div>
+        <svg id="map-edges" aria-hidden="true"></svg>
+      </div>
     </div>
     <div id="view-sm" style="display:none">
-      <div id="states"></div>
-      <div class="rules">
-        <h3>코드로 강제되는 하드 제약</h3>
-        <ul>
-          <li>승인 없는 Linear 이슈 생성 불가 — 게이트 승인이 유일한 생성 경로</li>
-          <li>룰 층 미통과 시 게이트 진입 불가 (승격 경로만 예외)</li>
-          <li>회귀 미통과 프롬프트·스키마 버전의 런타임 로드 불가 (F12)</li>
-          <li>종결 상태 전이 시 회신 발송 없이는 세션 종료 불가 (원칙 5)</li>
-          <li>목업 코드의 개발팀 전달 불가 — 이미지·URL 형태만</li>
-        </ul>
+      <div class="toolbar">
+        <span class="lbl">시나리오 재생</span>
+        <span id="sc-btns"></span>
+        <button class="pbtn" id="btn-clear">지우기</button>
       </div>
+      <div class="legend">
+        <span><span class="sw"></span>전이</span>
+        <span><span class="sw ret"></span>복귀 전이</span>
+        <span><span class="sw alt"></span>에스컬레이션</span>
+        <span><span class="sw term"></span>이중 테두리 = 종결 (회신 필수, 원칙 5)</span>
+      </div>
+      <div class="smwrap"><svg id="sm-svg" role="img" aria-label="요청 라이프사이클 상태 머신"></svg></div>
+      <div class="rules"><h3>코드로 강제되는 하드 제약</h3><ul id="rules-ul"></ul></div>
     </div>
   </main>
   <aside id="panel"></aside>
 </div>
 
+<!--
+━━ 머신 가독 영역 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+이 페이지의 모든 모델 정보(레이어·컴포넌트·호출 엣지·상태·전이·시나리오·하드 제약)는
+아래 #arch-data JSON data island가 단일 소스다. 정본 문서는 ARCHITECTURE.md이며,
+정본 개정 시 이 island를 함께 갱신한다.
+
+에이전트는 이 data island만 편집한다 — 위 HTML/CSS/JS 셸은 렌더러이므로 건드리면
+페이지가 렌더링되지 않는다 (issues/index.html과 동일한 규약).
+
+편집 후 검증:
+  node -e "const s=require('fs').readFileSync('docs/architecture.html','utf8');JSON.parse(s.match(/<script type=\"application\/json\" id=\"arch-data\">([\s\S]*?)<\/script>/)[1]);console.log('arch-data ok')"
+
+스키마 요약:
+  layers[]          {id, name, note}
+  components[]      {id, layer, name, intro(0|1|2), desc, funcs[], extra}
+  componentEdges[]  {from, to, label?, dashed?}          — 호출 관계 (ARCHITECTURE.md 시스템 구성도)
+  states[]          {id, name, kind("진행"|"종결"), funcs[], desc, col, row}  — col/row는 그리드 좌표
+  transitions[]     {id, from, to, label?, kind?("return"|"alt"), bow?, via?[[col,row]…], labelT?, ldx?, ldy?}
+  scenarios[]       {id, name, edges[transition id…]}
+  hardRules[]       string
+새 상태·전이 추가 시 col/row·via를 생략하면 기본 배치·직선 라우팅으로 렌더된다.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-->
+<script type="application/json" id="arch-data">
+{
+  "layers": [
+    { "id": "adapter", "name": "채널 어댑터", "note": "모든 어댑터는 동일한 코어 API만 호출" },
+    { "id": "core", "name": "채널 비의존 코어", "note": "단계 전이는 상태 머신이 결정 (ADR-0001)" },
+    { "id": "gateway", "name": "LLM 게이트웨이", "note": "외부는 백엔드 종류를 모름" },
+    { "id": "eval", "name": "평가·개선 서브시스템", "note": "계측 없는 기능은 만들지 않음 (원칙 6)" },
+    { "id": "ext", "name": "외부 시스템", "note": "" }
+  ],
+  "components": [
+    { "id": "slack-a", "layer": "adapter", "name": "Slack 어댑터", "intro": 0,
+      "desc": "멘션·DM·이모지 인테이크, 스레드 명확화, 버튼 게이트, DM 역보고. Bolt for TypeScript + Assistant 스레드. Phase 0 PoC와 Phase 1의 1차 표면.",
+      "funcs": ["F1"], "extra": "스테이크홀더의 서식지가 Slack이므로 전달 순서 1순위 (§9)" },
+    { "id": "web-a", "layer": "adapter", "name": "웹 어댑터", "intro": 1,
+      "desc": "Phase 1은 매직링크 경량 뷰어(긴 문서 열람·게이트), Phase 2에 채팅 인테이크·대시보드·SSO로 완결 표면화. 채널 비의존 원칙의 완성.",
+      "funcs": ["F1", "F9"], "extra": "" },
+    { "id": "intake", "layer": "core", "name": "인테이크 API", "intro": 1,
+      "desc": "채널 무관 수신, 통합 프로필·세션 생성, 3초 이내 확인 응답. 세션은 요청자 ≠ 실사용자와 N명 요청자를 표현.",
+      "funcs": ["F1"], "extra": "" },
+    { "id": "sm", "layer": "core", "name": "상태 머신", "intro": 1,
+      "desc": "단계 전이 결정과 하드 제약 강제의 주체. 게이트 라우터(영역 담당 → 기본 승인자 → 대체자)와 SLA 스케줄러(리마인더 → 대체자 통보 → 자동 백로그)를 포함.",
+      "funcs": ["F5"], "extra": "원칙 2·5의 구현 지점 (ADR-0001)" },
+    { "id": "clarify", "layer": "core", "name": "명확화 엔진", "intro": 0,
+      "desc": "표적 질문 생성(해석 발산 지점 공략), 2층 완결성 판정(룰 백스톱 + LLM 의미 판정), 슬롯 3상태와 승격 판정. 질문은 요청자 언어로 3~5개.",
+      "funcs": ["F2b", "F2c", "F2e"], "extra": "Phase 0에서 프롬프트 v0 검증" },
+    { "id": "search", "layer": "core", "name": "컨텍스트 검색기", "intro": 1,
+      "desc": "질문 생성 전에 기존 이슈·과거 문서·종결 세션·거절 이력을 검색. 시스템 유일의 LLM 자율 툴콜 지점(도구·횟수 제한). 중복 후보 제시의 출처.",
+      "funcs": ["F2a"], "extra": "거절 이력은 차단이 아니라 참고 정보로만 제시" },
+    { "id": "docgen", "layer": "core", "name": "문서 생성기 + UI 분류기", "intro": 0,
+      "desc": "requirements/tasks 생성(EARS·Given-When-Then), 슬롯 단위 요청자 확인, 원문 전사 첨부. 명확화 종료 시 UI 변화 여부를 분류해 목업 실행을 결정.",
+      "funcs": ["F3"], "extra": "문서 단일 진실 원천 (ADR-0002)" },
+    { "id": "mock", "layer": "core", "name": "목업 서비스 + 역주입기", "intro": 2,
+      "desc": "UI 요청에 한해 self-contained 인터랙티브 HTML 목업 생성·호스팅. 요구사항 vN ↔ 목업 vN 매핑, 승인 시 어노테이션 확정 사항을 문서 vN+1로 역주입.",
+      "funcs": ["F4"], "extra": "워터마크 상시 · 코드 형태 비전달" },
+    { "id": "connector", "layer": "core", "name": "Linear 커넥터", "intro": 0,
+      "desc": "승인 시 issueCreate. 본문에 스펙 + 원문 전사 + 오픈이슈 섹션, 모든 이슈에 세션 provenance 부착. 병합 세션은 이슈 생성 없이 구독자 등록 + 코멘트 첨부.",
+      "funcs": ["F6"], "extra": "Phase 0은 issueCreate 1개 또는 수동" },
+    { "id": "notify", "layer": "core", "name": "알림 서비스", "intro": 1,
+      "desc": "회신·역보고·리마인더 발송. 수신자 언어·시간대 인지, 요청자 N명 팬아웃, 채널 해제 시 웹·이메일 폴백.",
+      "funcs": ["F7", "F8"], "extra": "침묵 방지(원칙 5)의 실행 지점" },
+    { "id": "store", "layer": "core", "name": "세션·버전 저장소", "intro": 0,
+      "desc": "세션·원문 전사·슬롯 상태·신호·버전 레지스트리 저장. Phase 0은 SQLite, Phase 1에 Postgres 전환 전제.",
+      "funcs": ["F11"], "extra": "ADR-0006 · 버전 귀속 5축의 기반" },
+    { "id": "iface", "layer": "gateway", "name": "게이트웨이 인터페이스", "intro": 0,
+      "desc": "complete(promptVersion, input) → structuredOutput. 폭주 방지 상한(세션당 토큰·목업 횟수·월 총액)과 회귀 통과 버전만 로드하는 배포 게이트를 겸함.",
+      "funcs": ["F12", "F14"], "extra": "모델 중립 원칙 4 — 단, 얇게" },
+    { "id": "harness", "layer": "gateway", "name": "Claude Agent SDK 백엔드", "intro": 0,
+      "desc": "Phase 0 한정 하네스. 파일시스템·셸 도구 비활성, 서버 측 격리, 무상태 호출. PoC 목표 달성 시 직접 API로 교체(Exit 기준).",
+      "funcs": ["F14"], "extra": "ADR-0005 · TypeScript" },
+    { "id": "direct", "layer": "gateway", "name": "직접 API 백엔드", "intro": 1,
+      "desc": "Phase 1+ 백엔드. 프로바이더 추상화 구현체는 벤치마크 없이 하나를 확정(후보: Vercel AI SDK / LiteLLM / Bedrock Converse). 모델 라우팅 로직은 범위 밖.",
+      "funcs": [], "extra": "전환 시 골든셋 시드로 출력 동등성 확인" },
+    { "id": "signals", "layer": "eval", "name": "신호 수집기", "intro": 1,
+      "desc": "게이트 결정·재질문·reopen·스펙 변경·목업 반복·후행 피드백을 수집하고 세션 × 프롬프트 × 모델 × 임계치 × 슬롯 스키마 버전에 귀속.",
+      "funcs": ["F11"], "extra": "Phase 1부터 내장 — 계측 없는 기능 금지" },
+    { "id": "scanner", "layer": "eval", "name": "우회 스캐너", "intro": 1,
+      "desc": "provenance 없는 기능 요청 이슈를 전수 집계. 개발자 액션 0. 정책 발효 후에는 컴플라이언스 지표.",
+      "funcs": ["F6"], "extra": "ADR-0003" },
+    { "id": "evaltool", "layer": "eval", "name": "평가 도구 (채택)", "intro": 2,
+      "desc": "트레이싱·프롬프트 레지스트리·회귀 평가는 기존 도구 채택(후보: Langfuse·promptfoo). 자체 구축은 신호 귀속 스키마·골든셋 절차·배포 게이트 연동만.",
+      "funcs": ["F12"], "extra": "구축이 아니라 채택" },
+    { "id": "workbench", "layer": "eval", "name": "판독 워크벤치", "intro": 2,
+      "desc": "전 세션 판독 큐(저볼륨 1차 평가 수단), 실패 유형 분류(프롬프트 결함 vs 스키마 결손), 재질문↔슬롯 매핑 현황, 카나리 관리.",
+      "funcs": ["F13"], "extra": "판독 기록 = 미래 judge 보정 라벨" },
+    { "id": "linear", "layer": "ext", "name": "Linear", "intro": 0,
+      "desc": "이슈 생성 대상 + 웹훅 소스(HMAC 서명·타임스탬프 검증·중복 제거). 이슈 라이프사이클 신호(재질문·reopen·스펙 변경)의 출처.",
+      "funcs": ["F6", "F7"], "extra": "Agents API 네이티브화는 Phase 3 검토" },
+    { "id": "slack", "layer": "ext", "name": "Slack", "intro": 0,
+      "desc": "스테이크홀더의 서식지. 인테이크·명확화·게이트·역보고가 스레드와 DM으로 흐른다.",
+      "funcs": ["F1"], "extra": "" },
+    { "id": "hosting", "layer": "ext", "name": "목업 호스팅", "intro": 2,
+      "desc": "앱 도메인과 분리된 샌드박스 usercontent 도메인(R2 + Workers 권장선). 만료 서명 URL, CSP sandbox, 외부 네트워크 차단.",
+      "funcs": ["F4"], "extra": "다층 방어 §6" }
+  ],
+  "componentEdges": [
+    { "from": "slack", "to": "slack-a" },
+    { "from": "slack-a", "to": "intake" },
+    { "from": "web-a", "to": "intake" },
+    { "from": "intake", "to": "sm" },
+    { "from": "sm", "to": "clarify" },
+    { "from": "sm", "to": "docgen" },
+    { "from": "sm", "to": "mock" },
+    { "from": "sm", "to": "notify" },
+    { "from": "sm", "to": "connector" },
+    { "from": "sm", "to": "store" },
+    { "from": "clarify", "to": "search" },
+    { "from": "clarify", "to": "iface" },
+    { "from": "docgen", "to": "iface" },
+    { "from": "mock", "to": "iface" },
+    { "from": "mock", "to": "hosting" },
+    { "from": "search", "to": "linear" },
+    { "from": "connector", "to": "linear" },
+    { "from": "linear", "to": "notify", "label": "웹훅 (HMAC 검증)" },
+    { "from": "linear", "to": "scanner" },
+    { "from": "iface", "to": "harness" },
+    { "from": "iface", "to": "direct", "label": "Phase 1+", "dashed": true },
+    { "from": "store", "to": "signals" },
+    { "from": "signals", "to": "workbench" },
+    { "from": "evaltool", "to": "iface", "label": "회귀 통과 버전만 로드" }
+  ],
+  "states": [
+    { "id": "s-intake", "name": "인테이크", "kind": "진행", "funcs": ["F1"], "col": 0, "row": 1,
+      "desc": "요청 수신과 세션 생성. 접수 확인은 3초 이내." },
+    { "id": "s-search", "name": "컨텍스트 검색", "kind": "진행", "funcs": ["F2a"], "col": 1, "row": 1,
+      "desc": "기존 이슈·문서·종결 세션·거절 이력 검색. 유사 요청 발견 시 중복 후보 제시. 검색 결과는 세션에 기록." },
+    { "id": "s-merge", "name": "중복 병합", "kind": "종결", "funcs": ["F8"], "col": 2, "row": 0,
+      "desc": "종결 상태 ②. 새 이슈 없이 기존 이슈에 구독자 등록 + 원문 코멘트 첨부. 역보고는 동일 수신." },
+    { "id": "s-clarify", "name": "명확화 루프", "kind": "진행", "funcs": ["F2b", "F2c"], "col": 2, "row": 1,
+      "desc": "표적 질문 3~5개(요청자 언어) ↔ 답변 반복. 각 질문에 「모르겠다 / 개발팀이 정할 문제」 경로 상시 제공. 왕복 상한 존재." },
+    { "id": "s-onhold", "name": "보류(정보 부족)", "kind": "종결", "funcs": ["F2c", "F8"], "col": 2, "row": 2,
+      "desc": "종결 상태 ⑤. 승격조차 불가한 요청의 종결. 요청자는 언제든 재개 가능." },
+    { "id": "s-docgen", "name": "문서 생성 + 슬롯 확인", "kind": "진행", "funcs": ["F3"], "col": 3, "row": 1,
+      "desc": "requirements/tasks 생성. 요청자 확인은 산문 번역이 아니라 슬롯 값 단위·요청자 언어. 원문 전사 첨부." },
+    { "id": "s-promotion", "name": "승격 판정", "kind": "진행", "funcs": ["F2c"], "col": 3, "row": 2,
+      "desc": "왕복 상한 도달 시 남은 미충족 슬롯의 승격 가능 여부 판정. v1.3 데드락(진행도 종결도 불가)을 해소한 경로." },
+    { "id": "s-mockup", "name": "목업 반복", "kind": "진행", "funcs": ["F4"], "col": 4, "row": 0,
+      "desc": "UI 요청에만 실행. 최대 2~3회 반복 수렴, 승인 시 어노테이션 확정 사항을 문서 vN+1로 역주입." },
+    { "id": "s-gate", "name": "승인 게이트", "kind": "진행", "funcs": ["F5"], "col": 5, "row": 1,
+      "desc": "4버튼(승인/질문/백로그/거절), 비동기. 라우팅 근거와 SLA 잔여 표시. 조건부 상정 건은 시각적 구분." },
+    { "id": "s-reject", "name": "거절", "kind": "종결", "funcs": ["F5", "F8"], "col": 6, "row": 0,
+      "desc": "종결 상태 ④. 통제된 사유 목록(우선순위/스코프 밖/중복/기술적 불가/정보 부족) + 이의 경로(팀 리드 재검토) 안내." },
+    { "id": "s-issue", "name": "이슈 생성", "kind": "종결", "funcs": ["F6"], "col": 6, "row": 1,
+      "desc": "종결 상태 ①. 승인 시에만 도달하는 유일한 이슈 생성 경로. provenance 부착." },
+    { "id": "s-backlog", "name": "백로그", "kind": "종결", "funcs": ["F8"], "col": 6, "row": 2,
+      "desc": "종결 상태 ③. 통제된 사유 회신 + 재부상 트리거(유사 요청 누적·정기 리뷰) 안내. SLA 초과 자동 전환 포함." },
+    { "id": "s-track", "name": "추적·역보고", "kind": "진행", "funcs": ["F7"], "col": 7, "row": 1,
+      "desc": "Linear 웹훅 기반 상태 추적. 요청자 N명에게 각자 언어·시간대로 팬아웃. 완료 시 CSAT 1클릭." }
+  ],
+  "transitions": [
+    { "id": "t01", "from": "s-intake", "to": "s-search" },
+    { "id": "t02", "from": "s-search", "to": "s-merge", "label": "중복 후보 수락", "labelT": 0.42 },
+    { "id": "t03", "from": "s-search", "to": "s-clarify" },
+    { "id": "t04", "from": "s-clarify", "to": "s-docgen", "label": "완결성 통과", "ldy": -7 },
+    { "id": "t05", "from": "s-clarify", "to": "s-promotion", "label": "왕복 상한 도달", "labelT": 0.45, "ldy": 10 },
+    { "id": "t06", "from": "s-promotion", "to": "s-docgen", "label": "승격 가능 → 조건부 상정", "ldx": 92 },
+    { "id": "t07", "from": "s-promotion", "to": "s-onhold", "label": "승격 불가", "bow": 0.55, "ldy": 14 },
+    { "id": "t08", "from": "s-docgen", "to": "s-mockup", "label": "UI 요청", "labelT": 0.28, "ldx": -8, "ldy": -6 },
+    { "id": "t09", "from": "s-docgen", "to": "s-gate", "label": "비 UI 요청", "labelT": 0.35, "ldy": 14 },
+    { "id": "t10", "from": "s-mockup", "to": "s-gate", "label": "수렴 → 역주입 → 문서 vN+1", "bow": -0.1, "labelT": 0.45, "ldy": -8 },
+    { "id": "t11", "from": "s-mockup", "to": "s-gate", "label": "반복 상한 초과 에스컬레이션", "kind": "alt", "bow": 0.32, "labelT": 0.36, "ldy": 18 },
+    { "id": "t12", "from": "s-gate", "to": "s-issue", "label": "승인", "ldy": -7 },
+    { "id": "t13", "from": "s-gate", "to": "s-clarify", "label": "질문 → 요청자 되물음", "kind": "return", "via": [[3.55, 0.52]], "labelT": 0.72, "ldy": -8 },
+    { "id": "t14", "from": "s-gate", "to": "s-backlog", "label": "백로그 / SLA 초과 자동", "labelT": 0.55, "ldy": 12 },
+    { "id": "t15", "from": "s-gate", "to": "s-reject", "label": "거절 + 이의 경로", "labelT": 0.5, "ldy": -6 },
+    { "id": "t16", "from": "s-backlog", "to": "s-gate", "label": "재부상 트리거", "kind": "return", "bow": 0.38, "labelT": 0.38, "ldy": 16 },
+    { "id": "t17", "from": "s-onhold", "to": "s-clarify", "label": "요청자 재개", "kind": "return", "ldx": -78 },
+    { "id": "t18", "from": "s-issue", "to": "s-track" },
+    { "id": "t19", "from": "s-merge", "to": "s-track", "label": "구독 등록 + 원문 코멘트 첨부", "via": [[4, -0.5], [6, -0.5]], "labelT": 0.5, "ldy": -7 }
+  ],
+  "scenarios": [
+    { "id": "sc-standard", "name": "표준 (비 UI)", "edges": ["t01", "t03", "t04", "t09", "t12", "t18"] },
+    { "id": "sc-ui", "name": "UI 요청", "edges": ["t01", "t03", "t04", "t08", "t10", "t12", "t18"] },
+    { "id": "sc-promo", "name": "승격", "edges": ["t01", "t03", "t05", "t06", "t09", "t12", "t18"] },
+    { "id": "sc-merge", "name": "중복 병합", "edges": ["t01", "t02", "t19"] },
+    { "id": "sc-sla", "name": "SLA 자동 백로그", "edges": ["t01", "t03", "t04", "t09", "t14"] }
+  ],
+  "hardRules": [
+    "승인 없는 Linear 이슈 생성 불가 — 게이트 승인이 유일한 생성 경로",
+    "룰 층 미통과 시 게이트 진입 불가 (승격 경로만 예외)",
+    "회귀 미통과 프롬프트·스키마 버전의 런타임 로드 불가 (F12)",
+    "종결 상태 전이 시 회신 발송 없이는 세션 종료 불가 (원칙 5)",
+    "목업 코드의 개발팀 전달 불가 — 이미지·URL 형태만"
+  ]
+}
+</script>
+
 <script>
 'use strict';
-const LAYERS = [
-  { id:'adapter', name:'채널 어댑터', note:'모든 어댑터는 동일한 코어 API만 호출' },
-  { id:'core',    name:'채널 비의존 코어', note:'단계 전이는 상태 머신이 결정 (ADR-0001)' },
-  { id:'gateway', name:'LLM 게이트웨이', note:'외부는 백엔드 종류를 모름' },
-  { id:'eval',    name:'평가·개선 서브시스템', note:'계측 없는 기능은 만들지 않음 (원칙 6)' },
-  { id:'ext',     name:'외부 시스템', note:'' },
-];
-
-const COMPONENTS = [
-  { id:'slack-a', layer:'adapter', name:'Slack 어댑터', intro:0,
-    desc:'멘션·DM·이모지 인테이크, 스레드 명확화, 버튼 게이트, DM 역보고. Bolt for TypeScript + Assistant 스레드. Phase 0 PoC와 Phase 1의 1차 표면.',
-    funcs:['F1'], extra:'스테이크홀더의 서식지가 Slack이므로 전달 순서 1순위 (§9)' },
-  { id:'web-a', layer:'adapter', name:'웹 어댑터', intro:1,
-    desc:'Phase 1은 매직링크 경량 뷰어(긴 문서 열람·게이트), Phase 2에 채팅 인테이크·대시보드·SSO로 완결 표면화. 채널 비의존 원칙의 완성.',
-    funcs:['F1','F9'], extra:'' },
-  { id:'intake', layer:'core', name:'인테이크 API', intro:1,
-    desc:'채널 무관 수신, 통합 프로필·세션 생성, 3초 이내 확인 응답. 세션은 요청자 ≠ 실사용자와 N명 요청자를 표현.',
-    funcs:['F1'], extra:'' },
-  { id:'sm', layer:'core', name:'상태 머신', intro:1,
-    desc:'단계 전이 결정과 하드 제약 강제의 주체. 게이트 라우터(영역 담당 → 기본 승인자 → 대체자)와 SLA 스케줄러(리마인더 → 대체자 통보 → 자동 백로그)를 포함.',
-    funcs:['F5'], extra:'원칙 2·5의 구현 지점 (ADR-0001)' },
-  { id:'clarify', layer:'core', name:'명확화 엔진', intro:0,
-    desc:'표적 질문 생성(해석 발산 지점 공략), 2층 완결성 판정(룰 백스톱 + LLM 의미 판정), 슬롯 3상태와 승격 판정. 질문은 요청자 언어로 3~5개.',
-    funcs:['F2b','F2c','F2e'], extra:'Phase 0에서 프롬프트 v0 검증' },
-  { id:'search', layer:'core', name:'컨텍스트 검색기', intro:1,
-    desc:'질문 생성 전에 기존 이슈·과거 문서·종결 세션·거절 이력을 검색. 시스템 유일의 LLM 자율 툴콜 지점(도구·횟수 제한). 중복 후보 제시의 출처.',
-    funcs:['F2a'], extra:'거절 이력은 차단이 아니라 참고 정보로만 제시' },
-  { id:'docgen', layer:'core', name:'문서 생성기 + UI 분류기', intro:0,
-    desc:'requirements/tasks 생성(EARS·Given-When-Then), 슬롯 단위 요청자 확인, 원문 전사 첨부. 명확화 종료 시 UI 변화 여부를 분류해 목업 실행을 결정.',
-    funcs:['F3'], extra:'문서 단일 진실 원천 (ADR-0002)' },
-  { id:'mock', layer:'core', name:'목업 서비스 + 역주입기', intro:2,
-    desc:'UI 요청에 한해 self-contained 인터랙티브 HTML 목업 생성·호스팅. 요구사항 vN ↔ 목업 vN 매핑, 승인 시 어노테이션 확정 사항을 문서 vN+1로 역주입.',
-    funcs:['F4'], extra:'워터마크 상시 · 코드 형태 비전달' },
-  { id:'connector', layer:'core', name:'Linear 커넥터', intro:0,
-    desc:'승인 시 issueCreate. 본문에 스펙 + 원문 전사 + 오픈이슈 섹션, 모든 이슈에 세션 provenance 부착. 병합 세션은 이슈 생성 없이 구독자 등록 + 코멘트 첨부.',
-    funcs:['F6'], extra:'Phase 0은 issueCreate 1개 또는 수동' },
-  { id:'notify', layer:'core', name:'알림 서비스', intro:1,
-    desc:'회신·역보고·리마인더 발송. 수신자 언어·시간대 인지, 요청자 N명 팬아웃, 채널 해제 시 웹·이메일 폴백.',
-    funcs:['F7','F8'], extra:'침묵 방지(원칙 5)의 실행 지점' },
-  { id:'store', layer:'core', name:'세션·버전 저장소', intro:0,
-    desc:'세션·원문 전사·슬롯 상태·신호·버전 레지스트리 저장. Phase 0은 SQLite, Phase 1에 Postgres 전환 전제.',
-    funcs:['F11'], extra:'ADR-0006 · 버전 귀속 5축의 기반' },
-  { id:'iface', layer:'gateway', name:'게이트웨이 인터페이스', intro:0,
-    desc:'complete(promptVersion, input) → structuredOutput. 폭주 방지 상한(세션당 토큰·목업 횟수·월 총액)과 회귀 통과 버전만 로드하는 배포 게이트를 겸함.',
-    funcs:['F12','F14'], extra:'모델 중립 원칙 4 — 단, 얇게' },
-  { id:'harness', layer:'gateway', name:'Claude Agent SDK 백엔드', intro:0,
-    desc:'Phase 0 한정 하네스. 파일시스템·셸 도구 비활성, 서버 측 격리, 무상태 호출. PoC 목표 달성 시 직접 API로 교체(Exit 기준).',
-    funcs:['F14'], extra:'ADR-0005 · TypeScript' },
-  { id:'direct', layer:'gateway', name:'직접 API 백엔드', intro:1,
-    desc:'Phase 1+ 백엔드. 프로바이더 추상화 구현체는 벤치마크 없이 하나를 확정(후보: Vercel AI SDK / LiteLLM / Bedrock Converse). 모델 라우팅 로직은 범위 밖.',
-    funcs:[], extra:'전환 시 골든셋 시드로 출력 동등성 확인' },
-  { id:'signals', layer:'eval', name:'신호 수집기', intro:1,
-    desc:'게이트 결정·재질문·reopen·스펙 변경·목업 반복·후행 피드백을 수집하고 세션 × 프롬프트 × 모델 × 임계치 × 슬롯 스키마 버전에 귀속.',
-    funcs:['F11'], extra:'Phase 1부터 내장 — 계측 없는 기능 금지' },
-  { id:'scanner', layer:'eval', name:'우회 스캐너', intro:1,
-    desc:'provenance 없는 기능 요청 이슈를 전수 집계. 개발자 액션 0. 정책 발효 후에는 컴플라이언스 지표.',
-    funcs:['F6'], extra:'ADR-0003' },
-  { id:'evaltool', layer:'eval', name:'평가 도구 (채택)', intro:2,
-    desc:'트레이싱·프롬프트 레지스트리·회귀 평가는 기존 도구 채택(후보: Langfuse·promptfoo). 자체 구축은 신호 귀속 스키마·골든셋 절차·배포 게이트 연동만.',
-    funcs:['F12'], extra:'구축이 아니라 채택' },
-  { id:'workbench', layer:'eval', name:'판독 워크벤치', intro:2,
-    desc:'전 세션 판독 큐(저볼륨 1차 평가 수단), 실패 유형 분류(프롬프트 결함 vs 스키마 결손), 재질문↔슬롯 매핑 현황, 카나리 관리.',
-    funcs:['F13'], extra:'판독 기록 = 미래 judge 보정 라벨' },
-  { id:'linear', layer:'ext', name:'Linear', intro:0,
-    desc:'이슈 생성 대상 + 웹훅 소스(HMAC 서명·타임스탬프 검증·중복 제거). 이슈 라이프사이클 신호(재질문·reopen·스펙 변경)의 출처.',
-    funcs:['F6','F7'], extra:'Agents API 네이티브화는 Phase 3 검토' },
-  { id:'slack', layer:'ext', name:'Slack', intro:0,
-    desc:'스테이크홀더의 서식지. 인테이크·명확화·게이트·역보고가 스레드와 DM으로 흐른다.',
-    funcs:['F1'], extra:'' },
-  { id:'hosting', layer:'ext', name:'목업 호스팅', intro:2,
-    desc:'앱 도메인과 분리된 샌드박스 usercontent 도메인(R2 + Workers 권장선). 만료 서명 URL, CSP sandbox, 외부 네트워크 차단.',
-    funcs:['F4'], extra:'다층 방어 §6' },
-];
-
-const STATES = [
-  { id:'s-intake', name:'인테이크', kind:'진행', funcs:['F1'],
-    desc:'요청 수신과 세션 생성. 접수 확인은 3초 이내.' },
-  { id:'s-search', name:'컨텍스트 검색', kind:'진행', funcs:['F2a'],
-    desc:'기존 이슈·문서·종결 세션·거절 이력 검색. 유사 요청 발견 시 중복 후보 제시. 검색 결과는 세션에 기록.' },
-  { id:'s-clarify', name:'명확화 루프', kind:'진행', funcs:['F2b','F2c'],
-    desc:'표적 질문 3~5개(요청자 언어) ↔ 답변 반복. 각 질문에 「모르겠다 / 개발팀이 정할 문제」 경로 상시 제공. 왕복 상한 존재.' },
-  { id:'s-promotion', name:'승격 판정', kind:'진행', funcs:['F2c'],
-    desc:'왕복 상한 도달 시 남은 미충족 슬롯의 승격 가능 여부 판정. v1.3 데드락(진행도 종결도 불가)을 해소한 경로.' },
-  { id:'s-docgen', name:'문서 생성 + 슬롯 확인', kind:'진행', funcs:['F3'],
-    desc:'requirements/tasks 생성. 요청자 확인은 산문 번역이 아니라 슬롯 값 단위·요청자 언어. 원문 전사 첨부.' },
-  { id:'s-mockup', name:'목업 반복', kind:'진행', funcs:['F4'],
-    desc:'UI 요청에만 실행. 최대 2~3회 반복 수렴, 승인 시 어노테이션 확정 사항을 문서 vN+1로 역주입.' },
-  { id:'s-gate', name:'승인 게이트', kind:'진행', funcs:['F5'],
-    desc:'4버튼(승인/질문/백로그/거절), 비동기. 라우팅 근거와 SLA 잔여 표시. 조건부 상정 건은 시각적 구분.' },
-  { id:'s-issue', name:'이슈 생성', kind:'종결', funcs:['F6'],
-    desc:'종결 상태 ①. 승인 시에만 도달하는 유일한 이슈 생성 경로. provenance 부착.' },
-  { id:'s-merge', name:'중복 병합', kind:'종결', funcs:['F8'],
-    desc:'종결 상태 ②. 새 이슈 없이 기존 이슈에 구독자 등록 + 원문 코멘트 첨부. 역보고는 동일 수신.' },
-  { id:'s-backlog', name:'백로그', kind:'종결', funcs:['F8'],
-    desc:'종결 상태 ③. 통제된 사유 회신 + 재부상 트리거(유사 요청 누적·정기 리뷰) 안내. SLA 초과 자동 전환 포함.' },
-  { id:'s-reject', name:'거절', kind:'종결', funcs:['F5','F8'],
-    desc:'종결 상태 ④. 통제된 사유 목록(우선순위/스코프 밖/중복/기술적 불가/정보 부족) + 이의 경로(팀 리드 재검토) 안내.' },
-  { id:'s-onhold', name:'보류(정보 부족)', kind:'종결', funcs:['F2c','F8'],
-    desc:'종결 상태 ⑤. 승격조차 불가한 요청의 종결. 요청자는 언제든 재개 가능.' },
-  { id:'s-track', name:'추적·역보고', kind:'진행', funcs:['F7'],
-    desc:'Linear 웹훅 기반 상태 추적. 요청자 N명에게 각자 언어·시간대로 팬아웃. 완료 시 CSAT 1클릭.' },
-];
-
-const TRANSITIONS = [
-  ['s-intake','s-search','접수 → 검색'],
-  ['s-search','s-merge','중복 후보 수락'],
-  ['s-search','s-clarify','검색 완료'],
-  ['s-clarify','s-docgen','완결성 통과 (전 슬롯 충족·승격)'],
-  ['s-clarify','s-promotion','왕복 상한 도달'],
-  ['s-promotion','s-docgen','승격 가능 → 오픈이슈 + 조건부 상정'],
-  ['s-promotion','s-onhold','승격 불가'],
-  ['s-docgen','s-mockup','UI 요청'],
-  ['s-docgen','s-gate','비 UI 요청'],
-  ['s-mockup','s-gate','수렴 → 역주입 → 문서 vN+1'],
-  ['s-gate','s-issue','승인'],
-  ['s-gate','s-clarify','질문 → 요청자 되물음'],
-  ['s-gate','s-backlog','백로그 선택 / SLA 초과 자동 전환'],
-  ['s-gate','s-reject','거절'],
-  ['s-backlog','s-gate','재부상 트리거'],
-  ['s-onhold','s-clarify','요청자 재개'],
-  ['s-issue','s-track','이슈 생성 완료'],
-  ['s-merge','s-track','구독 등록'],
-];
-
+/* 렌더러 — 데이터는 #arch-data island가 단일 소스 (위 주석 참조) */
 const $ = s => document.querySelector(s);
-const esc = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let phaseFilter = 'all', selComp = null, selState = null;
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const SVGNS = 'http://www.w3.org/2000/svg';
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-function phaseChip(intro){
-  return intro === 0 ? 'Phase 0~' : intro === 1 ? 'Phase 1~' : 'Phase 2~';
+let DATA;
+try {
+  DATA = JSON.parse($('#arch-data').textContent);
+} catch (e) {
+  document.body.insertAdjacentHTML('beforeend',
+    `<div class="dataerr">#arch-data JSON 파스 실패 — 보드가 렌더링되지 않습니다.\n${esc(e.message)}</div>`);
+  throw e;
 }
+const { layers: LAYERS, components: COMPONENTS, componentEdges: CEDGES,
+        states: STATES, transitions: TRANSITIONS, scenarios: SCENARIOS, hardRules: RULES } = DATA;
 
+let phaseFilter = 'all', selComp = null, selState = null, showAllEdges = false;
+
+/* ══ 시스템 맵 — HTML 카드 + SVG 엣지 오버레이 ═══════════════ */
+function phaseChip(intro){ return intro === 0 ? 'Phase 0~' : intro === 1 ? 'Phase 1~' : 'Phase 2~'; }
+const compById = id => COMPONENTS.find(c => c.id === id);
+
+let firstRender = true;
 function renderLayers(){
   const root = $('#layers');
   root.innerHTML = '';
@@ -312,26 +445,94 @@ function renderLayers(){
     const comps = COMPONENTS.filter(c => c.layer === layer.id);
     const sec = document.createElement('section');
     sec.className = 'layer l-' + layer.id;
-    sec.style.animationDelay = (li * 60) + 'ms';
+    if (firstRender) sec.style.animationDelay = (li * 60) + 'ms';
+    else sec.style.animation = 'none';
     sec.innerHTML = `<div class="layer-head"><span class="dot"></span><h2>${esc(layer.name)}</h2><span class="n">${comps.length}</span></div>`;
     const grid = document.createElement('div');
     grid.className = 'layer-grid';
     comps.forEach(c => {
       const el = document.createElement('article');
       const dimmed = phaseFilter !== 'all' && c.intro > Number(phaseFilter);
-      el.className = 'comp' + (dimmed ? ' dim' : '') + (selComp === c.id ? ' sel' : '');
-      el.innerHTML = `<h3>${esc(c.name)}</h3><div class="meta">${c.funcs.map(f=>`<span class="chip">${esc(f)}</span>`).join('')}<span class="chip phase">${phaseChip(c.intro)}</span></div>`;
-      el.onclick = () => { selComp = c.id; renderLayers(); showComp(c); };
+      const related = selComp && CEDGES.some(e =>
+        (e.from === selComp && e.to === c.id) || (e.to === selComp && e.from === c.id));
+      el.className = 'comp' + (dimmed ? ' dim' : '') + (selComp === c.id ? ' sel' : related ? ' rel' : '');
+      el.dataset.comp = c.id;
+      el.tabIndex = 0;
+      el.setAttribute('role', 'button');
+      el.innerHTML = `<h3>${esc(c.name)}</h3><div class="meta">${c.funcs.map(f => `<span class="chip">${esc(f)}</span>`).join('')}<span class="chip phase">${phaseChip(c.intro)}</span></div>`;
+      const act = () => { selComp = selComp === c.id ? null : c.id; renderLayers(); selComp ? showComp(c) : showIntro('map'); };
+      el.onclick = act;
+      el.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); act(); } };
       grid.appendChild(el);
     });
     sec.appendChild(grid);
     root.appendChild(sec);
-    if (li < LAYERS.length - 1) root.insertAdjacentHTML('beforeend','<div class="flow">▼</div>');
+    if (li < LAYERS.length - 1) root.insertAdjacentHTML('beforeend', '<div class="flow">▼</div>');
+  });
+  firstRender = false;
+  requestAnimationFrame(drawMapEdges);
+}
+
+function cardRect(id){
+  const el = document.querySelector(`[data-comp="${id}"]`);
+  if (!el) return null;
+  const w = $('#mapwrap').getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  return { x: r.left - w.left, y: r.top - w.top, w: r.width, h: r.height,
+           cx: r.left - w.left + r.width / 2, cy: r.top - w.top + r.height / 2 };
+}
+
+function mapEdgePath(a, b){
+  let sx, sy, ex, ey;
+  if (b.y >= a.y + a.h - 4){ sx = a.cx; sy = a.y + a.h; ex = b.cx; ey = b.y; }
+  else if (a.y >= b.y + b.h - 4){ sx = a.cx; sy = a.y; ex = b.cx; ey = b.y + b.h; }
+  else if (b.cx > a.cx){ sx = a.x + a.w; sy = a.cy; ex = b.x; ey = b.cy; }
+  else { sx = a.x; sy = a.cy; ex = b.x + b.w; ey = b.cy; }
+  const vert = Math.abs(ey - sy) >= Math.abs(ex - sx);
+  const c1 = vert ? [sx, sy + (ey - sy) * .32] : [sx + (ex - sx) * .32, sy];
+  const c2 = vert ? [ex, ey - (ey - sy) * .32] : [ex - (ex - sx) * .32, ey];
+  return { d: `M${sx},${sy} C${c1},${c2},${ex},${ey}`, mx: (sx + ex) / 2, my: (sy + ey) / 2 };
+}
+
+function drawMapEdges(){
+  const svg = $('#map-edges');
+  const wrap = $('#mapwrap');
+  svg.setAttribute('width', wrap.clientWidth);
+  svg.setAttribute('height', wrap.clientHeight);
+  svg.innerHTML = `<defs>
+    <marker id="m-in" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L8,4L0,8z" style="fill:var(--c-adapter)"/></marker>
+    <marker id="m-out" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L8,4L0,8z" style="fill:var(--c-gateway)"/></marker>
+  </defs>`;
+  CEDGES.forEach(e => {
+    const on = showAllEdges || (selComp && (e.from === selComp || e.to === selComp));
+    if (!on) return;
+    const a = cardRect(e.from), b = cardRect(e.to);
+    if (!a || !b) return;
+    const { d, mx, my } = mapEdgePath(a, b);
+    const p = document.createElementNS(SVGNS, 'path');
+    const dir = (selComp && e.to === selComp) ? 'e-in' : 'e-out';
+    p.setAttribute('d', d);
+    p.setAttribute('class', `medge on ${dir}${e.dashed ? ' dashed' : ''}${showAllEdges && !selComp ? ' all' : ''}`);
+    svg.appendChild(p);
+    if (e.label && (selComp || showAllEdges)){
+      const t = document.createElementNS(SVGNS, 'text');
+      t.setAttribute('x', mx); t.setAttribute('y', my - 5);
+      t.setAttribute('text-anchor', 'middle');
+      t.setAttribute('class', 'mlabel');
+      t.textContent = e.label;
+      svg.appendChild(t);
+    }
   });
 }
 
 function showComp(c){
   const layer = LAYERS.find(l => l.id === c.layer);
+  const ins  = CEDGES.filter(e => e.to === c.id);
+  const outs = CEDGES.filter(e => e.from === c.id);
+  const row = (e, dir) => {
+    const other = compById(dir === 'in' ? e.from : e.to);
+    return `<li data-goto="${other.id}"><span class="arrow ${dir}">${dir === 'in' ? '←' : '→'}</span> ${esc(other.name)}${e.label ? ` <span style="color:var(--ink-soft)">· ${esc(e.label)}</span>` : ''}</li>`;
+  };
   $('#panel').innerHTML = `
     <div class="kicker">${esc(layer.name)}</div>
     <h2>${esc(c.name)}</h2>
@@ -341,62 +542,276 @@ function showComp(c){
       <dt>도입</dt><dd>${phaseChip(c.intro)}</dd>
       ${layer.note ? `<dt>레이어</dt><dd>${esc(layer.note)}</dd>` : ''}
     </dl>
-    ${c.extra ? `<p class="desc" style="color:var(--ink-soft);font-size:12.5px">${esc(c.extra)}</p>` : ''}`;
+    ${c.extra ? `<p class="desc" style="color:var(--ink-soft);font-size:12.5px">${esc(c.extra)}</p>` : ''}
+    ${ins.length ? `<div class="sect">호출받음 (파랑)</div><ul class="tlist">${ins.map(e => row(e, 'in')).join('')}</ul>` : ''}
+    ${outs.length ? `<div class="sect">호출함 (초록)</div><ul class="tlist">${outs.map(e => row(e, 'out')).join('')}</ul>` : ''}`;
+  $('#panel').querySelectorAll('[data-goto]').forEach(li => {
+    li.onclick = () => { selComp = li.dataset.goto; renderLayers(); showComp(compById(selComp)); };
+  });
 }
 
-function renderStates(){
-  const root = $('#states');
-  root.innerHTML = '';
-  const grid = document.createElement('div');
-  grid.className = 'stategrid';
-  const relIn  = selState ? TRANSITIONS.filter(t => t[1] === selState).map(t => t[0]) : [];
-  const relOut = selState ? TRANSITIONS.filter(t => t[0] === selState).map(t => t[1]) : [];
-  STATES.forEach((s, i) => {
-    const el = document.createElement('article');
-    el.className = 'snode' + (s.kind === '종결' ? ' terminal' : '')
-      + (selState === s.id ? ' sel' : relIn.includes(s.id) ? ' rel-in' : relOut.includes(s.id) ? ' rel-out' : '');
-    el.style.animationDelay = (Math.min(i,12) * 30) + 'ms';
-    el.innerHTML = `<h3>${esc(s.name)}</h3><span class="k">${esc(s.kind)}${s.funcs.length ? ' · ' + s.funcs.join('·') : ''}</span>`;
-    el.onclick = () => { selState = s.id; renderStates(); showState(s); };
-    grid.appendChild(el);
+/* ══ 상태 머신 — SVG 그래프 ═══════════════════════════════ */
+const CW = 205, RH = 150, NW = 176, NH = 60, OX = 24, OY = 110;
+const cx = col => OX + col * CW + NW / 2;
+const cy = row => OY + row * RH;
+const stateById = id => STATES.find(s => s.id === id);
+const transById = id => TRANSITIONS.find(t => t.id === id);
+const edgeEls = {};   // transition id → {path, label}
+const nodeEls = {};   // state id → g
+
+function anchor(s, tx, ty){
+  const x = cx(s.col), y = cy(s.row);
+  const dx = tx - x, dy = ty - y;
+  if (Math.abs(dx) / NW > Math.abs(dy) / (NH * 1.5))
+    return { x: x + Math.sign(dx) * NW / 2, y, side: 'h' };
+  return { x, y: y + Math.sign(dy) * NH / 2, side: 'v' };
+}
+
+function chainPath(points){
+  let d = `M${points[0].x},${points[0].y}`;
+  for (let i = 1; i < points.length; i++){
+    const p = points[i - 1], q = points[i];
+    const hx = (q.x - p.x) * .5;
+    d += ` C${p.x + hx},${p.y} ${q.x - hx},${q.y} ${q.x},${q.y}`;
+  }
+  return d;
+}
+
+function transPath(t){
+  const A = stateById(t.from), B = stateById(t.to);
+  if (t.via){
+    const vias = t.via.map(([c, r]) => ({ x: cx(c), y: cy(r) }));
+    const a = anchor(A, vias[0].x, vias[0].y);
+    const b = anchor(B, vias[vias.length - 1].x, vias[vias.length - 1].y);
+    return chainPath([a, ...vias, b]);
+  }
+  const a = anchor(A, cx(B.col), cy(B.row));
+  const b = anchor(B, cx(A.col), cy(A.row));
+  const bow = (t.bow || 0) * RH;
+  const dx = b.x - a.x, dy = b.y - a.y;
+  if (Math.abs(dx) >= Math.abs(dy)){
+    return `M${a.x},${a.y} C${a.x + dx * .35},${a.y + bow} ${b.x - dx * .35},${b.y + bow} ${b.x},${b.y}`;
+  }
+  return `M${a.x},${a.y} C${a.x + bow},${a.y + dy * .35} ${b.x + bow},${b.y - dy * .35} ${b.x},${b.y}`;
+}
+
+function renderSM(){
+  const svg = $('#sm-svg');
+  const maxCol = Math.max(...STATES.map(s => s.col));
+  const maxRow = Math.max(...STATES.map(s => s.row));
+  const W = OX * 2 + maxCol * CW + NW, H = OY + maxRow * RH + NH / 2 + 30;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = `<defs>
+    <marker id="m-n" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L8,4L0,8z" style="fill:var(--ink-soft)"/></marker>
+    <marker id="m-in" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L8,4L0,8z" style="fill:var(--c-adapter)"/></marker>
+    <marker id="m-out" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L8,4L0,8z" style="fill:var(--c-gateway)"/></marker>
+    <marker id="m-lit" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L8,4L0,8z" style="fill:var(--accent)"/></marker>
+  </defs>`;
+  const gEdges = document.createElementNS(SVGNS, 'g');
+  const gLabels = document.createElementNS(SVGNS, 'g');
+  const gNodes = document.createElementNS(SVGNS, 'g');
+  svg.append(gEdges, gLabels, gNodes);
+
+  TRANSITIONS.forEach(t => {
+    const d = transPath(t);
+    const p = document.createElementNS(SVGNS, 'path');
+    p.setAttribute('d', d);
+    p.setAttribute('class', 'edge' + (t.kind ? ' ' + t.kind : ''));
+    p.dataset.t = t.id;
+    gEdges.appendChild(p);
+    const hit = document.createElementNS(SVGNS, 'path');
+    hit.setAttribute('d', d);
+    hit.setAttribute('class', 'ehit');
+    hit.onclick = () => showTrans(t);
+    gEdges.appendChild(hit);
+    let label = null;
+    if (t.label){
+      const len = p.getTotalLength();
+      const pt = p.getPointAtLength(len * (t.labelT ?? 0.5));
+      label = document.createElementNS(SVGNS, 'text');
+      label.setAttribute('x', pt.x + (t.ldx || 0));
+      label.setAttribute('y', pt.y + (t.ldy ?? -6));
+      label.setAttribute('text-anchor', 'middle');
+      label.setAttribute('class', 'elabel');
+      label.textContent = t.label;
+      gLabels.appendChild(label);
+    }
+    edgeEls[t.id] = { path: p, label };
   });
-  root.appendChild(grid);
+
+  STATES.forEach(s => {
+    const g = document.createElementNS(SVGNS, 'g');
+    const x = cx(s.col) - NW / 2, y = cy(s.row) - NH / 2;
+    g.setAttribute('class', 'snodeG' + (s.kind === '종결' ? ' terminal' : ''));
+    g.setAttribute('tabindex', '0');
+    g.setAttribute('role', 'button');
+    g.innerHTML =
+      `<rect class="body" x="${x}" y="${y}" width="${NW}" height="${NH}" rx="3"/>` +
+      (s.kind === '종결' ? `<rect class="ring" x="${x + 3.5}" y="${y + 3.5}" width="${NW - 7}" height="${NH - 7}" rx="2"/>` : '') +
+      `<rect class="bar" x="${x}" y="${y}" width="3" height="${NH}"/>` +
+      `<text class="nm" x="${x + 13}" y="${y + 25}">${esc(s.name)}</text>` +
+      `<text class="sub" x="${x + 13}" y="${y + 43}">${esc(s.kind)}${s.funcs.length ? ' · ' + s.funcs.join('·') : ''}</text>`;
+    const act = () => { selState = s.id; applySMHighlight(); showState(s); };
+    g.onclick = act;
+    g.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); act(); } };
+    gNodes.appendChild(g);
+    nodeEls[s.id] = g;
+  });
+}
+
+function applySMHighlight(){
+  const relIn  = selState ? TRANSITIONS.filter(t => t.to === selState) : [];
+  const relOut = selState ? TRANSITIONS.filter(t => t.from === selState) : [];
+  STATES.forEach(s => {
+    const g = nodeEls[s.id];
+    g.classList.remove('sel', 'rel-in', 'rel-out', 'lit', 'dimmed');
+    if (!selState) return;
+    if (s.id === selState) g.classList.add('sel');
+    else if (relIn.some(t => t.from === s.id)) g.classList.add('rel-in');
+    else if (relOut.some(t => t.to === s.id)) g.classList.add('rel-out');
+    else g.classList.add('dimmed');
+  });
+  TRANSITIONS.forEach(t => {
+    const { path, label } = edgeEls[t.id];
+    path.classList.remove('e-in', 'e-out', 'lit', 'dimmed');
+    if (label) label.classList.remove('hl', 'dimmed');
+    if (!selState) return;
+    if (t.to === selState){ path.classList.add('e-in'); label && label.classList.add('hl'); }
+    else if (t.from === selState){ path.classList.add('e-out'); label && label.classList.add('hl'); }
+    else { path.classList.add('dimmed'); label && label.classList.add('dimmed'); }
+  });
 }
 
 function showState(s){
-  const inbound  = TRANSITIONS.filter(t => t[1] === s.id);
-  const outbound = TRANSITIONS.filter(t => t[0] === s.id);
-  const nameOf = id => STATES.find(x => x.id === id).name;
+  const inbound  = TRANSITIONS.filter(t => t.to === s.id);
+  const outbound = TRANSITIONS.filter(t => t.from === s.id);
   const row = (t, dir) => {
-    const other = dir === 'in' ? t[0] : t[1];
-    return `<li data-goto="${other}"><span class="arrow">${dir === 'in' ? '←' : '→'}</span> ${esc(nameOf(other))} <span style="color:var(--ink-soft)">· ${esc(t[2])}</span></li>`;
+    const other = stateById(dir === 'in' ? t.from : t.to);
+    return `<li data-goto="${other.id}"><span class="arrow ${dir}">${dir === 'in' ? '←' : '→'}</span> ${esc(other.name)}${t.label ? ` <span style="color:var(--ink-soft)">· ${esc(t.label)}</span>` : ''}</li>`;
   };
   $('#panel').innerHTML = `
     <div class="kicker">${esc(s.kind)} 상태${s.kind === '종결' ? ' · 회신 필수 (원칙 5)' : ''}</div>
     <h2>${esc(s.name)}</h2>
     <p class="desc">${esc(s.desc)}</p>
     <dl class="facts"><dt>기능</dt><dd>${s.funcs.length ? s.funcs.map(esc).join(' · ') : '—'}</dd></dl>
-    ${inbound.length ? `<div class="sect">들어오는 전이 (파란 점선)</div><ul class="tlist">${inbound.map(t=>row(t,'in')).join('')}</ul>` : ''}
-    ${outbound.length ? `<div class="sect">나가는 전이 (초록 점선)</div><ul class="tlist">${outbound.map(t=>row(t,'out')).join('')}</ul>` : ''}`;
+    ${inbound.length ? `<div class="sect">들어오는 전이 (파랑)</div><ul class="tlist">${inbound.map(t => row(t, 'in')).join('')}</ul>` : ''}
+    ${outbound.length ? `<div class="sect">나가는 전이 (초록)</div><ul class="tlist">${outbound.map(t => row(t, 'out')).join('')}</ul>` : ''}`;
   $('#panel').querySelectorAll('[data-goto]').forEach(li => {
     li.onclick = () => {
-      const target = STATES.find(x => x.id === li.dataset.goto);
-      selState = target.id; renderStates(); showState(target);
+      const target = stateById(li.dataset.goto);
+      selState = target.id; applySMHighlight(); showState(target);
     };
   });
 }
 
+function showTrans(t){
+  const A = stateById(t.from), B = stateById(t.to);
+  selState = null; applySMHighlight();
+  edgeEls[t.id].path.classList.add('lit');
+  $('#panel').innerHTML = `
+    <div class="kicker">전이${t.kind === 'return' ? ' · 복귀' : t.kind === 'alt' ? ' · 에스컬레이션' : ''}</div>
+    <h2>${esc(A.name)} → ${esc(B.name)}</h2>
+    <p class="desc">${t.label ? esc(t.label) : '조건 없는 순차 전이.'}</p>
+    <ul class="tlist">
+      <li data-goto="${A.id}"><span class="arrow in">←</span> ${esc(A.name)}</li>
+      <li data-goto="${B.id}"><span class="arrow out">→</span> ${esc(B.name)}</li>
+    </ul>`;
+  $('#panel').querySelectorAll('[data-goto]').forEach(li => {
+    li.onclick = () => { const s = stateById(li.dataset.goto); selState = s.id; applySMHighlight(); showState(s); };
+  });
+}
+
+/* ── 시나리오 재생 ── */
+let playToken = null, playRun = 0;
+
+function clearPlay(){
+  playRun++;
+  if (playToken){ playToken.remove(); playToken = null; }
+  selState = null;
+  applySMHighlight();
+  document.querySelectorAll('#sc-btns .pbtn').forEach(b => b.classList.remove('on'));
+  showIntro('sm');
+}
+
+function playScenario(sc, btn){
+  clearPlay();
+  btn.classList.add('on');
+  const run = ++playRun;
+  const ids = sc.edges;
+  STATES.forEach(s => nodeEls[s.id].classList.add('dimmed'));
+  TRANSITIONS.forEach(t => {
+    edgeEls[t.id].path.classList.add('dimmed');
+    edgeEls[t.id].label && edgeEls[t.id].label.classList.add('dimmed');
+  });
+  const litNode = id => { nodeEls[id].classList.remove('dimmed'); nodeEls[id].classList.add('lit'); };
+  const litEdge = t => {
+    const e = edgeEls[t.id];
+    e.path.classList.remove('dimmed'); e.path.classList.add('lit');
+    if (e.label){ e.label.classList.remove('dimmed'); e.label.classList.add('hl'); }
+  };
+  if (REDUCED){
+    ids.forEach(id => { const t = transById(id); litNode(t.from); litEdge(t); litNode(t.to); });
+    showScenarioPanel(sc);
+    return;
+  }
+  const svg = $('#sm-svg');
+  playToken = document.createElementNS(SVGNS, 'circle');
+  playToken.setAttribute('r', 6);
+  playToken.setAttribute('class', 'token');
+  svg.appendChild(playToken);
+  let i = 0;
+  const step = () => {
+    if (run !== playRun) return;
+    if (i >= ids.length){ playToken && playToken.remove(); playToken = null; showScenarioPanel(sc); return; }
+    const t = transById(ids[i]);
+    litNode(t.from); litEdge(t);
+    const path = edgeEls[t.id].path;
+    const len = path.getTotalLength();
+    const dur = Math.max(420, len * 1.6);
+    const t0 = performance.now();
+    const tick = now => {
+      if (run !== playRun) return;
+      const k = Math.min(1, (now - t0) / dur);
+      const pt = path.getPointAtLength(len * k);
+      playToken.setAttribute('cx', pt.x); playToken.setAttribute('cy', pt.y);
+      if (k < 1) requestAnimationFrame(tick);
+      else { litNode(t.to); i++; setTimeout(step, 140); }
+    };
+    requestAnimationFrame(tick);
+  };
+  step();
+  showScenarioPanel(sc);
+}
+
+function showScenarioPanel(sc){
+  const seq = sc.edges.map(id => transById(id));
+  const names = [stateById(seq[0].from).name, ...seq.map(t => stateById(t.to).name)];
+  $('#panel').innerHTML = `
+    <div class="kicker">시나리오</div>
+    <h2>${esc(sc.name)}</h2>
+    <p class="desc">${names.map(esc).join(' → ')}</p>
+    <ul class="tlist">${seq.map(t => t.label
+      ? `<li><span class="arrow out">→</span> ${esc(stateById(t.to).name)} <span style="color:var(--ink-soft)">· ${esc(t.label)}</span></li>`
+      : `<li><span class="arrow out">→</span> ${esc(stateById(t.to).name)}</li>`).join('')}</ul>
+    <p class="empty" style="margin-top:12px">지우기 버튼 → 강조 해제</p>`;
+}
+
+/* ══ 공통 ═══════════════════════════════════════════════ */
 function showIntro(view){
   $('#panel').innerHTML = view === 'map'
     ? `<div class="kicker">시스템 맵</div><h2>컴포넌트 조감</h2>
-       <p class="empty">컴포넌트 클릭 → 책임 · 관련 기능 · 도입 Phase<br>
-       Phase 버튼 → 해당 시점의 활성 컴포넌트만 강조<br><br>
+       <p class="empty">컴포넌트 클릭 → 책임 · 호출 관계 강조<br>
+       파란 선 = 이 컴포넌트를 호출<br>
+       초록 선 = 이 컴포넌트가 호출<br>
+       「전체 표시」 → 호출 그래프 전체<br>
+       Phase 버튼 → 해당 시점 활성 컴포넌트<br><br>
        상세 정본: ARCHITECTURE.md</p>`
     : `<div class="kicker">상태 머신</div><h2>요청 라이프사이클</h2>
-       <p class="empty">상태 클릭 → 설명과 전이 목록<br>
-       파란 점선 = 이 상태로 들어오는 상태<br>
-       초록 점선 = 이 상태에서 가는 상태<br><br>
-       전이 결정 주체: 코드 상태 머신 (ADR-0001)</p>`;
+       <p class="empty">상태 클릭 → 설명 + 전이 강조<br>
+       전이 선 클릭 → 전이 조건<br>
+       시나리오 버튼 → 요청 경로 재생<br><br>
+       전이 결정 주체: 코드 상태 머신 (ADR-0001)<br>
+       이중 테두리 = 종결 · 회신 필수</p>`;
 }
 
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
@@ -405,15 +820,33 @@ document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
   $('#view-map').style.display = v === 'map' ? '' : 'none';
   $('#view-sm').style.display  = v === 'sm'  ? '' : 'none';
   showIntro(v);
+  if (v === 'map') requestAnimationFrame(drawMapEdges);
 });
-document.querySelectorAll('.pbtn').forEach(b => b.onclick = () => {
-  document.querySelectorAll('.pbtn').forEach(x => x.classList.toggle('on', x === b));
+document.querySelectorAll('.pbtn[data-phase]').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.pbtn[data-phase]').forEach(x => x.classList.toggle('on', x === b));
   phaseFilter = b.dataset.phase;
   renderLayers();
 });
+$('#btn-alledges').onclick = () => {
+  showAllEdges = !showAllEdges;
+  $('#btn-alledges').classList.toggle('on', showAllEdges);
+  drawMapEdges();
+};
+$('#btn-clear').onclick = clearPlay;
+
+SCENARIOS.forEach(sc => {
+  const b = document.createElement('button');
+  b.className = 'pbtn';
+  b.textContent = sc.name;
+  b.onclick = () => playScenario(sc, b);
+  $('#sc-btns').appendChild(b);
+});
+$('#rules-ul').innerHTML = RULES.map(r => `<li>${esc(r)}</li>`).join('');
+
+new ResizeObserver(() => drawMapEdges()).observe($('#layers'));
 
 renderLayers();
-renderStates();
+renderSM();
 showIntro('map');
 </script>
 </body>
