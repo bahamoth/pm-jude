@@ -15,6 +15,14 @@ export interface Reply {
 /** 코어 러너가 세션에 부여하는 상태 집합 (src/runner/core-runner.ts). */
 export type SessionStatus = 'intake' | 'clarifying' | 'documented' | 'closed';
 
+/** 접수 응답 — 즉시 반환(F1). 질문은 SSE·세션 조회로 온다. */
+export interface IntakeResult {
+  sessionId: string;
+  status: SessionStatus;
+  terminalState: string | null;
+  ack: string;
+}
+
 export interface RoundResult {
   sessionId: string;
   status: SessionStatus;
@@ -30,8 +38,18 @@ export interface Utterance {
   createdAt: string;
 }
 
+export interface SlotView {
+  slotKey: string;
+  label: string;
+  state: 'filled' | 'unfilled' | 'promoted' | string;
+  value: string | null;
+  confirmedByRequester: boolean;
+  openIssueAssignee: string | null;
+}
+
 export interface SessionDetail {
   latestQuestions: ReplyQuestion[] | null;
+  roundBudget: number;
   session: {
     id: string;
     status: SessionStatus;
@@ -43,7 +61,25 @@ export interface SessionDetail {
     closedAt: string | null;
   };
   utterances: Utterance[];
-  slotStates: Array<{ slotKey: string; state: string; openIssueAssignee: string | null }>;
+  slotStates: SlotView[];
+}
+
+export interface SessionSummary {
+  id: string;
+  status: SessionStatus;
+  terminalState: string | null;
+  roundCount: number;
+  requestText: string;
+  updatedAt: string;
+}
+
+/** SSE status 이벤트 페이로드 — 라운드 완료(연결 종료 신호)를 나른다. */
+export interface StatusEvent {
+  sessionId: string;
+  status: SessionStatus;
+  terminalState: string | null;
+  roundCount: number;
+  roundBudget: number;
 }
 
 export class ApiError extends Error {

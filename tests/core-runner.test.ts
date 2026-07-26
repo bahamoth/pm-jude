@@ -317,7 +317,10 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
     await runner.handleIntake(intake);
     await runner.handleReply({ ...intake, text: '잘 모르겠는데요' }); // → 보류 종결
 
-    const result = await runner.handleReply({ ...intake, text: '내용을 보탤게요 — 영업팀용입니다' });
+    const result = await runner.handleReply({
+      ...intake,
+      text: '내용을 보탤게요 — 영업팀용입니다',
+    });
 
     expect(result).toMatchObject({ status: 'clarifying', terminalState: null });
     const session = store.findSessionByThreadKey('web:thread-1');
