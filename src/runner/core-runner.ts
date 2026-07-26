@@ -226,11 +226,19 @@ export class IntakeRunner<A> {
     return { sessionId: session.id, existing: false };
   }
 
-  /** 개설된 세션의 명확화 라운드 실행 — intake·clarifying 상태에서만 동작한다. */
+  /**
+   * 개설된 세션의 명확화 라운드 실행 — intake·clarifying 상태에서만 동작한다.
+   * 백그라운드 호출은 이벤트에 원문이 없으므로, 언어는 저장된 요청자 발화에서 되찾는다.
+   */
   async startClarification(event: IntakeEvent<A>): Promise<void> {
     const session = this.deps.store.findSessionByThreadKey(event.threadKey);
     if (!session || (session.status !== 'intake' && session.status !== 'clarifying')) return;
-    await this.runClarificationRound(session.id, event, this.languageOf(event));
+    const stored = this.deps.store
+      .listUtterances(session.id)
+      .find((u) => u.authorType === 'requester')?.originalLanguage;
+    const language =
+      event.language ?? (stored === 'ko' || stored === 'en' ? stored : this.languageOf(event));
+    await this.runClarificationRound(session.id, event, language);
   }
 
   /** 새 threadKey면 세션을 만들고 첫 라운드까지 원자적으로, 이미 있으면 답변으로 라우팅한다. */

@@ -6,17 +6,17 @@ import { clarificationOutputSchema } from '../prompts/clarification-v0';
 import type { PromptRegistry } from '../prompts/registry';
 import {
   IntakeRunner,
+  TEMP_REQUIRED_SLOTS,
   type ChannelPort,
   type ClarificationRoundPayload,
 } from '../runner/core-runner';
 import type { SessionStore } from '../store/session-store';
-import { WEB_PAGE_HTML } from './page';
 
 /**
- * 웹 채널 어댑터 (#16, ADR-0007) — Node 내장 http 로컬 단일 프로세스 서버.
- * 웹 프레임워크 선택은 ARCHITECTURE.md 결정 대기 항목이라 PoC에서 선점하지 않는다.
- * 회신 주소는 요청 단위 수집기다: 코어가 포트로 게시한 회신을 모아 HTTP 응답으로 돌려준다
- * (SlackPort와 대칭 — 채널 어댑터 원칙). 로직은 코어 러너 몫이고 여기는 HTTP 배선만 갖는다.
+ * 웹 채널 어댑터 (#16·#35, ADR-0007/0008) — Node 내장 http 로컬 단일 프로세스 서버.
+ * 접수는 즉시 응답하고(F1), 질문·판정·문서 게시는 세션 이벤트 스트림(SSE)으로 푸시한다(#31).
+ * 회신 주소는 {sessionId, collector}: 포트 게시가 SSE 구독자에게 브로드캐스트되고,
+ * 동기 응답이 필요한 경로는 수집기로도 받는다. 로직은 코어 러너 몫 — 여기는 HTTP 배선만.
  */
 
 export interface WebServerDeps {
@@ -42,8 +42,9 @@ interface Reply {
   questions?: ReplyQuestion[];
 }
 
-interface ReplyCollector {
-  replies: Reply[];
+interface WebAddress {
+  sessionId?: string;
+  collector?: Reply[];
 }
 
 function toReplyQuestions(payload: ClarificationRoundPayload): ReplyQuestion[] {
@@ -72,19 +73,8 @@ function parseStoredQuestions(payload: unknown): ReplyQuestion[] | null {
   }));
 }
 
-const collectorPort: ChannelPort<ReplyCollector> = {
-  post(address, text, payload) {
-    address.replies.push({
-      text,
-      ...(payload?.kind === 'clarification_questions'
-        ? { questions: toReplyQuestions(payload) }
-        : {}),
-    });
-    return Promise.resolve();
-  },
-};
-
 const MAX_BODY_BYTES = 1_000_000;
+const HEARTBEAT_MS = 15_000;
 
 function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
@@ -141,26 +131,96 @@ function parseIntakeBody(body: Record<string, unknown>): {
 
 export function createWebServer(deps: WebServerDeps): Server {
   const { store } = deps;
-  const runner = new IntakeRunner<ReplyCollector>({ ...deps, port: collectorPort });
 
+  // 세션 이벤트 스트림 (#31 SSE) — 구독자와 진행 중 백그라운드 라운드의 서버 내 상태
+  const subscribers = new Map<string, Set<ServerResponse>>();
+  const inFlight = new Set<string>();
+
+  function sseSend(res: ServerResponse, event: string, data: unknown): void {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  }
+
+  function broadcast(sessionId: string, event: string, data: unknown): void {
+    for (const res of subscribers.get(sessionId) ?? []) sseSend(res, event, data);
+  }
+
+  function statusOf(sessionId: string): Record<string, unknown> | null {
+    const session = store.getSession(sessionId);
+    if (!session) return null;
+    return {
+      sessionId,
+      status: session.status,
+      terminalState: session.terminalState,
+      roundCount: session.roundCount,
+      roundBudget: runner.roundBudgetOf(sessionId),
+    };
+  }
+
+  function broadcastStatus(sessionId: string): void {
+    const status = statusOf(sessionId);
+    if (status) broadcast(sessionId, 'status', status);
+  }
+
+  const port: ChannelPort<WebAddress> = {
+    post(address, text, payload) {
+      const reply: Reply = {
+        text,
+        ...(payload?.kind === 'clarification_questions'
+          ? { questions: toReplyQuestions(payload) }
+          : {}),
+      };
+      address.collector?.push(reply);
+      if (address.sessionId) broadcast(address.sessionId, 'post', reply);
+      return Promise.resolve();
+    },
+  };
+  const runner = new IntakeRunner<WebAddress>({ ...deps, port });
+
+  /** 명확화 라운드를 백그라운드로 — 결과는 SSE로 흐르고, 실패는 error 이벤트로 알린다. */
+  function kickClarification(sessionId: string, threadKey: string, language?: 'ko' | 'en'): void {
+    if (inFlight.has(sessionId)) return;
+    inFlight.add(sessionId);
+    void (async () => {
+      try {
+        await runner.startClarification({
+          address: { sessionId },
+          threadKey,
+          channel: 'web',
+          text: '',
+          ...(language ? { language } : {}),
+        });
+      } catch (error) {
+        console.error('[web] 라운드 실패:', error);
+        broadcast(sessionId, 'error', {
+          message: '질문 생성에 실패했어요 — 다시 시도할 수 있어요.',
+        });
+      } finally {
+        inFlight.delete(sessionId);
+        broadcastStatus(sessionId);
+      }
+    })();
+  }
+
+  /** 접수는 즉시 응답(F1 3초) — 질문 생성은 백그라운드, 결과는 SSE·세션 조회로. */
   async function handleIntake(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const { text, name, language } = parseIntakeBody(await readJsonBody(req));
-    const collector: ReplyCollector = { replies: [] };
-    const { sessionId } = await runner.handleIntake({
-      address: collector,
-      threadKey: `web:${randomUUID()}`,
+    const collector: Reply[] = [];
+    const threadKey = `web:${randomUUID()}`;
+    const { sessionId } = await runner.openSession({
+      address: { collector },
+      threadKey,
       channel: 'web',
       ...(name !== undefined ? { authorId: name } : {}),
       text,
       ...(language !== undefined ? { language } : {}),
     });
-    const session = store.getSession(sessionId);
     sendJson(res, 201, {
       sessionId,
-      status: session?.status ?? 'intake',
-      terminalState: session?.terminalState ?? null,
-      replies: collector.replies,
+      status: 'intake',
+      terminalState: null,
+      ack: collector[0]?.text ?? '',
     });
+    kickClarification(sessionId, threadKey, language);
   }
 
   async function handleReply(
@@ -178,9 +238,9 @@ export function createWebServer(deps: WebServerDeps): Server {
       return;
     }
     const { text, name, language } = parseIntakeBody(await readJsonBody(req));
-    const collector: ReplyCollector = { replies: [] };
+    const collector: Reply[] = [];
     const outcome = await runner.handleReply({
-      address: collector,
+      address: { sessionId, collector },
       threadKey: session.channelThreadKey,
       channel: 'web',
       ...(name !== undefined ? { authorId: name } : {}),
@@ -195,7 +255,103 @@ export function createWebServer(deps: WebServerDeps): Server {
       });
       return;
     }
-    sendJson(res, 200, { ...outcome, replies: collector.replies });
+    broadcastStatus(sessionId);
+    sendJson(res, 200, { ...outcome, replies: collector });
+  }
+
+  /** 슬롯 단위 요청자 확인 (F3) — confirmed=false는 정정 텍스트 필수. */
+  async function handleSlotConfirm(
+    req: IncomingMessage,
+    res: ServerResponse,
+    sessionId: string,
+    slotKey: string,
+  ): Promise<void> {
+    const session = store.getSession(sessionId);
+    if (!session || !session.channelThreadKey) {
+      sendJson(res, 404, { error: '세션 없음' });
+      return;
+    }
+    const body = await readJsonBody(req);
+    if (typeof body.confirmed !== 'boolean') {
+      throw new BadRequest('confirmed는 boolean이어야 한다');
+    }
+    const text = typeof body.text === 'string' ? body.text.trim() : '';
+    if (!body.confirmed && !text) {
+      throw new BadRequest('정정(confirmed=false)에는 text가 필요하다');
+    }
+    const collector: Reply[] = [];
+    const outcome = await runner.confirmSlot(
+      {
+        address: { sessionId, collector },
+        threadKey: session.channelThreadKey,
+        channel: 'web',
+        text,
+      },
+      slotKey,
+      body.confirmed,
+    );
+    if (!outcome) {
+      sendJson(res, 409, { error: '슬롯 확인은 문서 완성 상태에서만 가능하다' });
+      return;
+    }
+    broadcastStatus(sessionId);
+    sendJson(res, 200, { ...outcome, replies: collector });
+  }
+
+  function handleEvents(req: IncomingMessage, res: ServerResponse, sessionId: string): void {
+    if (!store.getSession(sessionId)) {
+      sendJson(res, 404, { error: '세션 없음' });
+      return;
+    }
+    res.writeHead(200, {
+      'content-type': 'text/event-stream; charset=utf-8',
+      'cache-control': 'no-store',
+      connection: 'keep-alive',
+      'x-accel-buffering': 'no',
+    });
+    res.write(': connected\n\n');
+    const status = statusOf(sessionId);
+    if (status) sseSend(res, 'status', status);
+
+    let clients = subscribers.get(sessionId);
+    if (!clients) {
+      clients = new Set();
+      subscribers.set(sessionId, clients);
+    }
+    clients.add(res);
+    const heartbeat = setInterval(() => res.write(': ping\n\n'), HEARTBEAT_MS);
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      clients.delete(res);
+      if (clients.size === 0) subscribers.delete(sessionId);
+    });
+  }
+
+  /** 로컬 목록(#29)용 요약 — 클라이언트가 보관한 세션 ID들만 조회한다. 전체 나열 API는 없다. */
+  function handleSummaries(res: ServerResponse, idsParam: string | null): void {
+    const ids = (idsParam ?? '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean)
+      .slice(0, 50);
+    const sessions = ids.flatMap((id) => {
+      const session = store.getSession(id);
+      if (!session) return [];
+      const request = store
+        .listUtterances(id)
+        .find((utterance) => utterance.authorType === 'requester');
+      return [
+        {
+          id,
+          status: session.status,
+          terminalState: session.terminalState,
+          roundCount: session.roundCount,
+          requestText: request?.originalText ?? '',
+          updatedAt: session.updatedAt,
+        },
+      ];
+    });
+    sendJson(res, 200, { sessions });
   }
 
   function handleSessionDetail(res: ServerResponse, sessionId: string): void {
@@ -213,9 +369,13 @@ export function createWebServer(deps: WebServerDeps): Server {
           .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt))
           .at(-1)
       : undefined;
+    const labelBySlot = new Map<string, string>(
+      TEMP_REQUIRED_SLOTS.map((slot) => [slot.key, slot.label]),
+    );
     // 원문 전사는 상시 조회 대상 (US-11, 원칙 7). 요청자 식별자(authorId)는 내보내지 않는다.
     sendJson(res, 200, {
       latestQuestions: lastRound ? parseStoredQuestions(lastRound.payload) : null,
+      roundBudget: runner.roundBudgetOf(sessionId),
       session: {
         id: session.id,
         status: session.status,
@@ -235,7 +395,10 @@ export function createWebServer(deps: WebServerDeps): Server {
       })),
       slotStates: store.listSlotStates(sessionId).map((slot) => ({
         slotKey: slot.slotKey,
+        label: labelBySlot.get(slot.slotKey) ?? slot.slotKey,
         state: slot.state,
+        value: typeof slot.value === 'string' ? slot.value : null,
+        confirmedByRequester: slot.confirmedByRequester,
         openIssueAssignee: slot.openIssueAssignee,
       })),
     });
@@ -246,17 +409,23 @@ export function createWebServer(deps: WebServerDeps): Server {
     const segments = url.pathname.split('/').filter(Boolean);
 
     if (req.method === 'GET' && segments.length === 0) {
-      res.writeHead(200, {
-        'content-type': 'text/html; charset=utf-8',
-        'cache-control': 'no-store',
-      });
-      res.end(WEB_PAGE_HTML);
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(
+        '<!doctype html><meta charset="utf-8"><title>pm-jude API</title>' +
+          '<p>pm-jude API 서버 — 웹 UI는 <code>pnpm web:ui</code> (http://localhost:3000)</p>',
+      );
       return;
     }
     if (segments[0] === 'api' && segments[1] === 'sessions') {
-      if (req.method === 'POST' && segments.length === 2) {
-        await handleIntake(req, res);
-        return;
+      if (segments.length === 2) {
+        if (req.method === 'POST') {
+          await handleIntake(req, res);
+          return;
+        }
+        if (req.method === 'GET') {
+          handleSummaries(res, url.searchParams.get('ids'));
+          return;
+        }
       }
       const sessionId = segments[2];
       if (sessionId !== undefined) {
@@ -264,8 +433,27 @@ export function createWebServer(deps: WebServerDeps): Server {
           handleSessionDetail(res, sessionId);
           return;
         }
+        if (req.method === 'GET' && segments.length === 4 && segments[3] === 'events') {
+          handleEvents(req, res, sessionId);
+          return;
+        }
         if (req.method === 'POST' && segments.length === 4 && segments[3] === 'replies') {
           await handleReply(req, res, sessionId);
+          return;
+        }
+        if (req.method === 'POST' && segments.length === 4 && segments[3] === 'rounds') {
+          // 백그라운드 라운드 실패 시 재시도 경로 — intake 상태에서만 의미가 있다
+          const session = store.getSession(sessionId);
+          if (!session || !session.channelThreadKey) {
+            sendJson(res, 404, { error: '세션 없음' });
+            return;
+          }
+          kickClarification(sessionId, session.channelThreadKey);
+          sendJson(res, 202, { accepted: true });
+          return;
+        }
+        if (req.method === 'POST' && segments.length === 5 && segments[3] === 'slots') {
+          await handleSlotConfirm(req, res, sessionId, decodeURIComponent(segments[4] ?? ''));
           return;
         }
       }
