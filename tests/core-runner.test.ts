@@ -185,6 +185,9 @@ describe('코어 러너 — 인테이크', () => {
       ],
       signals: [{ type: 'clarification_round' }],
     });
+    // 질문 구조가 신호에 영속된다 — 세션 재개 시 어댑터가 질문별 UI를 복원한다
+    const round = exported[0]?.signals[0]?.payload as { questions?: unknown[] };
+    expect(round.questions).toHaveLength(3);
   });
 
   it('명시 언어가 있으면 발화 문자 감지보다 우선한다 (웹 간이 식별)', async () => {

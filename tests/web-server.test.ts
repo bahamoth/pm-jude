@@ -162,10 +162,12 @@ describe('웹 어댑터 HTTP 계약 smoke', () => {
     expect(sessionRes.status).toBe(200);
     const detail = (await sessionRes.json()) as {
       session: { id: string; status: string };
+      latestQuestions: unknown;
       utterances: Array<{ authorType: string; originalText: string; originalLanguage: string }>;
       slotStates: Array<{ slotKey: string; state: string }>;
     };
     expect(detail.session).toMatchObject({ id: intake.sessionId, status: 'documented' });
+    expect(detail.latestQuestions).toBeNull(); // 종결(documented) 세션은 마법사 복원 대상이 아니다
     expect(detail.utterances[0]).toMatchObject({
       authorType: 'requester',
       originalText: '영업 실적 대시보드 하나 만들어 주세요',
@@ -183,6 +185,27 @@ describe('웹 어댑터 HTTP 계약 smoke', () => {
       status: 'documented',
     });
     expect(store.getSession(intake.sessionId)?.promptVersionId).toBeTruthy();
+  });
+
+  it('진행 중 세션 조회는 마지막 라운드의 질문 구조를 되돌린다 — 마법사 복원 (US-8)', async () => {
+    const { baseUrl } = await startServer([clarificationResponse]);
+
+    const intakeRes = await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: '영업 실적 대시보드 하나 만들어 주세요' }),
+    });
+    const { sessionId } = (await intakeRes.json()) as { sessionId: string };
+
+    const detail = (await (await fetch(`${baseUrl}/api/sessions/${sessionId}`)).json()) as {
+      latestQuestions: Array<{ index: number; question: string; dontKnowLabel: string }> | null;
+    };
+    expect(detail.latestQuestions).toHaveLength(3);
+    expect(detail.latestQuestions?.[0]).toMatchObject({
+      index: 1,
+      question: '이 대시보드는 주로 누가 보게 되나요?',
+      dontKnowLabel: '모르겠어요 — 개발팀이 정해 주세요',
+    });
   });
 
   it('채팅 페이지가 서빙되고, 잘못된 요청은 4xx로 거절된다', async () => {
