@@ -2,7 +2,7 @@
 
 ## Collaboration workflow
 
-One directive = one branch = one PR with issue-unit commits. No stacked PRs; registry-like files (`package.json`, `.env.example`, `issues/index.html`, catalog) are edited only at integration time; claim tickets on the board before starting. See `docs/agents/workflow.md`.
+One directive = one branch = one PR with issue-unit commits, **landed serially** — merge the previous PR before starting the next. No stacked PRs; registry-like files (`package.json`, `.env.example`, catalog) are edited only at integration time. The issue board (`issues/index.html`) lives on main: claim/close via small docs commits pushed directly to main, never on PR branches. See `docs/agents/workflow.md`.
 
 ## Agent skills
 
