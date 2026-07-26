@@ -48,16 +48,36 @@ function page(title: string, body: string, extraHead = ''): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark"><title>${title} · pm-jude</title>
 <style>
-  :root{color-scheme:light dark}
-  body{font:15px/1.6 "Avenir Next","Segoe UI",system-ui,sans-serif;max-width:860px;margin:0 auto;padding:32px 20px 80px}
-  a{color:#b4430e}@media(prefers-color-scheme:dark){a{color:#e8703a}}
-  nav.crumbs{font-size:12.5px;margin-bottom:20px;opacity:.8}
-  article :is(h1,h2,h3){line-height:1.3}
-  article pre{padding:12px 14px;overflow-x:auto;border-radius:6px;background:rgba(128,120,100,.12)}
-  article code{font-family:ui-monospace,Menlo,monospace;font-size:.9em}
-  article :not(pre)>code{background:rgba(128,120,100,.15);padding:1px 5px;border-radius:3px}
-  article table{border-collapse:collapse}article :is(td,th){border:1px solid rgba(128,120,100,.4);padding:5px 10px}
-  article blockquote{margin:0;padding-left:14px;border-left:3px solid rgba(128,120,100,.4);opacity:.85}
+  /* shadcn neutral 토큰 — 정본: web-ui/app/globals.css (#37). prefers-color-scheme으로 다크 분기. */
+  :root{
+    color-scheme:light dark;
+    --background:oklch(1 0 0);--foreground:oklch(0.145 0 0);
+    --muted:oklch(0.97 0 0);--muted-foreground:oklch(0.556 0 0);
+    --border:oklch(0.922 0 0);--radius:0.625rem;
+    --font-sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI","Apple SD Gothic Neo",sans-serif;
+    --font-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  @media(prefers-color-scheme:dark){
+    :root{
+      --background:oklch(0.145 0 0);--foreground:oklch(0.985 0 0);
+      --muted:oklch(0.269 0 0);--muted-foreground:oklch(0.708 0 0);
+      --border:oklch(1 0 0/10%);
+    }
+  }
+  body{font:14.5px/1.65 var(--font-sans);background:var(--background);color:var(--foreground);
+    max-width:860px;margin:0 auto;padding:32px 20px 80px;-webkit-font-smoothing:antialiased}
+  a{color:var(--foreground);text-decoration:underline;text-underline-offset:3px;
+    text-decoration-color:color-mix(in oklab,var(--foreground) 30%,transparent)}
+  a:hover{text-decoration-color:var(--foreground)}
+  nav.crumbs{font-size:12.5px;margin-bottom:24px;color:var(--muted-foreground)}
+  nav.crumbs a{color:var(--muted-foreground);text-decoration:none}
+  nav.crumbs a:hover{color:var(--foreground)}
+  article :is(h1,h2,h3){line-height:1.3;font-weight:600}
+  article pre{padding:12px 14px;overflow-x:auto;border-radius:var(--radius);background:var(--muted)}
+  article code{font-family:var(--font-mono);font-size:.9em}
+  article :not(pre)>code{background:var(--muted);padding:2px 5px;border-radius:6px}
+  article table{border-collapse:collapse}article :is(td,th){border:1px solid var(--border);padding:5px 10px}
+  article blockquote{margin:0;padding-left:14px;border-left:3px solid var(--border);color:var(--muted-foreground)}
   ul.listing{list-style:none;padding:0}ul.listing li{padding:3px 0}
   .mermaid{background:transparent}
 </style>${extraHead}</head><body>
@@ -106,7 +126,10 @@ function markdownPage(relPath: string, markdown: string): string {
     pre.textContent = code.textContent;
     code.closest('pre').replaceWith(pre);
   });
-  mermaid.initialize({ startOnLoad: false, theme: 'neutral' });
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'neutral',
+  });
   mermaid.run();
 </script>`,
   );

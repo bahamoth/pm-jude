@@ -15,62 +15,77 @@ export function renderTraceHtml(data: TraceData): string {
 <meta name="color-scheme" content="light dark">
 <title>pm-jude · Session Trace</title>
 <style>
+  /* shadcn neutral 토큰 — 정본: web-ui/app/globals.css (#37). prefers-color-scheme으로 다크 분기. */
   :root{
-    --paper:#f5f2ec; --ink:#211d18; --ink-soft:#6b6357; --hairline:#d9d2c4;
-    --card:#fdfbf7; --card-edge:#e4ddd0; --accent:#b4430e;
-    --ok:#0e7268; --warn:#976a08;
-    --shadow:0 1px 2px rgba(33,29,24,.06),0 8px 24px rgba(33,29,24,.07);
+    --background:oklch(1 0 0); --foreground:oklch(0.145 0 0);
+    --card:oklch(1 0 0); --card-foreground:oklch(0.145 0 0);
+    --primary:oklch(0.205 0 0); --primary-foreground:oklch(0.985 0 0);
+    --secondary:oklch(0.97 0 0); --secondary-foreground:oklch(0.205 0 0);
+    --muted:oklch(0.97 0 0); --muted-foreground:oklch(0.556 0 0);
+    --destructive:oklch(0.577 0.245 27.325);
+    --border:oklch(0.922 0 0); --ring:oklch(0.708 0 0);
+    --radius:0.625rem;
+    --shadow-xs:0 1px 2px 0 rgb(0 0 0/.05);
+    --font-sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI","Apple SD Gothic Neo",sans-serif;
+    --font-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --ok:#059669; --warn:#d97706;
   }
   @media (prefers-color-scheme: dark){
     :root{
-      --paper:#161310; --ink:#e9e2d4; --ink-soft:#968d7d; --hairline:#332d25;
-      --card:#1f1b16; --card-edge:#383127; --accent:#e8703a;
-      --ok:#3aa89a; --warn:#d1a12e;
-      --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.35);
+      --background:oklch(0.145 0 0); --foreground:oklch(0.985 0 0);
+      --card:oklch(0.205 0 0); --card-foreground:oklch(0.985 0 0);
+      --primary:oklch(0.922 0 0); --primary-foreground:oklch(0.205 0 0);
+      --secondary:oklch(0.269 0 0); --secondary-foreground:oklch(0.985 0 0);
+      --muted:oklch(0.269 0 0); --muted-foreground:oklch(0.708 0 0);
+      --destructive:oklch(0.704 0.191 22.216);
+      --border:oklch(1 0 0/10%); --ring:oklch(0.556 0 0);
+      --ok:#34d399; --warn:#fbbf24;
     }
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html{color-scheme:light dark;word-break:keep-all;overflow-wrap:break-word}
-  body{font:14px/1.55 "Avenir Next","Avenir","Segoe UI",system-ui,sans-serif;background:var(--paper);color:var(--ink)}
-  .mono{font-family:ui-monospace,"SF Mono",Menlo,monospace}
-  header{border-top:3px solid var(--ink);border-bottom:1px solid var(--hairline);padding:18px 28px;
-    display:flex;flex-wrap:wrap;gap:6px 24px;align-items:baseline}
-  .wordmark{font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;font-size:22px;font-weight:600}
-  .wordmark em{font-style:italic;color:var(--accent)}
-  .gen{margin-left:auto;font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;color:var(--ink-soft)}
-  main{padding:22px 28px 56px;max-width:1100px}
-  #summary{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:22px}
-  .stat{background:var(--card);border:1px solid var(--card-edge);box-shadow:var(--shadow);padding:10px 14px;min-width:110px}
-  .stat .k{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:10px;letter-spacing:.12em;
-    text-transform:uppercase;color:var(--ink-soft);margin-bottom:2px}
-  .stat .v{font-size:19px;font-weight:600}
-  .stat .sub{font-size:11px;color:var(--ink-soft)}
-  details.session{background:var(--card);border:1px solid var(--card-edge);box-shadow:var(--shadow);margin-bottom:10px}
-  details.session>summary{list-style:none;cursor:pointer;padding:12px 16px;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline}
+  body{font:14px/1.55 var(--font-sans);background:var(--background);color:var(--foreground);-webkit-font-smoothing:antialiased}
+  .mono{font-family:var(--font-mono)}
+  header{border-bottom:1px solid var(--border);padding:16px 24px;
+    display:flex;flex-wrap:wrap;gap:6px 24px;align-items:center}
+  .wordmark{font-size:16px;font-weight:600;letter-spacing:-.01em}
+  .wordmark em{font-style:normal;font-weight:400;color:var(--muted-foreground)}
+  .gen{margin-left:auto;font-family:var(--font-mono);font-size:11px;color:var(--muted-foreground)}
+  main{padding:20px 24px 56px;max-width:1100px}
+  #summary{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px}
+  .stat{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    box-shadow:var(--shadow-xs);padding:12px 16px;min-width:120px}
+  .stat .k{font-size:11px;font-weight:500;color:var(--muted-foreground);margin-bottom:2px}
+  .stat .v{font-size:18px;font-weight:600;font-variant-numeric:tabular-nums}
+  .stat .sub{font-size:11px;color:var(--muted-foreground)}
+  details.session{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    box-shadow:var(--shadow-xs);margin-bottom:8px;overflow:hidden}
+  details.session>summary{list-style:none;cursor:pointer;padding:12px 16px;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
   details.session>summary::-webkit-details-marker{display:none}
-  details.session>summary:hover{outline:1px solid var(--accent)}
-  .sid{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:12px;font-weight:600}
-  .badge{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:10.5px;letter-spacing:.05em;
-    padding:2px 8px;border-radius:2px;background:var(--paper);border:1px solid var(--hairline);color:var(--ink-soft)}
-  .badge.status{border-color:var(--accent);color:var(--accent)}
-  .badge.terminal{border-color:var(--ink-soft);color:var(--ink)}
-  .badge.filled{border-color:var(--ok);color:var(--ok)}
-  .badge.promoted{border-color:var(--warn);color:var(--warn)}
-  .meta{margin-left:auto;font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;color:var(--ink-soft)}
-  .body{border-top:1px dashed var(--hairline);padding:14px 16px;display:grid;gap:16px}
-  .sect{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:10.5px;letter-spacing:.14em;
-    text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px}
+  details.session>summary:hover{background:color-mix(in oklab,var(--muted) 50%,transparent)}
+  .sid{font-family:var(--font-mono);font-size:12px;font-weight:600}
+  .badge{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:9999px;
+    font-size:11px;font-weight:500;border:1px solid transparent;
+    background:var(--secondary);color:var(--secondary-foreground)}
+  .badge.status{background:var(--primary);color:var(--primary-foreground)}
+  .badge.terminal{background:transparent;border-color:var(--border);color:var(--foreground)}
+  .badge.filled{background:color-mix(in oklab,var(--ok) 12%,transparent);color:var(--ok)}
+  .badge.promoted{background:color-mix(in oklab,var(--warn) 15%,transparent);color:var(--warn)}
+  .meta{margin-left:auto;font-family:var(--font-mono);font-size:11px;color:var(--muted-foreground)}
+  .body{border-top:1px solid var(--border);padding:14px 16px;display:grid;gap:16px}
+  .sect{font-size:11px;font-weight:500;color:var(--muted-foreground);margin-bottom:6px}
   table{border-collapse:collapse;width:100%;font-size:12.5px}
-  th,td{text-align:left;padding:4px 10px 4px 0;border-bottom:1px dashed var(--hairline);vertical-align:top}
-  th{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:10px;letter-spacing:.1em;
-    text-transform:uppercase;color:var(--ink-soft);font-weight:500}
+  th,td{text-align:left;padding:5px 10px 5px 0;border-bottom:1px solid var(--border);vertical-align:top}
+  th{font-size:11px;color:var(--muted-foreground);font-weight:500}
   .utt{display:grid;grid-template-columns:max-content max-content 1fr;gap:4px 10px;font-size:12.5px}
-  .utt .who{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;color:var(--accent)}
-  .utt .when{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;color:var(--ink-soft)}
+  .utt .who{font-family:var(--font-mono);font-size:11px;font-weight:500;color:var(--foreground)}
+  .utt .when{font-family:var(--font-mono);font-size:11px;color:var(--muted-foreground)}
   .utt .txt{white-space:pre-wrap}
-  .empty{color:var(--ink-soft);font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:12px;padding:30px 0}
-  .dataerr{background:var(--card);border:1px solid var(--accent);padding:16px 20px;margin:16px 0;
-    font-family:ui-monospace,monospace;font-size:12px;white-space:pre-wrap}
+  .empty{color:var(--muted-foreground);font-size:12.5px;padding:30px 0}
+  .dataerr{border:1px solid color-mix(in oklab,var(--destructive) 40%,transparent);
+    background:color-mix(in oklab,var(--destructive) 8%,transparent);color:var(--destructive);
+    border-radius:var(--radius);padding:16px 20px;margin:16px 0;
+    font-family:var(--font-mono);font-size:12px;white-space:pre-wrap}
 </style>
 </head>
 <body>
