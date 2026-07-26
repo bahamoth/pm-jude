@@ -182,17 +182,30 @@ describe('웹 어댑터 HTTP 계약 smoke', () => {
     });
     expect(detail.slotStates[0]?.label).toBeTruthy(); // 슬롯 라벨 노출 (G-2 맥락 카드)
 
-    // 답변 → 문서
+    // 답변 → 202 접수, 판정·문서는 백그라운드 (#31) — 완료는 processing=false로 관측
     const replyRes = await fetch(`${baseUrl}/api/sessions/${intake.sessionId}/replies`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ text: '영업팀 매니저요. 수작업 집계 제거요. 데이터는 모르겠어요.' }),
     });
-    const reply = await json<{ status: string; replies: Array<{ text: string }> }>(replyRes);
-    expect(reply.status).toBe('documented');
-    expect(reply.replies.at(-1)?.text).toContain('requirements v0');
+    expect(replyRes.status).toBe(202);
+    const documented = await waitFor(async () => {
+      const d = await json<{ session: { status: string }; processing: boolean }>(
+        await fetch(`${baseUrl}/api/sessions/${intake.sessionId}`),
+      );
+      return !d.processing && d.session.status === 'documented' ? d : null;
+    });
+    expect(documented.session.status).toBe('documented');
 
-    // 슬롯 확인: 맞아요 → 기록 (F3, 원칙 7)
+    // documented의 일반 답변은 409 — 정정은 슬롯 확인 경로만 (§6)
+    const directReply = await fetch(`${baseUrl}/api/sessions/${intake.sessionId}/replies`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: '아무 말' }),
+    });
+    expect(directReply.status).toBe(409);
+
+    // 슬롯 확인: 맞아요 → 즉시 200 (무 LLM)
     const confirmRes = await fetch(
       `${baseUrl}/api/sessions/${intake.sessionId}/slots/target-user`,
       {
@@ -210,25 +223,37 @@ describe('웹 어댑터 HTTP 계약 smoke', () => {
     });
     expect(afterConfirm.slotStates[0]?.value).toBeTruthy(); // 판정 근거가 확인 카드 텍스트
 
-    // 아니에요 + 정정 → 재판정 → 문서 v2 (#30 상한 미산입)
+    // 아니에요 + 정정 → 202, 재판정 백그라운드 → 문서 v2 (#30 상한 미산입)
+    const roundBefore = store.getSession(intake.sessionId)?.roundCount;
     const correctRes = await fetch(`${baseUrl}/api/sessions/${intake.sessionId}/slots/purpose`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ confirmed: false, text: '사실 경영진 보고용이에요' }),
     });
-    const corrected = await json<{ status: string; replies: Array<{ text: string }> }>(correctRes);
-    expect(corrected.status).toBe('documented');
-    expect(corrected.replies.at(-1)?.text).toContain('requirements v0');
+    expect(correctRes.status).toBe(202);
+    await waitFor(async () => {
+      const d = await json<{ session: { status: string }; processing: boolean }>(
+        await fetch(`${baseUrl}/api/sessions/${intake.sessionId}`),
+      );
+      return !d.processing && d.session.status === 'documented' ? d : null;
+    });
+    expect(store.getSession(intake.sessionId)?.roundCount).toBe(roundBefore); // 상한 미산입
 
     // 요약 목록 (#29 로컬 목록의 서버측 짝) — 미존재 ID는 조용히 걸러진다
     const summaries = await json<{
-      sessions: Array<{ id: string; status: string; requestText: string }>;
+      sessions: Array<{
+        id: string;
+        status: string;
+        requestText: string;
+        openIssueCount: number;
+      }>;
     }>(await fetch(`${baseUrl}/api/sessions?ids=${intake.sessionId},no-such-id`));
     expect(summaries.sessions).toHaveLength(1);
     expect(summaries.sessions[0]).toMatchObject({
       id: intake.sessionId,
       status: 'documented',
       requestText: '영업 실적 대시보드 하나 만들어 주세요',
+      openIssueCount: 1, // data-source 승격 (§5.1 요청 카드)
     });
 
     expect(store.getSession(intake.sessionId)?.originChannel).toBe('web');
@@ -263,13 +288,20 @@ describe('웹 어댑터 HTTP 계약 smoke', () => {
       }
     }
 
-    await readUntil('event: status'); // 접속 직후 현재 상태
+    await readUntil('event: status'); // 접속 직후 현재 상태 (processing=true라 연결 유지)
+    expect(buffer).toContain('"processing":true');
     backend.open(); // 질문 생성 진행
     await readUntil('event: post'); // 질문 게시 푸시
     expect(buffer).toContain('이 대시보드는 주로 누가 보게 되나요?');
     expect(buffer).toContain('"questions"');
-    await readUntil('"status":"clarifying"'); // 라운드 종료 후 상태 푸시 — 클라이언트의 연결 종료 신호
+    await readUntil('"processing":false'); // 종료 상태 푸시 — 이후 서버가 스트림을 닫는다
+    expect(buffer).toContain('"status":"clarifying"');
     await reader.cancel();
+
+    // 수명 규칙 강제: 처리 중이 아니면 상태만 주고 서버가 즉시 닫는다 — 유휴 연결 불허
+    const idle = await fetch(`${baseUrl}/api/sessions/${intake.sessionId}/events`);
+    const idleBody = await idle.text(); // 서버가 닫아야 반환된다
+    expect(idleBody).toContain('"processing":false');
   });
 
   it('안내 페이지·4xx 계약', async () => {

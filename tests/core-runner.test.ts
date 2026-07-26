@@ -368,6 +368,34 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
     );
   });
 
+  it('정정이 미정제로 판명돼도 문서를 보류로 파괴하지 않고, 상한 미산입 되물음을 연다 (§6)', async () => {
+    const { runner, port, store } = makeRunner(
+      [
+        clarificationResponse,
+        refinedCompletenessResponse,
+        requirementsResponse,
+        unrefinedCompletenessResponse, // 정정 재판정 → 미정제
+        clarificationResponse, // 되물음 라운드 (상한 미산입)
+      ],
+      { maxRounds: 1 }, // 예산이 이미 소진된 상태에서도 정정은 보류로 흐르지 않아야 한다
+    );
+    await runner.handleIntake(intake);
+    await runner.handleReply({ ...intake, text: '영업팀 매니저요. 수작업 집계 제거요.' });
+    expect(store.findSessionByThreadKey('web:thread-1')?.status).toBe('documented');
+    const roundBefore = store.findSessionByThreadKey('web:thread-1')?.roundCount;
+
+    const outcome = await runner.confirmSlot(
+      { ...intake, text: '사실 다른 문제예요' },
+      'purpose',
+      false,
+    );
+
+    expect(outcome?.status).toBe('clarifying'); // 보류가 아니라 되물음
+    expect(outcome?.terminalState).toBeNull();
+    expect(port.posted.at(-1)?.text).toContain('데이터는 어디에서 가져오면 되나요?');
+    expect(store.findSessionByThreadKey('web:thread-1')?.roundCount).toBe(roundBefore); // 미산입
+  });
+
   it('openSession/startClarification 분리 — 접수 확인이 먼저, 라운드는 나중에 (G-1)', async () => {
     const { runner, port, store } = makeRunner([clarificationResponse]);
 

@@ -14,9 +14,11 @@ import type { SessionStore } from '../store/session-store';
 
 /**
  * 웹 채널 어댑터 (#16·#35, ADR-0007/0008) — Node 내장 http 로컬 단일 프로세스 서버.
- * 접수는 즉시 응답하고(F1), 질문·판정·문서 게시는 세션 이벤트 스트림(SSE)으로 푸시한다(#31).
- * 회신 주소는 {sessionId, collector}: 포트 게시가 SSE 구독자에게 브로드캐스트되고,
- * 동기 응답이 필요한 경로는 수집기로도 받는다. 로직은 코어 러너 몫 — 여기는 HTTP 배선만.
+ * 접수·답변·정정의 LLM 라운드는 전부 백그라운드로 돌고(POST는 즉시 응답 — F1),
+ * 결과는 세션 이벤트 스트림(SSE)으로 푸시된다(#31). 수명 규칙은 서버가 강제한다:
+ * 처리 중이 아닌 세션의 구독은 현재 상태만 주고 즉시 닫으며, 처리가 끝나면 서버가
+ * 구독을 닫는다 — 동시 연결 수 = 진행 중 라운드 수. 저장소가 진실 원천이므로
+ * 놓친 이벤트 개념은 없고, 폴백은 세션 조회다. 로직은 코어 러너 몫 — 여기는 배선만.
  */
 
 export interface WebServerDeps {
@@ -132,7 +134,7 @@ function parseIntakeBody(body: Record<string, unknown>): {
 export function createWebServer(deps: WebServerDeps): Server {
   const { store } = deps;
 
-  // 세션 이벤트 스트림 (#31 SSE) — 구독자와 진행 중 백그라운드 라운드의 서버 내 상태
+  // 세션 이벤트 스트림 (#31) — 구독자와 진행 중 백그라운드 라운드
   const subscribers = new Map<string, Set<ServerResponse>>();
   const inFlight = new Set<string>();
 
@@ -153,12 +155,14 @@ export function createWebServer(deps: WebServerDeps): Server {
       terminalState: session.terminalState,
       roundCount: session.roundCount,
       roundBudget: runner.roundBudgetOf(sessionId),
+      processing: inFlight.has(sessionId),
     };
   }
 
-  function broadcastStatus(sessionId: string): void {
-    const status = statusOf(sessionId);
-    if (status) broadcast(sessionId, 'status', status);
+  /** 처리 종료 시 서버가 구독을 닫는다 — 수명 규칙 강제 (#31: 연결은 처리 구간에만). */
+  function closeSubscribers(sessionId: string): void {
+    for (const res of subscribers.get(sessionId) ?? []) res.end();
+    subscribers.delete(sessionId);
   }
 
   const port: ChannelPort<WebAddress> = {
@@ -176,29 +180,41 @@ export function createWebServer(deps: WebServerDeps): Server {
   };
   const runner = new IntakeRunner<WebAddress>({ ...deps, port });
 
-  /** 명확화 라운드를 백그라운드로 — 결과는 SSE로 흐르고, 실패는 error 이벤트로 알린다. */
-  function kickClarification(sessionId: string, threadKey: string, language?: 'ko' | 'en'): void {
-    if (inFlight.has(sessionId)) return;
+  /**
+   * LLM 라운드를 백그라운드로 — 세션당 동시 1개(경합 방지). 종료 시 최종 status를
+   * 브로드캐스트하고 구독을 서버가 닫는다. 실패는 round_failed 이벤트.
+   */
+  function runInBackground(sessionId: string, work: () => Promise<unknown>): boolean {
+    if (inFlight.has(sessionId)) return false;
     inFlight.add(sessionId);
     void (async () => {
       try {
-        await runner.startClarification({
-          address: { sessionId },
-          threadKey,
-          channel: 'web',
-          text: '',
-          ...(language ? { language } : {}),
-        });
+        await work();
       } catch (error) {
         console.error('[web] 라운드 실패:', error);
-        broadcast(sessionId, 'error', {
-          message: '질문 생성에 실패했어요 — 다시 시도할 수 있어요.',
+        broadcast(sessionId, 'round_failed', {
+          message: '처리에 실패했어요 — 다시 시도할 수 있어요.',
         });
       } finally {
         inFlight.delete(sessionId);
-        broadcastStatus(sessionId);
+        const status = statusOf(sessionId);
+        if (status) broadcast(sessionId, 'status', status);
+        closeSubscribers(sessionId);
       }
     })();
+    return true;
+  }
+
+  function kickClarification(sessionId: string, threadKey: string, language?: 'ko' | 'en'): void {
+    runInBackground(sessionId, () =>
+      runner.startClarification({
+        address: { sessionId },
+        threadKey,
+        channel: 'web',
+        text: '',
+        ...(language ? { language } : {}),
+      }),
+    );
   }
 
   /** 접수는 즉시 응답(F1 3초) — 질문 생성은 백그라운드, 결과는 SSE·세션 조회로. */
@@ -223,43 +239,47 @@ export function createWebServer(deps: WebServerDeps): Server {
     kickClarification(sessionId, threadKey, language);
   }
 
+  /** 답변 접수 → 202 즉시, 판정·다음 라운드·문서는 백그라운드 + SSE (#31). */
   async function handleReply(
     req: IncomingMessage,
     res: ServerResponse,
     sessionId: string,
   ): Promise<void> {
     const session = store.getSession(sessionId);
-    if (!session) {
+    if (!session || !session.channelThreadKey) {
       sendJson(res, 404, { error: '세션 없음' });
       return;
     }
-    if (!session.channelThreadKey) {
-      sendJson(res, 409, { error: '이 세션은 웹에서 이어갈 수 없다 (스레드 키 없음)' });
-      return;
-    }
-    const { text, name, language } = parseIntakeBody(await readJsonBody(req));
-    const collector: Reply[] = [];
-    const outcome = await runner.handleReply({
-      address: { sessionId, collector },
-      threadKey: session.channelThreadKey,
-      channel: 'web',
-      ...(name !== undefined ? { authorId: name } : {}),
-      text,
-      ...(language !== undefined ? { language } : {}),
-    });
-    if (!outcome) {
+    // documented의 일반 답변은 막는다 — 정정은 슬롯 확인 경로(§6)만 (Spec 리뷰 6)
+    if (session.status === 'documented') {
       sendJson(res, 409, {
-        error: '이미 종결된 세션이다 — 새 요청으로 시작해 달라',
-        status: session.status,
-        terminalState: session.terminalState,
+        error: '문서가 완성된 요청이에요 — 항목별 확인·정정으로 고칠 수 있어요.',
       });
       return;
     }
-    broadcastStatus(sessionId);
-    sendJson(res, 200, { ...outcome, replies: collector });
+    if (session.status === 'closed' && session.terminalState !== 'on_hold_insufficient_info') {
+      sendJson(res, 409, { error: '이미 종결된 세션이다 — 새 요청으로 시작해 달라' });
+      return;
+    }
+    const { text, name, language } = parseIntakeBody(await readJsonBody(req));
+    const accepted = runInBackground(sessionId, () =>
+      runner.handleReply({
+        address: { sessionId },
+        threadKey: session.channelThreadKey ?? '',
+        channel: 'web',
+        ...(name !== undefined ? { authorId: name } : {}),
+        text,
+        ...(language !== undefined ? { language } : {}),
+      }),
+    );
+    if (!accepted) {
+      sendJson(res, 409, { error: '이미 처리 중이에요 — 잠시 뒤 다시 시도해 주세요.' });
+      return;
+    }
+    sendJson(res, 202, { sessionId, accepted: true });
   }
 
-  /** 슬롯 단위 요청자 확인 (F3) — confirmed=false는 정정 텍스트 필수. */
+  /** 슬롯 단위 요청자 확인 (F3) — 맞아요는 즉시(무 LLM), 정정은 백그라운드 라운드. */
   async function handleSlotConfirm(
     req: IncomingMessage,
     res: ServerResponse,
@@ -279,23 +299,31 @@ export function createWebServer(deps: WebServerDeps): Server {
     if (!body.confirmed && !text) {
       throw new BadRequest('정정(confirmed=false)에는 text가 필요하다');
     }
-    const collector: Reply[] = [];
-    const outcome = await runner.confirmSlot(
-      {
-        address: { sessionId, collector },
-        threadKey: session.channelThreadKey,
-        channel: 'web',
-        text,
-      },
-      slotKey,
-      body.confirmed,
-    );
-    if (!outcome) {
+    const event = {
+      address: { sessionId },
+      threadKey: session.channelThreadKey,
+      channel: 'web' as const,
+      text,
+    };
+    if (body.confirmed) {
+      const outcome = await runner.confirmSlot(event, slotKey, true);
+      if (!outcome) {
+        sendJson(res, 409, { error: '슬롯 확인은 문서 완성 상태에서만 가능하다' });
+        return;
+      }
+      sendJson(res, 200, outcome);
+      return;
+    }
+    if (session.status !== 'documented') {
       sendJson(res, 409, { error: '슬롯 확인은 문서 완성 상태에서만 가능하다' });
       return;
     }
-    broadcastStatus(sessionId);
-    sendJson(res, 200, { ...outcome, replies: collector });
+    const accepted = runInBackground(sessionId, () => runner.confirmSlot(event, slotKey, false));
+    if (!accepted) {
+      sendJson(res, 409, { error: '이미 처리 중이에요 — 잠시 뒤 다시 시도해 주세요.' });
+      return;
+    }
+    sendJson(res, 202, { sessionId, accepted: true });
   }
 
   function handleEvents(req: IncomingMessage, res: ServerResponse, sessionId: string): void {
@@ -312,6 +340,12 @@ export function createWebServer(deps: WebServerDeps): Server {
     res.write(': connected\n\n');
     const status = statusOf(sessionId);
     if (status) sseSend(res, 'status', status);
+
+    // 수명 규칙 강제: 처리 중이 아니면 현재 상태만 주고 즉시 닫는다 — 유휴 연결 불허
+    if (!inFlight.has(sessionId)) {
+      res.end();
+      return;
+    }
 
     let clients = subscribers.get(sessionId);
     if (!clients) {
@@ -340,6 +374,9 @@ export function createWebServer(deps: WebServerDeps): Server {
       const request = store
         .listUtterances(id)
         .find((utterance) => utterance.authorType === 'requester');
+      const openIssueCount = store
+        .listSlotStates(id)
+        .filter((slot) => slot.state === 'promoted').length;
       return [
         {
           id,
@@ -348,6 +385,7 @@ export function createWebServer(deps: WebServerDeps): Server {
           roundCount: session.roundCount,
           requestText: request?.originalText ?? '',
           updatedAt: session.updatedAt,
+          openIssueCount,
         },
       ];
     });
@@ -376,6 +414,7 @@ export function createWebServer(deps: WebServerDeps): Server {
     sendJson(res, 200, {
       latestQuestions: lastRound ? parseStoredQuestions(lastRound.payload) : null,
       roundBudget: runner.roundBudgetOf(sessionId),
+      processing: inFlight.has(sessionId),
       session: {
         id: session.id,
         status: session.status,
@@ -453,7 +492,13 @@ export function createWebServer(deps: WebServerDeps): Server {
           return;
         }
         if (req.method === 'POST' && segments.length === 5 && segments[3] === 'slots') {
-          await handleSlotConfirm(req, res, sessionId, decodeURIComponent(segments[4] ?? ''));
+          let slotKey: string;
+          try {
+            slotKey = decodeURIComponent(segments[4] ?? '');
+          } catch {
+            throw new BadRequest('잘못된 슬롯 키');
+          }
+          await handleSlotConfirm(req, res, sessionId, slotKey);
           return;
         }
       }

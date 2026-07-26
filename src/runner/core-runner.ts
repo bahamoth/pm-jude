@@ -258,6 +258,13 @@ export class IntakeRunner<A> {
    * 슬롯 확인 정정의 재판정 경로로 허용된다(docgen 상태 내부 루프).
    */
   async handleReply(event: IntakeEvent<A>): Promise<ReplyOutcome | null> {
+    return this.processReply(event, { correction: false });
+  }
+
+  private async processReply(
+    event: IntakeEvent<A>,
+    options: { correction: boolean },
+  ): Promise<ReplyOutcome | null> {
     const { store } = this.deps;
     let session = store.findSessionByThreadKey(event.threadKey);
     if (!session) return null;
@@ -324,6 +331,12 @@ export class IntakeRunner<A> {
 
     if (verdict.refined) {
       await this.deliverDocument(session.id, event, completeness.output, request, conversation);
+      return this.outcomeOf(session.id);
+    }
+    if (options.correction) {
+      // 슬롯 정정의 되물음 (#30, §6 계약) — 왕복 상한에 산입하지 않고, 완성된 문서를
+      // 보류로 파괴하지 않는다. 남은 공백(정정 슬롯)을 겨냥한 라운드만 연다.
+      await this.runClarificationRound(session.id, event, language, { countRound: false });
       return this.outcomeOf(session.id);
     }
     if (session.roundCount < this.roundBudgetOf(session.id)) {
@@ -396,7 +409,7 @@ export class IntakeRunner<A> {
       modelVersion: this.deps.modelVersion,
       ...this.versionAxesOf(session),
     });
-    return this.handleReply(event);
+    return this.processReply(event, { correction: true });
   }
 
   /** 왕복 예산 — 재개(#30)마다 상한이 한 번 더 주어진다. */
@@ -421,6 +434,7 @@ export class IntakeRunner<A> {
     sessionId: string,
     event: IntakeEvent<A>,
     language: 'ko' | 'en',
+    options: { countRound: boolean } = { countRound: true },
   ): Promise<void> {
     const { store } = this.deps;
     const session = store.getSession(sessionId);
@@ -466,8 +480,10 @@ export class IntakeRunner<A> {
       sessionId,
       type: 'clarification_round',
       payload: {
-        round: session.roundCount + 1,
+        round: options.countRound ? session.roundCount + 1 : session.roundCount,
         questionCount: result.output.questions.length,
+        // 정정 되물음은 상한 미산입 (#30) — 관측을 위해 표식만 남긴다
+        ...(options.countRound ? {} : { correction: true }),
         // 질문 구조를 신호에 영속 — 세션 재개 시 어댑터가 질문별 UI를 복원한다 (F11 관측 겸용)
         questions: result.output.questions,
       },
@@ -476,7 +492,7 @@ export class IntakeRunner<A> {
     });
     store.updateSessionState(sessionId, {
       status: 'clarifying',
-      roundCount: session.roundCount + 1,
+      ...(options.countRound ? { roundCount: session.roundCount + 1 } : {}),
     });
   }
 

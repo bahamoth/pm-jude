@@ -91,6 +91,7 @@ export default function Home() {
                       <p className="truncate text-sm font-medium">{summary.requestText}</p>
                       <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
                         {summary.id.slice(0, 8)} · {new Date(summary.updatedAt).toLocaleString()}
+                        {summary.openIssueCount > 0 && ` · 개발팀 확인 ${summary.openIssueCount}건`}
                       </p>
                     </div>
                     <Badge className={cn('shrink-0 border-transparent', CHIP_TONE[chip.tone])}>

@@ -158,6 +158,11 @@ export function QuestionWizard({ questions, round, lastRound, onSubmit }: Props)
               <span>직접 입력할게요</span>
             </Label>
           </RadioGroup>
+          {answers.get(current.index)?.kind === 'dontKnow' && (
+            <p className="mt-3 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+              이 항목은 개발팀 확인 목록에 올라가요 — 요청은 멈추지 않고 계속 진행됩니다.
+            </p>
+          )}
           {answers.get(current.index)?.kind === 'free' && (
             <Textarea
               className="mt-3"

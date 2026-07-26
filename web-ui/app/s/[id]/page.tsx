@@ -16,15 +16,15 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { confirmSlot, getSession, retryRound, sendReply } from '@/lib/api';
+import { confirmSlotOk, correctSlot, getSession, retryRound, sendReply } from '@/lib/api';
 import { rememberSession } from '@/lib/local-sessions';
 import { isLastRound, journeyStep } from '@/lib/stage';
 import type { SessionDetail } from '@/lib/types';
+import { watchProcessing } from '@/lib/watch-processing';
 
 /**
- * 세션 화면 (딥링크 /s/:id — P-U2 상시 재개). 서버 status가 화면의 유일한 근거다.
- * SSE는 수명 규칙(#31)대로 서버 처리 구간에만 연다: 질문 생성 중(intake)에 열고,
- * 라운드 완료(status 이벤트)에 닫는다. 무응답 방치 구간에는 연결이 없다.
+ * 세션 화면 (딥링크 /s/:id — P-U2 상시 재개). 서버 status·processing이 화면의 유일한 근거다.
+ * 모든 LLM 라운드는 202로 접수되고 watchProcessing(SSE, 수명 규칙 #31)으로 완료를 기다린다.
  */
 export default function SessionPage() {
   const params = useParams<{ id: string }>();
@@ -33,9 +33,7 @@ export default function SessionPage() {
   const [notFound, setNotFound] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [roundFailed, setRoundFailed] = useState(false);
-  const sourceRef = useRef<EventSource | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const watchingRef = useRef(false);
 
   const refetch = useCallback(async () => {
     try {
@@ -48,65 +46,38 @@ export default function SessionPage() {
     }
   }, [sessionId]);
 
-  const stopStream = useCallback(() => {
-    sourceRef.current?.close();
-    sourceRef.current = null;
-    if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = null;
-  }, []);
-
-  /** 질문 생성 진행 구간에만 SSE를 연다 — 완료 status를 받으면 닫는다 (#31 수명 규칙). */
-  const streamWhileProcessing = useCallback(() => {
-    if (sourceRef.current) return;
-    const source = new EventSource(`/api/sessions/${encodeURIComponent(sessionId)}/events`);
-    sourceRef.current = source;
-    source.addEventListener('status', (event) => {
-      const data = JSON.parse((event as MessageEvent<string>).data) as { status: string };
-      if (data.status !== 'intake') {
-        stopStream();
-        void refetch();
-      }
-    });
-    source.addEventListener('error', (event) => {
-      // 서버가 보낸 라운드 실패 이벤트 (EventSource 연결 오류와 구분: data 유무)
-      if ((event as MessageEvent<string>).data) {
-        setRoundFailed(true);
-        stopStream();
-      }
-    });
-    source.onerror = () => {
-      // 연결 실패 — 조회 폴링으로 강등 (#31 폴백)
-      if (source.readyState === EventSource.CLOSED && !pollRef.current) {
-        pollRef.current = setInterval(() => {
-          void refetch().then((next) => {
-            if (next && next.session.status !== 'intake') stopStream();
-          });
-        }, 3000);
-      }
-    };
-  }, [refetch, sessionId, stopStream]);
+  /** 진행 중인 처리를 끝까지 지켜보고 화면을 갱신한다 — 중복 감시는 1개로 합쳐진다. */
+  const watchThenRefetch = useCallback(async () => {
+    if (watchingRef.current) return;
+    watchingRef.current = true;
+    try {
+      await watchProcessing(sessionId);
+      await refetch();
+    } finally {
+      watchingRef.current = false;
+    }
+  }, [refetch, sessionId]);
 
   useEffect(() => {
     rememberSession(sessionId);
     // 부팅 조회는 마운트 후에만 가능(딥링크 진입) — 상태 반영은 응답 후 비동기
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void refetch();
-    return stopStream;
-  }, [refetch, sessionId, stopStream]);
+    void refetch().then((next) => {
+      // 다른 탭·백그라운드에서 돌던 처리도 이어서 지켜본다 (P-U2)
+      if (next?.processing) void watchThenRefetch();
+    });
+  }, [refetch, sessionId, watchThenRefetch]);
 
-  // intake 상태를 관측하면 처리 중 — 스트림을 연다 (라운드 완료 시 자동 종료)
-  useEffect(() => {
-    if (detail?.session.status === 'intake' && !roundFailed) streamWhileProcessing();
-  }, [detail?.session.status, roundFailed, streamWhileProcessing]);
-
-  async function act(run: () => Promise<unknown>) {
+  /** 202 접수 → 처리 감시 → 재조회. LLM이 도는 모든 행동의 공통 경로. */
+  async function act(kick: () => Promise<unknown>) {
     setBusy(true);
     setError(null);
     try {
-      await run();
-      await refetch();
+      await kick();
+      await watchThenRefetch();
     } catch (e) {
       setError(e instanceof Error ? e.message : '처리 실패');
+      await refetch();
     } finally {
       setBusy(false);
     }
@@ -136,9 +107,11 @@ export default function SessionPage() {
     );
   }
 
-  const { session, latestQuestions, roundBudget, slotStates, utterances } = detail;
+  const { session, latestQuestions, roundBudget, slotStates, utterances, processing } = detail;
   const onHold =
     session.status === 'closed' && session.terminalState === 'on_hold_insufficient_info';
+  // 실패 판정은 상태로 유도한다: intake인데 처리 중이 아니면 첫 라운드가 죽은 것
+  const roundFailed = session.status === 'intake' && !processing && !busy;
   const documentText = utterances.findLast((u) => u.authorType === 'agent')?.originalText ?? '';
 
   return (
@@ -152,22 +125,23 @@ export default function SessionPage() {
         }))}
       />
 
-      {busy ? (
-        <WaitingCard phase="reply" />
-      ) : session.status === 'intake' ? (
+      {session.status === 'intake' ? (
         <AckCard
           sessionId={sessionId}
           failed={roundFailed}
           onRetry={() => {
-            setRoundFailed(false);
-            void retryRound(sessionId).then(() => streamWhileProcessing());
+            void retryRound(sessionId)
+              .then(() => watchThenRefetch())
+              .catch((e) => setError(e instanceof Error ? e.message : '재시도 실패'));
           }}
         />
+      ) : busy || processing ? (
+        <WaitingCard phase="reply" />
       ) : session.status === 'clarifying' ? (
         <div className="grid gap-4">
           {session.roundCount > 1 && <RoundContext slots={slotStates} />}
           <QuestionWizard
-            key={session.roundCount} // 라운드가 바뀌면 마법사 상태 초기화
+            key={`${session.roundCount}-${latestQuestions?.[0]?.question ?? ''}`}
             questions={latestQuestions ?? []}
             round={Math.max(session.roundCount, 1)}
             lastRound={isLastRound(session.roundCount, roundBudget)}
@@ -179,10 +153,12 @@ export default function SessionPage() {
           <SlotReview
             slots={slotStates}
             submitting={busy}
-            onConfirm={(slotKey) => void act(() => confirmSlot(sessionId, slotKey, true))}
-            onCorrect={(slotKey, text) =>
-              void act(() => confirmSlot(sessionId, slotKey, false, text))
+            onConfirm={(slotKey) =>
+              void confirmSlotOk(sessionId, slotKey)
+                .then(() => refetch())
+                .catch((e) => setError(e instanceof Error ? e.message : '확인 실패'))
             }
+            onCorrect={(slotKey, text) => void act(() => correctSlot(sessionId, slotKey, text))}
           />
           <DocumentView text={documentText} />
           <p className="text-center text-sm text-muted-foreground">
