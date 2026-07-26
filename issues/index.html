@@ -495,6 +495,28 @@
         "body": "정정 — release-please 기본값이 첫 릴리스를 1.0.0으로 잡아 v1.0.0 태그·릴리스가 생성됐으나, Phase 0 PoC이므로 0.1.0에서 시작하기로 결정(운영자). v1.0.0 태그·GitHub 릴리스 삭제 후 package.json·manifest·CHANGELOG를 0.1.0으로 정정하고 config에 `initial-version: 0.1.0` 명시. v0.1.0 태그·릴리스는 정정 커밋 머지 후 재생성."
       }
     ]
+  },
+  {
+    "id": 14,
+    "title": "PRD 섹션 분할 — 진입 문서 경량화 (docs/prd/)",
+    "state": "closed",
+    "labels": [
+      "ready-for-agent"
+    ],
+    "type": "task",
+    "assignee": "claude",
+    "parent": null,
+    "blockedBy": [],
+    "created": "2026-07-26",
+    "updated": "2026-07-26",
+    "body": "컨텍스트 엔지니어링 리팩터링 지시서 과제 1. PRD.md(525줄)를 docs/prd/ 아래 섹션 단위 파일 8개로 분할. PRD.md에는 §2 제품 개요·§3 핵심 원칙·목차만 잔류. CONTEXT.md 정본 출처를 분할 파일 기준으로 갱신, 정의만으로 부족한 용어 12개에 원문 위치 병기. 본문 텍스트 무변경(순수 이동). 완료 기준: docs/prd/ 최대 파일 < 200줄, PRD.md < 100줄.",
+    "comments": [
+      {
+        "author": "jude",
+        "date": "2026-07-26",
+        "body": "완료. 분할 결과: document-info(13줄)·user-stories(45)·functional-requirements(158)·system(49)·scope-and-milestones(49)·metrics-and-risks(59)·pending-decisions(27)·glossary(41). PRD.md 79줄. 분할 전후 본문 텍스트 동일성 스크립트 검증 통과. §12 파일명은 CONTEXT.md 용어 \"오픈이슈\"(승격 슬롯 필드)와의 충돌을 피해 pending-decisions.md로 명명."
+      }
+    ]
   }
 ]
 </script>
