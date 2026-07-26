@@ -718,6 +718,174 @@
         "body": "설계 초안 산출 — docs/ux/requester-journey.md (PR #21에 docs 커밋으로 동승). 구성: UX 원칙 6종(침묵 없음·상시 재개·막힘 없음·위치 가시성·다음 예고·채널 등가), 5단계 여정 스테퍼(접수→내용 정리→문서 확정→개발팀 검토→진행·완료), 정본 상태↔화면 매핑 표, 화면별 설계 7종(요청 목록·접수 직후·마법사 라운드 맥락·판정 대기·문서+슬롯 단위 확인·보류 재개·Phase 1 자리), 상호작용 계약 7항. **현행 대비 갭 8건**: G-1 접수 즉시성(버퍼링 위반), G-2 maxRounds·남은 슬롯 미노출, G-3 슬롯 단위 요청자 확인 화면 부재, G-4 보류 재개 전이 미구현(정본 전이 존재·코어는 무시), G-5 세션 목록·딥링크, G-6 전체 스테퍼, G-7 승격 인과 표시, G-8 chrome 다국어. **운영자 결정 대기 Q1~Q5**: 세션 목록 경계 / 보류 재개 Phase 0 포함 / 접수 즉시성 구현 방식(2단계 API vs SSE) / Phase 1 자리 노출 수위 / 슬롯 확인 되물음의 상한 산입. 승인 전 신규 화면 구현 없음."
       }
     ]
+  },
+  {
+    "id": 24,
+    "title": "요청자 여정 UX 설계 확정 — wayfinder 맵",
+    "state": "open",
+    "labels": [
+      "wayfinder:map"
+    ],
+    "type": null,
+    "assignee": null,
+    "parent": null,
+    "blockedBy": [],
+    "created": "2026-07-26",
+    "updated": "2026-07-26",
+    "body": "## Destination\n\ndocs/ux/requester-journey.md의 vNext 확정 — 검토(스트레스 테스트·프로토타입·리서치) 반영과 오픈 질문 5건(Q1~Q5)의 결정이 문서에 흡수되고 운영자 승인을 받은 상태. 프론트 스택 재검토(Next 유지/교체, AI 코딩 적합성 기준) 결정을 포함한다. 구현(갭 G-1~G-8 실행)은 이 맵의 범위 밖 — 설계 승인 후 별도 지시로 이어진다.\n\n## Notes\n\n- 정본: ARCHITECTURE.md §상태 머신, docs/prd/functional-requirements.md(F1~F8), CONTEXT.md 용어. 설계 대상: docs/ux/requester-journey.md (#23).\n- 스킬: 그릴링 티켓 = /grilling·/domain-modeling, 프로토타입 티켓 = /prototype, 리서치 티켓 = /research.\n- 운영자 상수: 검증된 디자인 시스템(shadcn 계열)·객관식 마법사·대기 UX 상시. 단 프레임워크 자체는 이 맵에서 재검토(#25) — 판단 기준은 AI 코딩 적합성 (운영자, 2026-07-26).\n- 보드 쓰기는 main 직행(워크플로우 규칙 6). HITL 티켓은 운영자와의 실문답으로만 해소 — 에이전트가 운영자 답을 대신하지 않는다.\n\n## Decisions so far\n\n(없음)\n\n## Not yet specified\n\n- 스택 교체로 결정될 경우: ADR-0008 개정(ADR-0009)·PR #21 처리·web-ui 마이그레이션 경로\n- Slack 복귀 시 채널 등가(P-U6)의 검증 방법 — 설계 확정 후 구체화\n- 다국어 chrome(G-8)의 설계 상세 — 언어 결정 시점·번역 자원\n\n## Out of scope\n\n- 게이트·역보고(Phase 1) UX 상세 설계 — 자리만 확보(운영자 결정 2026-07-26), 게이트 구현 지시 때 별도 맵\n- 갭 G-1~G-8의 구현 실행 — 설계 vNext 승인 후 별도 지시\n- Slack 어댑터 운영 — #8 후순위 유지(ADR-0007)",
+    "comments": []
+  },
+  {
+    "id": 25,
+    "title": "프론트 스택 확정 — Next.js 유지 vs 교체 (AI 코딩 적합성 기준)",
+    "state": "open",
+    "labels": [],
+    "type": "grilling",
+    "assignee": null,
+    "parent": 24,
+    "blockedBy": [
+      26
+    ],
+    "created": "2026-07-26",
+    "updated": "2026-07-26",
+    "body": "## Question\n\n웹 프론트 스택으로 Next.js 16을 유지하는가, 교체하는가. 판단 기준은 운영자가 지정한 「AI 코딩에 적합한 프론트 스택」 — 개발 초기라 전환 비용이 낮은 지금 결정한다. #26 리서치 결과(후보 비교·권고)를 놓고 운영자와 결정하며, 결정에 따라 ADR-0008 개정(append-only — ADR-0009)·PR #21 처리 방향·web-ui 마이그레이션 여부까지 정한다.",
+    "comments": []
+  },
+  {
+    "id": 26,
+    "title": "리서치 — AI 코딩에 적합한 프론트 스택 조사",
+    "state": "open",
+    "labels": [],
+    "type": "research",
+    "assignee": null,
+    "parent": 24,
+    "blockedBy": [],
+    "created": "2026-07-26",
+    "updated": "2026-07-26",
+    "body": "## Question\n\nAI 에이전트가 코드를 주로 작성하는 개발 초기 로컬 PoC(요청자 인테이크 웹, API 프록시 클라이언트, shadcn 계열 디자인 시스템 전제)에 적합한 프론트 스택은 무엇인가. 후보: Next.js(App Router, 현행) / Vite + React SPA / TanStack Start / Remix·React Router 7 / SvelteKit 등. 비교 축: AI 코딩 적합성(관례의 예측 가능성·학습 데이터 풍부함·오류 메시지 품질), 타입 안정성, 테스트 용이성, shadcn/ui 호환, 빌드·개발 루프 속도, 이 프로젝트의 실요구(SSR 불필요·로컬 단일 사용자·Phase 1 확장 여지)와의 정합. 산출: 비교표 + 권고안 + 근거 출처.",
+    "comments": []
+  },
+  {
+    "id": 27,
+    "title": "리서치 — 유사 제품의 인테이크·대기·재개 UX 관례 조사",
+    "state": "open",
+    "labels": [],
+    "type": "research",
+    "assignee": null,
+    "parent": 24,
+    "blockedBy": [],
+    "created": "2026-07-26",
+    "updated": "2026-07-26",
+    "body": "## Question\n\n단계형 인테이크·트리아지를 가진 검증된 제품들(Typeform류 폼 위저드, 서비스데스크 요청 포털(Jira SM·Zendesk), Linear/GitHub 이슈 트리아지, Intercom류 대화형 봇)은 다음을 어떻게 다루는가: ① 장시간 비동기 처리의 대기·이탈·복귀 UX ② 다단계 진행의 위치 표시(스테퍼·진행률) ③ 중단 후 재개(딥링크·목록·알림) ④ 답 못하는 문항의 처리(건너뛰기·나중에) ⑤ 제출 후 다음 단계 예고. 산출: 관례 요약 + requester-journey.md 각 화면 설계에의 시사점.",
+    "comments": []
+  },
+  {
+    "id": 28,
+    "title": "설계 스트레스 테스트 — 빠진 상태·엣지·과설계 도출",
+    "state": "open",
+    "labels": [],
+    "type": "grilling",
+    "assignee": null,
+    "parent": 24,
+    "blockedBy": [
+      27
+    ],
+    "created": "2026-07-26",
+    "updated": "2026-07-26",
+    "body": "## Question\n\nrequester-journey.md를 문답으로 따져 어디가 약한가 — 다루지 않은 상태 조합(동시 다중 세션, 라운드 중 브라우저 2개, 판정 대기 중 재제출), 엣지(질문 0개 응답, 슬롯 확인 무한 정정), 과설계(Phase 0에 불필요한 항목), 정본과의 어긋남. #27 관례 조사 결과를 반영해 진행한다. 산출: 설계 수정 목록(vNext 반영분).",
+    "comments": []
+  },
+  {
+    "id": 29,
+    "title": "세션 접근 모델 결정 (Q1) — 브라우저 로컬 목록 vs 서버 목록",
+    "state": "open",
+    "labels": [],
+    "type": "grilling",
+    "assignee": null,
+    "parent": 24,
+    "blockedBy": [],
+    "created": "2026-07-26",
+    "updated": "2026-07-26",
+    "body": "## Question\n\n「내 요청 목록」의 경계를 무엇으로 하는가 — 브라우저 로컬 세션 ID 목록(설계 제안)인가, 간이 식별(이름) 기반 서버 목록인가. 후자는 타인 요청 열람 문제가 있어 Phase 1 매직 링크와 함께 푸는 경로가 자연스럽다. 딥링크 /s/:id의 접근 통제 수위도 함께 정한다.",
+    "comments": []
+  },
+  {
+    "id": 30,
+    "title": "상태 머신 상호작용 규칙 결정 (Q2·Q5) — 보류 재개 포함, 슬롯 확인의 상한 산입",
+    "state": "open",
+    "labels": [],
+    "type": "grilling",
+    "assignee": null,
+    "parent": 24,
+    "blockedBy": [],
+    "created": "2026-07-26",
+    "updated": "2026-07-26",
+    "body": "## Question\n\n두 가지 상태 머신 접점 규칙을 정한다. ① 보류(정보 부족) → 명확화 재개 전이(정본에 존재, 코어 미구현)를 Phase 0 범위에 포함하는가(설계 제안: 포함). ② 슬롯 단위 확인의 「아니에요」 되물음을 왕복 상한에 산입하는가(설계 제안: 미산입 — 확정 시 PRD §12 등재).",
+    "comments": []
+  },
+  {
+    "id": 31,
+    "title": "접수 즉시성 구현 방식 결정 (Q3) — 2단계 API vs SSE",
+    "state": "open",
+    "labels": [],
+    "type": "grilling",
+    "assignee": null,
+    "parent": 24,
+    "blockedBy": [],
+    "created": "2026-07-26",
+    "updated": "2026-07-26",
+    "body": "## Question\n\nF1(접수 확인 3초)을 성립시키는 웹 어댑터 구현 방식 — ⓐ 2단계 API(세션 생성 즉시 응답 + 질문 폴링, 설계 제안) ⓑ SSE 스트리밍. #25 스택 결정과 상호작용할 수 있다(프레임워크의 스트리밍 지원). PoC 단순성과 Phase 1 확장성을 기준으로 정한다.",
+    "comments": []
+  },
+  {
+    "id": 32,
+    "title": "Phase 1 자리 노출 수위 결정 (Q4) — 「개발팀 검토 준비 중」 예고 표시 여부",
+    "state": "open",
+    "labels": [],
+    "type": "grilling",
+    "assignee": null,
+    "parent": 24,
+    "blockedBy": [],
+    "created": "2026-07-26",
+    "updated": "2026-07-26",
+    "body": "## Question\n\n문서 화면과 여정 스테퍼에서 아직 구현되지 않은 ④ 개발팀 검토·⑤ 진행 단계를 지금 노출하는가(정직한 「준비 중」 표기, P-U5 다음 예고), 게이트 구현 전까지 숨기는가(스테퍼 3단계로 축소). 요청자 기대 관리와 미완성 노출 사이의 결정.",
+    "comments": []
+  },
+  {
+    "id": 33,
+    "title": "프로토타입 — 스테퍼·문서/슬롯 확인·보류 재개 핵심 화면",
+    "state": "open",
+    "labels": [],
+    "type": "prototype",
+    "assignee": null,
+    "parent": 24,
+    "blockedBy": [],
+    "created": "2026-07-26",
+    "updated": "2026-07-26",
+    "body": "## Question\n\n설계의 신규 화면 3종 — 전체 여정 스테퍼(+라운드 맥락 카드), 문서+슬롯 단위 확인, 보류→재개 — 이 실제로 어떻게 보여야 하는가. 저충실도 스택 비의존 HTML 프로토타입(/prototype, 폐기 전제)을 만들어 운영자 반응으로 설계를 다듬는다. #27 관례 조사 결과가 닫혀 있으면 반영한다. 산출: 프로토타입 에셋 링크 + 설계 수정 목록.",
+    "comments": []
+  },
+  {
+    "id": 34,
+    "title": "설계 vNext 반영·운영자 승인",
+    "state": "open",
+    "labels": [],
+    "type": "task",
+    "assignee": null,
+    "parent": 24,
+    "blockedBy": [
+      25,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33
+    ],
+    "created": "2026-07-26",
+    "updated": "2026-07-26",
+    "body": "## Question\n\n닫힌 결정 전부를 docs/ux/requester-journey.md vNext로 반영하고(오픈 질문 §8 해소, 갭 표 갱신, 스택 결정 반영) 운영자 승인을 받는다 — 이 맵의 목적지 도달 티켓. 승인 후 구현은 별도 지시.",
+    "comments": []
   }
 ]
 </script>
