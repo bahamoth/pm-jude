@@ -1,7 +1,8 @@
 import {
   ApiError,
+  type Accepted,
   type IntakeResult,
-  type RoundResult,
+  type ReplyOutcome,
   type SessionDetail,
   type SessionSummary,
 } from './types';
@@ -44,7 +45,8 @@ export function startSession(input: {
   });
 }
 
-export function sendReply(sessionId: string, text: string): Promise<RoundResult> {
+/** 202 접수 — 판정·다음 라운드·문서는 백그라운드에서 돌고 SSE·조회로 온다. */
+export function sendReply(sessionId: string, text: string): Promise<Accepted> {
   return request(`/api/sessions/${encodeURIComponent(sessionId)}/replies`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -52,18 +54,26 @@ export function sendReply(sessionId: string, text: string): Promise<RoundResult>
   });
 }
 
-export function confirmSlot(
-  sessionId: string,
-  slotKey: string,
-  confirmed: boolean,
-  text?: string,
-): Promise<RoundResult> {
+/** 맞아요(즉시 200) — LLM 호출이 없다. */
+export function confirmSlotOk(sessionId: string, slotKey: string): Promise<ReplyOutcome> {
   return request(
     `/api/sessions/${encodeURIComponent(sessionId)}/slots/${encodeURIComponent(slotKey)}`,
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ confirmed, ...(text !== undefined ? { text } : {}) }),
+      body: JSON.stringify({ confirmed: true }),
+    },
+  );
+}
+
+/** 아니에요 + 정정(202) — 재판정이 백그라운드로 돈다. */
+export function correctSlot(sessionId: string, slotKey: string, text: string): Promise<Accepted> {
+  return request(
+    `/api/sessions/${encodeURIComponent(sessionId)}/slots/${encodeURIComponent(slotKey)}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ confirmed: false, text }),
     },
   );
 }

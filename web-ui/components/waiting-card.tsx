@@ -41,7 +41,7 @@ export function WaitingCard({ phase }: { phase: 'intake' | 'reply' }) {
           {overdue ? '응답이 없으면 곧 자동으로 중단돼요' : '보통 수십 초, 길면 2분까지 걸려요'}
         </p>
         <p className="text-xs text-muted-foreground">
-          세션은 저장되고 있어요 — 페이지를 닫아도 이어서 진행할 수 있습니다.
+          떠나도 됩니다 — 돌아오면 이 자리부터 이어집니다. 내용은 서버에 저장돼 있어요.
         </p>
       </CardContent>
     </Card>

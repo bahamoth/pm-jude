@@ -100,6 +100,33 @@ describe('trace-data — 저장소 export의 조형', () => {
     expect(sess.versions.threshold).toContain('@');
   });
 
+  it('신규 신호 유형(#35 — 재개·슬롯 확인)이 요약과 세션 신호에 그대로 실린다 (AGENTS.md 동반 지침)', async () => {
+    store = SessionStore.open(':memory:');
+    await seedSession(store, '대시보드 요청');
+    const session = store.exportSessions()[0]?.session;
+    if (!session) throw new Error('시드 세션 없음');
+    const axes = {
+      promptVersionId: session.promptVersionId,
+      modelVersion: session.modelVersion,
+      thresholdVersionId: session.thresholdVersionId,
+      slotSchemaVersionId: session.slotSchemaVersionId,
+    };
+    store.recordSignal({ sessionId: session.id, type: 'session_resumed', payload: {}, ...axes });
+    store.recordSignal({
+      sessionId: session.id,
+      type: 'slot_confirmed',
+      payload: { slotKey: 'target-user' },
+      ...axes,
+    });
+
+    const data = buildTraceData(store.exportSessions(), store.listVersionRegistry(), GENERATED_AT);
+    expect(data.summary.signalTypeCounts).toMatchObject({
+      clarification_round: 1,
+      session_resumed: 1,
+      slot_confirmed: 1,
+    });
+  });
+
   it('빈 저장소 — 세션 0건, 평균 왕복 null', () => {
     store = SessionStore.open(':memory:');
     const data = buildTraceData(store.exportSessions(), store.listVersionRegistry(), GENERATED_AT);

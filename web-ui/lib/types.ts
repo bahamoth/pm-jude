@@ -23,11 +23,16 @@ export interface IntakeResult {
   ack: string;
 }
 
-export interface RoundResult {
+/** 202 접수 응답 — 처리 결과는 SSE·세션 조회로 온다 (#31). */
+export interface Accepted {
+  sessionId: string;
+  accepted: boolean;
+}
+
+export interface ReplyOutcome {
   sessionId: string;
   status: SessionStatus;
   terminalState: string | null;
-  replies: Reply[];
 }
 
 export interface Utterance {
@@ -50,6 +55,8 @@ export interface SlotView {
 export interface SessionDetail {
   latestQuestions: ReplyQuestion[] | null;
   roundBudget: number;
+  /** 서버가 이 세션의 LLM 라운드를 돌리는 중인지 — 대기 화면과 SSE 수명의 근거 */
+  processing: boolean;
   session: {
     id: string;
     status: SessionStatus;
@@ -71,15 +78,17 @@ export interface SessionSummary {
   roundCount: number;
   requestText: string;
   updatedAt: string;
+  openIssueCount: number;
 }
 
-/** SSE status 이벤트 페이로드 — 라운드 완료(연결 종료 신호)를 나른다. */
+/** SSE status 이벤트 페이로드 — processing=false가 라운드 완료(연결 종료) 신호다. */
 export interface StatusEvent {
   sessionId: string;
   status: SessionStatus;
   terminalState: string | null;
   roundCount: number;
   roundBudget: number;
+  processing: boolean;
 }
 
 export class ApiError extends Error {
