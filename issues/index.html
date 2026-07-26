@@ -548,7 +548,7 @@
   {
     "id": 16,
     "title": "웹 우선 검증 전환 — 코어 러너 승격 + 웹 어댑터 (Slack·외부 API 후순위)",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
@@ -564,6 +564,11 @@
         "author": "claude",
         "date": "2026-07-26",
         "body": "코드 완료 — PR #19 (rebase 머지 대기). 구성: ① ADR-0007(전달 순서 변경, 트레이드오프 명시) ② 코어 러너 승격 — `IntakeRunner<A>` + `ChannelPort<A>`(SlackPort와 대칭, 질문 게시에 구조화 페이로드 동봉) ③ slack-runner는 이벤트·주소 매핑만 남긴 얇은 어댑터로 봉인 ④ CLI(`pnpm intake`)도 코어 위임 — 게시 질문 전사 영속(원칙 7) ⑤ 웹 어댑터 `pnpm web` — Node 내장 http, 간이 식별(이름·언어), 질문별 「모르겠다」 1클릭(US-5), 접수 진행 표시(US-2), localStorage 재개(US-8), 루프백 바인딩 ⑥ phase0-plan 갈래 A 개정. 검증: 92 테스트(코어 시임 8건 이관 재구성 + 웹 HTTP smoke 2건), 2축 코드 리뷰 반영. **이연**: 웹 접수 확인의 진짜 즉시성(단일 응답 버퍼링 — 스트리밍/2단계 후속), formatQuestions/formatDocument mrkdwn의 어댑터 이동(Slack 복귀 시), 테스트 픽스처 공용화, 재개 시 「모르겠다」 버튼 미복원, 「간이 식별」 글로서리 등재."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-26",
+        "body": "PR #19 rebase 머지로 종결 (운영자 승인). 웹 표면의 UX·UI 품질은 운영자 판정으로 재작업 지시 — #22(Next.js + shadcn/ui, 마법사형 명확화, 대기 UX)로 이관."
       }
     ]
   },
@@ -664,6 +669,22 @@
         "body": "PR #17 rebase 머지로 종결. concurrency 직렬화 적용, 실패 런 30194970903 재실행 → success. v0.3.0 릴리스 상태는 수리 불필요(정상)였음."
       }
     ]
+  },
+  {
+    "id": 22,
+    "title": "웹 프론트 재작업 — Next.js + shadcn/ui, 마법사형 명확화 UX, 대기 상태 UX",
+    "state": "open",
+    "labels": [
+      "ready-for-agent"
+    ],
+    "type": "task",
+    "assignee": "claude",
+    "parent": null,
+    "blockedBy": [],
+    "created": "2026-07-26",
+    "updated": "2026-07-26",
+    "body": "운영자 지시 (2026-07-26): #16 웹 표면의 UX·UI 품질 미달 판정에 따른 재작업.\n\n## 요구\n1. 시장 검증 프레임워크(Next.js)로 프론트 구축\n2. shadcn/ui(또는 그 기반의 검증된 확장) 디자인 시스템 적용\n3. 명확화 질답을 객관식 중심 마법사 동선으로 — 질문별 예시 선택지·「모르겠다 / 개발팀이 정할 문제」 경로는 이미 구조화 페이로드로 제공됨(#16), 자유 입력은 보조 경로\n4. LLM 대기 구간의 UX 처리 — 진행 표시, 입력 비활성화, 장기 대기(최대 2분) 안내\n\n## 구조 결정 (운영자 확인, 2026-07-26)\n- pnpm workspace 멤버로 `web-ui/` 추가 — 백엔드 단일 패키지 구조·tsconfig·CI 규칙 불변\n- 기존 http 어댑터는 API 서버로 유지, Next dev가 `/api` 프록시\n- #1의 「pnpm workspace 없음」 결정은 이 지시로 부분 개정 — ADR로 기록\n- PR #19 선머지 후 새 브랜치·새 PR (규칙 2)",
+    "comments": []
   }
 ]
 </script>
