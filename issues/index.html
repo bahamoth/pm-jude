@@ -732,7 +732,7 @@
     "blockedBy": [],
     "created": "2026-07-26",
     "updated": "2026-07-26",
-    "body": "## Destination\n\ndocs/ux/requester-journey.md의 vNext 확정 — 검토(스트레스 테스트·프로토타입·리서치) 반영과 오픈 질문 5건(Q1~Q5)의 결정이 문서에 흡수되고 운영자 승인을 받은 상태. 프론트 스택 재검토(Next 유지/교체, AI 코딩 적합성 기준) 결정을 포함한다. 구현(갭 G-1~G-8 실행)은 이 맵의 범위 밖 — 설계 승인 후 별도 지시로 이어진다.\n\n## Notes\n\n- 정본: ARCHITECTURE.md §상태 머신, docs/prd/functional-requirements.md(F1~F8), CONTEXT.md 용어. 설계 대상: docs/ux/requester-journey.md (#23).\n- 스킬: 그릴링 티켓 = /grilling·/domain-modeling, 프로토타입 티켓 = /prototype, 리서치 티켓 = /research.\n- 운영자 상수: 검증된 디자인 시스템(shadcn 계열)·객관식 마법사·대기 UX 상시. 단 프레임워크 자체는 이 맵에서 재검토(#25) — 판단 기준은 AI 코딩 적합성 (운영자, 2026-07-26).\n- 보드 쓰기는 main 직행(워크플로우 규칙 6). HITL 티켓은 운영자와의 실문답으로만 해소 — 에이전트가 운영자 답을 대신하지 않는다.\n\n## Decisions so far\n\n- [리서치 — 유사 제품의 인테이크·대기·재개 UX 관례 조사](#27) — 관례 5축 정리 + 설계 수정 발견 M-1~M-9(내 차례 신호·「언제」 명시·localStorage 취약·카운트형 진행·재개 트리거). 산출물 docs/research/intake-ux-conventions.md(research/intake-ux-conventions)\n\n## Not yet specified\n\n- 스택 교체로 결정될 경우: ADR-0008 개정(ADR-0009)·PR #21 처리·web-ui 마이그레이션 경로\n- Slack 복귀 시 채널 등가(P-U6)의 검증 방법 — 설계 확정 후 구체화\n- 다국어 chrome(G-8)의 설계 상세 — 언어 결정 시점·번역 자원\n\n## Out of scope\n\n- 게이트·역보고(Phase 1) UX 상세 설계 — 자리만 확보(운영자 결정 2026-07-26), 게이트 구현 지시 때 별도 맵\n- 갭 G-1~G-8의 구현 실행 — 설계 vNext 승인 후 별도 지시\n- Slack 어댑터 운영 — #8 후순위 유지(ADR-0007)",
+    "body": "## Destination\n\ndocs/ux/requester-journey.md의 vNext 확정 — 검토(스트레스 테스트·프로토타입·리서치) 반영과 오픈 질문 5건(Q1~Q5)의 결정이 문서에 흡수되고 운영자 승인을 받은 상태. 프론트 스택 재검토(Next 유지/교체, AI 코딩 적합성 기준) 결정을 포함한다. 구현(갭 G-1~G-8 실행)은 이 맵의 범위 밖 — 설계 승인 후 별도 지시로 이어진다.\n\n## Notes\n\n- 정본: ARCHITECTURE.md §상태 머신, docs/prd/functional-requirements.md(F1~F8), CONTEXT.md 용어. 설계 대상: docs/ux/requester-journey.md (#23).\n- 스킬: 그릴링 티켓 = /grilling·/domain-modeling, 프로토타입 티켓 = /prototype, 리서치 티켓 = /research.\n- 운영자 상수: 검증된 디자인 시스템(shadcn 계열)·객관식 마법사·대기 UX 상시. 단 프레임워크 자체는 이 맵에서 재검토(#25) — 판단 기준은 AI 코딩 적합성 (운영자, 2026-07-26).\n- 보드 쓰기는 main 직행(워크플로우 규칙 6). HITL 티켓은 운영자와의 실문답으로만 해소 — 에이전트가 운영자 답을 대신하지 않는다.\n\n## Decisions so far\n\n- [리서치 — 유사 제품의 인테이크·대기·재개 UX 관례 조사](#27) — 관례 5축 정리 + 설계 수정 발견 M-1~M-9(내 차례 신호·「언제」 명시·localStorage 취약·카운트형 진행·재개 트리거). 산출물 docs/research/intake-ux-conventions.md(research/intake-ux-conventions)\n- [리서치 — AI 코딩에 적합한 프론트 스택 조사](#26) — 권고: Next.js 16 유지 + 클라이언트 SPA 사용 계약 명문화(ADR-0008 추인), 차선 Vite(전환 비용 앱 셸 수준). 산출물 docs/research/frontend-stack-ai-coding.md(research/frontend-stack)\n\n## Not yet specified\n\n- 스택 교체로 결정될 경우: ADR-0008 개정(ADR-0009)·PR #21 처리·web-ui 마이그레이션 경로\n- Slack 복귀 시 채널 등가(P-U6)의 검증 방법 — 설계 확정 후 구체화\n- 다국어 chrome(G-8)의 설계 상세 — 언어 결정 시점·번역 자원\n\n## Out of scope\n\n- 게이트·역보고(Phase 1) UX 상세 설계 — 자리만 확보(운영자 결정 2026-07-26), 게이트 구현 지시 때 별도 맵\n- 갭 G-1~G-8의 구현 실행 — 설계 vNext 승인 후 별도 지시\n- Slack 어댑터 운영 — #8 후순위 유지(ADR-0007)",
     "comments": []
   },
   {
@@ -754,7 +754,7 @@
   {
     "id": 26,
     "title": "리서치 — AI 코딩에 적합한 프론트 스택 조사",
-    "state": "open",
+    "state": "closed",
     "labels": [],
     "type": "research",
     "assignee": "claude",
@@ -763,7 +763,13 @@
     "created": "2026-07-26",
     "updated": "2026-07-26",
     "body": "## Question\n\nAI 에이전트가 코드를 주로 작성하는 개발 초기 로컬 PoC(요청자 인테이크 웹, API 프록시 클라이언트, shadcn 계열 디자인 시스템 전제)에 적합한 프론트 스택은 무엇인가. 후보: Next.js(App Router, 현행) / Vite + React SPA / TanStack Start / Remix·React Router 7 / SvelteKit 등. 비교 축: AI 코딩 적합성(관례의 예측 가능성·학습 데이터 풍부함·오류 메시지 품질), 타입 안정성, 테스트 용이성, shadcn/ui 호환, 빌드·개발 루프 속도, 이 프로젝트의 실요구(SSR 불필요·로컬 단일 사용자·Phase 1 확장 여지)와의 정합. 산출: 비교표 + 권고안 + 근거 출처.",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-26",
+        "body": "해소 — 산출물 docs/research/frontend-stack-ai-coding.md (브랜치 research/frontend-stack, 커밋 5349018). **권고: 현행 Next.js 16 App Router 유지 + 「전면 클라이언트 SPA + /api 프록시」 사용 계약 명문화(ADR-0008 추인)**. 차선: Vite + React SPA — 전환 비용이 앱 셸 수준(components/·lib/는 Next import 0건, 결합은 layout.tsx·next.config.ts 2개 파일)이라 마찰이 실측되는 시점에 전환해도 손실 없음. 근거: ① 현행 사용 방식이 Next의 AI 코딩 위험 축(암묵 캐싱·서버/클라이언트 경계·15→16 breaking)을 대부분 비활성화 ② shadcn/ui 공식 템플릿은 next·vite·start·react-router·astro뿐 — SvelteKit은 비공식 포트라 디자인 시스템 전제에서 탈락 ③ TanStack Start는 RC(버전 핀 권고)라 AI 주도 PoC와 상성 나쁨 ④ React Router v8은 릴리스 문화(연 1회 major)상 훈련 데이터 괴리가 가장 작으나 라우트 1개 규모엔 과잉 — Phase 1 다중 라우트 시점의 1순위 재평가 대상 ⑤ 지금 교체는 당일 accepted된 ADR-0008 번복이라 순비용. 부속 조치: components.json rsc:false 정정 + web-ui 문서에 서버 기능 금지 계약 명문화(에이전트의 서버 패턴 드리프트가 유일한 실질 위험). AI 적합성 축은 대리 지표 기반 판단임을 문서에 명시. → #25(프론트 스택 확정, HITL) 블록 해제 — 결정은 운영자 몫."
+      }
+    ]
   },
   {
     "id": 27,
