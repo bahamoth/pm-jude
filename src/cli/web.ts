@@ -38,6 +38,17 @@ const server = createWebServer({
 });
 
 const port = Number(process.env.PMJUDE_WEB_PORT ?? 8787);
+server.on('error', (error: NodeJS.ErrnoException) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(
+      `포트 ${String(port)}가 이미 사용 중이다 — 이전 pnpm web이 떠 있는지 확인:\n` +
+        `  lsof -ti:${String(port)} | xargs kill\n` +
+        `다른 포트로 띄우려면: PMJUDE_WEB_PORT=8788 pnpm dev`,
+    );
+    process.exit(1);
+  }
+  throw error;
+});
 server.listen(port, '127.0.0.1', () => {
   console.error(`pm-jude 웹 러너 가동 — http://127.0.0.1:${String(port)} · 세션 저장소: ${dbPath}`);
 });
