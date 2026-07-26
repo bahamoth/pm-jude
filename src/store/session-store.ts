@@ -170,6 +170,27 @@ export class SessionStore {
       .all();
   }
 
+  /** 버전 레지스트리 3종 전체 — 트레이스 뷰어 등에서 id → name@semver 표기로 해석할 때 쓴다. */
+  listVersionRegistry(): Record<
+    'prompt' | 'threshold' | 'slotSchema',
+    Array<{ id: string; name: string; semver: string; regressionPassed: boolean }>
+  > {
+    const strip = (
+      rows: Array<{ id: string; name: string; semver: string; regressionPassed: boolean }>,
+    ) =>
+      rows.map(({ id, name, semver, regressionPassed }) => ({
+        id,
+        name,
+        semver,
+        regressionPassed,
+      }));
+    return {
+      prompt: strip(this.db.select().from(schema.promptVersion).all()),
+      threshold: strip(this.db.select().from(schema.thresholdVersion).all()),
+      slotSchema: strip(this.db.select().from(schema.slotSchemaVersion).all()),
+    };
+  }
+
   /** 버전 레지스트리 3종에서 name+semver로 id를 찾는다. 미등록이면 null. */
   findVersionId(
     kind: 'prompt' | 'threshold' | 'slot_schema',

@@ -17,3 +17,7 @@ Default five-role vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `
 ### Domain docs
 
 Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+### Session trace
+
+`pnpm trace` reads the session store and regenerates `data/trace.html` — a self-contained viewer (JSON data island convention) over sessions, transcripts, slot states, signals, and version axes. Operator standing directive: tracking visualization is a permanent companion concern — any change that adds or reshapes session-store writes must keep `src/trace/` rendering them (extend `buildTraceData` + tests in `tests/trace.test.ts`).
