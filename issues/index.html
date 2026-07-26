@@ -732,7 +732,7 @@
     "blockedBy": [],
     "created": "2026-07-26",
     "updated": "2026-07-26",
-    "body": "## Destination\n\ndocs/ux/requester-journey.md의 vNext 확정 — 검토(스트레스 테스트·프로토타입·리서치) 반영과 오픈 질문 5건(Q1~Q5)의 결정이 문서에 흡수되고 운영자 승인을 받은 상태. 프론트 스택 재검토(Next 유지/교체, AI 코딩 적합성 기준) 결정을 포함한다. 구현(갭 G-1~G-8 실행)은 이 맵의 범위 밖 — 설계 승인 후 별도 지시로 이어진다.\n\n## Notes\n\n- 정본: ARCHITECTURE.md §상태 머신, docs/prd/functional-requirements.md(F1~F8), CONTEXT.md 용어. 설계 대상: docs/ux/requester-journey.md (#23).\n- 스킬: 그릴링 티켓 = /grilling·/domain-modeling, 프로토타입 티켓 = /prototype, 리서치 티켓 = /research.\n- 운영자 상수: 검증된 디자인 시스템(shadcn 계열)·객관식 마법사·대기 UX 상시. 단 프레임워크 자체는 이 맵에서 재검토(#25) — 판단 기준은 AI 코딩 적합성 (운영자, 2026-07-26).\n- 보드 쓰기는 main 직행(워크플로우 규칙 6). HITL 티켓은 운영자와의 실문답으로만 해소 — 에이전트가 운영자 답을 대신하지 않는다.\n\n## Decisions so far\n\n(없음)\n\n## Not yet specified\n\n- 스택 교체로 결정될 경우: ADR-0008 개정(ADR-0009)·PR #21 처리·web-ui 마이그레이션 경로\n- Slack 복귀 시 채널 등가(P-U6)의 검증 방법 — 설계 확정 후 구체화\n- 다국어 chrome(G-8)의 설계 상세 — 언어 결정 시점·번역 자원\n\n## Out of scope\n\n- 게이트·역보고(Phase 1) UX 상세 설계 — 자리만 확보(운영자 결정 2026-07-26), 게이트 구현 지시 때 별도 맵\n- 갭 G-1~G-8의 구현 실행 — 설계 vNext 승인 후 별도 지시\n- Slack 어댑터 운영 — #8 후순위 유지(ADR-0007)",
+    "body": "## Destination\n\ndocs/ux/requester-journey.md의 vNext 확정 — 검토(스트레스 테스트·프로토타입·리서치) 반영과 오픈 질문 5건(Q1~Q5)의 결정이 문서에 흡수되고 운영자 승인을 받은 상태. 프론트 스택 재검토(Next 유지/교체, AI 코딩 적합성 기준) 결정을 포함한다. 구현(갭 G-1~G-8 실행)은 이 맵의 범위 밖 — 설계 승인 후 별도 지시로 이어진다.\n\n## Notes\n\n- 정본: ARCHITECTURE.md §상태 머신, docs/prd/functional-requirements.md(F1~F8), CONTEXT.md 용어. 설계 대상: docs/ux/requester-journey.md (#23).\n- 스킬: 그릴링 티켓 = /grilling·/domain-modeling, 프로토타입 티켓 = /prototype, 리서치 티켓 = /research.\n- 운영자 상수: 검증된 디자인 시스템(shadcn 계열)·객관식 마법사·대기 UX 상시. 단 프레임워크 자체는 이 맵에서 재검토(#25) — 판단 기준은 AI 코딩 적합성 (운영자, 2026-07-26).\n- 보드 쓰기는 main 직행(워크플로우 규칙 6). HITL 티켓은 운영자와의 실문답으로만 해소 — 에이전트가 운영자 답을 대신하지 않는다.\n\n## Decisions so far\n\n- [리서치 — 유사 제품의 인테이크·대기·재개 UX 관례 조사](#27) — 관례 5축 정리 + 설계 수정 발견 M-1~M-9(내 차례 신호·「언제」 명시·localStorage 취약·카운트형 진행·재개 트리거). 산출물 docs/research/intake-ux-conventions.md(research/intake-ux-conventions)\n\n## Not yet specified\n\n- 스택 교체로 결정될 경우: ADR-0008 개정(ADR-0009)·PR #21 처리·web-ui 마이그레이션 경로\n- Slack 복귀 시 채널 등가(P-U6)의 검증 방법 — 설계 확정 후 구체화\n- 다국어 chrome(G-8)의 설계 상세 — 언어 결정 시점·번역 자원\n\n## Out of scope\n\n- 게이트·역보고(Phase 1) UX 상세 설계 — 자리만 확보(운영자 결정 2026-07-26), 게이트 구현 지시 때 별도 맵\n- 갭 G-1~G-8의 구현 실행 — 설계 vNext 승인 후 별도 지시\n- Slack 어댑터 운영 — #8 후순위 유지(ADR-0007)",
     "comments": []
   },
   {
@@ -768,7 +768,7 @@
   {
     "id": 27,
     "title": "리서치 — 유사 제품의 인테이크·대기·재개 UX 관례 조사",
-    "state": "open",
+    "state": "closed",
     "labels": [],
     "type": "research",
     "assignee": "claude",
@@ -777,7 +777,13 @@
     "created": "2026-07-26",
     "updated": "2026-07-26",
     "body": "## Question\n\n단계형 인테이크·트리아지를 가진 검증된 제품들(Typeform류 폼 위저드, 서비스데스크 요청 포털(Jira SM·Zendesk), Linear/GitHub 이슈 트리아지, Intercom류 대화형 봇)은 다음을 어떻게 다루는가: ① 장시간 비동기 처리의 대기·이탈·복귀 UX ② 다단계 진행의 위치 표시(스테퍼·진행률) ③ 중단 후 재개(딥링크·목록·알림) ④ 답 못하는 문항의 처리(건너뛰기·나중에) ⑤ 제출 후 다음 단계 예고. 산출: 관례 요약 + requester-journey.md 각 화면 설계에의 시사점.",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-26",
+        "body": "해소 — 산출물 docs/research/intake-ux-conventions.md (브랜치 research/intake-ux-conventions, 커밋 e237e05). 관례 5축: ① 대기·복귀 — 이탈은 정상 경로, 예상 응답 시간 선제시(Intercom)·복귀는 알림·딥링크(Zendesk/JSM·GitHub 자동 구독) ② 위치 표시 — 여정 층위(단계 목록+현재 강조)와 폼 층위(카운트형 「Question 3 of 7」)를 다른 장치로 분리, 분기 폼 비율바는 요동(Typeform 자인) ③ 재개 — 브라우저 저장은 취약 경로로 문서화(Typeform 15일·같은 기기), 내구 경로는 요청 목록+알림 딥링크+보존 기간 문장 고지 3겹 ④ 무답 — 「모르겠다」는 선택지(GOV.UK), 요약에 「Not answered」 노출, 트리아지 「나중에」는 snooze+새 활동 자동 복귀(Linear) ⑤ 다음 예고 — 참조 번호·「what happens next and when」·연락처(GOV.UK confirmation 필수 요소), 상태명이 「누구 차례인지」를 말함. **설계 수정 발견 M-1~M-9**: 내 차례 신호(M-1), localStorage 취약 대비 딥링크 안내(M-2), 접수·대기·예고의 「언제」 명시(M-3·M-6·M-7), 비율바→카운트형(M-5), 보존 기간 병기(M-4), 재개 트리거=요청자 입력 자동 재개 또는 Zendesk follow-up 모델(M-8, Q2 입력), SLA는 내부 지표·요청자에겐 기대 문구(M-9). P-U1~P-U6은 전부 1차 출처 관례로 뒷받침됨. → #28 스트레스 테스트와 #33 프로토타입의 입력."
+      }
+    ]
   },
   {
     "id": 28,
