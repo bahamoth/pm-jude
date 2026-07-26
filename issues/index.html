@@ -673,7 +673,7 @@
   {
     "id": 22,
     "title": "웹 프론트 재작업 — Next.js + shadcn/ui, 마법사형 명확화 UX, 대기 상태 UX",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
@@ -694,13 +694,18 @@
         "author": "jude",
         "date": "2026-07-26",
         "body": "운영자 판정 — 상태 머신 전체를 관통하는 요구사항 정제 플로우의 UX가 설계돼 있지 않은 것이 근본 문제. 화면 단위 구현 이전에 전체 UX 설계가 선행돼야 한다 → #23 등록."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-26",
+        "body": "PR #21 rebase 머지로 종결 (운영자 승인). Next 16 + shadcn/ui 마법사 UI·대기 UX·세션 재개·가짜 백엔드 포함. 스택은 #25에서 Next 유지로 확정(사용 계약 명문화 동승). 후속 UX 개선은 맵 #24(설계 vNext) → 갭 구현 지시로 이어진다."
       }
     ]
   },
   {
     "id": 23,
     "title": "요청자 여정 UX 설계 — 세션 상태 머신 전 구간의 화면·상호작용 대응",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
@@ -716,6 +721,11 @@
         "author": "claude",
         "date": "2026-07-26",
         "body": "설계 초안 산출 — docs/ux/requester-journey.md (PR #21에 docs 커밋으로 동승). 구성: UX 원칙 6종(침묵 없음·상시 재개·막힘 없음·위치 가시성·다음 예고·채널 등가), 5단계 여정 스테퍼(접수→내용 정리→문서 확정→개발팀 검토→진행·완료), 정본 상태↔화면 매핑 표, 화면별 설계 7종(요청 목록·접수 직후·마법사 라운드 맥락·판정 대기·문서+슬롯 단위 확인·보류 재개·Phase 1 자리), 상호작용 계약 7항. **현행 대비 갭 8건**: G-1 접수 즉시성(버퍼링 위반), G-2 maxRounds·남은 슬롯 미노출, G-3 슬롯 단위 요청자 확인 화면 부재, G-4 보류 재개 전이 미구현(정본 전이 존재·코어는 무시), G-5 세션 목록·딥링크, G-6 전체 스테퍼, G-7 승격 인과 표시, G-8 chrome 다국어. **운영자 결정 대기 Q1~Q5**: 세션 목록 경계 / 보류 재개 Phase 0 포함 / 접수 즉시성 구현 방식(2단계 API vs SSE) / Phase 1 자리 노출 수위 / 슬롯 확인 되물음의 상한 산입. 승인 전 신규 화면 구현 없음."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-26",
+        "body": "설계 초안(docs/ux/requester-journey.md)이 PR #21 머지로 정본 위치에 착지 — 이 티켓의 산출물 범위 완료로 종결. 설계의 검토·개선·vNext 확정은 wayfinder 맵 #24가 승계(#28 스트레스 테스트, #33 프로토타입, #34 vNext 반영·승인)."
       }
     ]
   },
@@ -732,13 +742,13 @@
     "blockedBy": [],
     "created": "2026-07-26",
     "updated": "2026-07-26",
-    "body": "## Destination\n\ndocs/ux/requester-journey.md의 vNext 확정 — 검토(스트레스 테스트·프로토타입·리서치) 반영과 오픈 질문 5건(Q1~Q5)의 결정이 문서에 흡수되고 운영자 승인을 받은 상태. 프론트 스택 재검토(Next 유지/교체, AI 코딩 적합성 기준) 결정을 포함한다. 구현(갭 G-1~G-8 실행)은 이 맵의 범위 밖 — 설계 승인 후 별도 지시로 이어진다.\n\n## Notes\n\n- 정본: ARCHITECTURE.md §상태 머신, docs/prd/functional-requirements.md(F1~F8), CONTEXT.md 용어. 설계 대상: docs/ux/requester-journey.md (#23).\n- 스킬: 그릴링 티켓 = /grilling·/domain-modeling, 프로토타입 티켓 = /prototype, 리서치 티켓 = /research.\n- 운영자 상수: 검증된 디자인 시스템(shadcn 계열)·객관식 마법사·대기 UX 상시. 단 프레임워크 자체는 이 맵에서 재검토(#25) — 판단 기준은 AI 코딩 적합성 (운영자, 2026-07-26).\n- 보드 쓰기는 main 직행(워크플로우 규칙 6). HITL 티켓은 운영자와의 실문답으로만 해소 — 에이전트가 운영자 답을 대신하지 않는다.\n\n## Decisions so far\n\n- [리서치 — 유사 제품의 인테이크·대기·재개 UX 관례 조사](#27) — 관례 5축 정리 + 설계 수정 발견 M-1~M-9(내 차례 신호·「언제」 명시·localStorage 취약·카운트형 진행·재개 트리거). 산출물 docs/research/intake-ux-conventions.md(research/intake-ux-conventions)\n- [리서치 — AI 코딩에 적합한 프론트 스택 조사](#26) — 권고: Next.js 16 유지 + 클라이언트 SPA 사용 계약 명문화(ADR-0008 추인), 차선 Vite(전환 비용 앱 셸 수준). 산출물 docs/research/frontend-stack-ai-coding.md(research/frontend-stack)\n\n## Not yet specified\n\n- 스택 교체로 결정될 경우: ADR-0008 개정(ADR-0009)·PR #21 처리·web-ui 마이그레이션 경로\n- Slack 복귀 시 채널 등가(P-U6)의 검증 방법 — 설계 확정 후 구체화\n- 다국어 chrome(G-8)의 설계 상세 — 언어 결정 시점·번역 자원\n\n## Out of scope\n\n- 게이트·역보고(Phase 1) UX 상세 설계 — 자리만 확보(운영자 결정 2026-07-26), 게이트 구현 지시 때 별도 맵\n- 갭 G-1~G-8의 구현 실행 — 설계 vNext 승인 후 별도 지시\n- Slack 어댑터 운영 — #8 후순위 유지(ADR-0007)",
+    "body": "## Destination\n\ndocs/ux/requester-journey.md의 vNext 확정 — 검토(스트레스 테스트·프로토타입·리서치) 반영과 오픈 질문 5건(Q1~Q5)의 결정이 문서에 흡수되고 운영자 승인을 받은 상태. 프론트 스택 재검토(Next 유지/교체, AI 코딩 적합성 기준) 결정을 포함한다. 구현(갭 G-1~G-8 실행)은 이 맵의 범위 밖 — 설계 승인 후 별도 지시로 이어진다.\n\n## Notes\n\n- 정본: ARCHITECTURE.md §상태 머신, docs/prd/functional-requirements.md(F1~F8), CONTEXT.md 용어. 설계 대상: docs/ux/requester-journey.md (#23).\n- 스킬: 그릴링 티켓 = /grilling·/domain-modeling, 프로토타입 티켓 = /prototype, 리서치 티켓 = /research.\n- 운영자 상수: 검증된 디자인 시스템(shadcn 계열)·객관식 마법사·대기 UX 상시. 단 프레임워크 자체는 이 맵에서 재검토(#25) — 판단 기준은 AI 코딩 적합성 (운영자, 2026-07-26).\n- 보드 쓰기는 main 직행(워크플로우 규칙 6). HITL 티켓은 운영자와의 실문답으로만 해소 — 에이전트가 운영자 답을 대신하지 않는다.\n\n## Decisions so far\n\n- [리서치 — 유사 제품의 인테이크·대기·재개 UX 관례 조사](#27) — 관례 5축 정리 + 설계 수정 발견 M-1~M-9(내 차례 신호·「언제」 명시·localStorage 취약·카운트형 진행·재개 트리거). 산출물 docs/research/intake-ux-conventions.md(research/intake-ux-conventions)\n- [리서치 — AI 코딩에 적합한 프론트 스택 조사](#26) — 권고: Next.js 16 유지 + 클라이언트 SPA 사용 계약 명문화(ADR-0008 추인), 차선 Vite(전환 비용 앱 셸 수준). 산출물 docs/research/frontend-stack-ai-coding.md(research/frontend-stack)\n- [프론트 스택 확정 — Next.js 유지](#25) — 운영자 결정: Next 16 유지 + 클라이언트 SPA 사용 계약 명문화(rsc:false, 서버 기능 금지 — ADR-0008 추인). PR #21 머지 완료. Vite 전환은 마찰 실측 시 재론\n\n## Not yet specified\n\n- Slack 복귀 시 채널 등가(P-U6)의 검증 방법 — 설계 확정 후 구체화\n- 다국어 chrome(G-8)의 설계 상세 — 언어 결정 시점·번역 자원\n\n## Out of scope\n\n- 게이트·역보고(Phase 1) UX 상세 설계 — 자리만 확보(운영자 결정 2026-07-26), 게이트 구현 지시 때 별도 맵\n- 갭 G-1~G-8의 구현 실행 — 설계 vNext 승인 후 별도 지시\n- Slack 어댑터 운영 — #8 후순위 유지(ADR-0007)",
     "comments": []
   },
   {
     "id": 25,
     "title": "프론트 스택 확정 — Next.js 유지 vs 교체 (AI 코딩 적합성 기준)",
-    "state": "open",
+    "state": "closed",
     "labels": [],
     "type": "grilling",
     "assignee": "claude",
@@ -749,7 +759,13 @@
     "created": "2026-07-26",
     "updated": "2026-07-26",
     "body": "## Question\n\n웹 프론트 스택으로 Next.js 16을 유지하는가, 교체하는가. 판단 기준은 운영자가 지정한 「AI 코딩에 적합한 프론트 스택」 — 개발 초기라 전환 비용이 낮은 지금 결정한다. #26 리서치 결과(후보 비교·권고)를 놓고 운영자와 결정하며, 결정에 따라 ADR-0008 개정(append-only — ADR-0009)·PR #21 처리 방향·web-ui 마이그레이션 여부까지 정한다.",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-26",
+        "body": "해소 (운영자 결정) — **Next.js 16 유지**. 리서치 #26 권고 수용: 「전면 클라이언트 SPA + /api 프록시」 사용 계약을 web-ui/README.md에 명문화하고 components.json rsc:false 정정(커밋 0dcb4cb, PR #21에 동승). ADR-0008은 개정 없이 추인 — 이 보드 기록이 추인의 정본. 계약 위반(서버 기능 도입)은 ADR 개정을 동반해야 한다. 차선(Vite 전환)은 마찰 실측 시 재론 — 전환 비용은 앱 셸 수준으로 유지된다. PR #21은 운영자 승인으로 rebase 머지 완료."
+      }
+    ]
   },
   {
     "id": 26,
