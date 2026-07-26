@@ -1,0 +1,4 @@
+packages:
+  - web-ui
+
+# better-sqlite3 네이티브 빌드 허용은 package.json pnpm.onlyBuiltDependencies가 계속 담당한다.
