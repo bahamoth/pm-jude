@@ -15,18 +15,15 @@ Next.js(App Router) + shadcn/ui 프론트엔드 ([ADR-0008](../docs/adr/0008-fro
 
 ## 실행
 
-두 프로세스를 리포지토리 루트에서 띄운다:
+리포지토리 루트에서 한 번에:
 
 ```bash
-pnpm web       # API 서버 (기본 http://127.0.0.1:8787) — ANTHROPIC_API_KEY 필요
-pnpm web:ui    # Next dev (http://localhost:3000) — /api를 API 서버로 프록시
+pnpm dev                          # API 서버 + Next dev 동시 기동 — ANTHROPIC_API_KEY 필요
+PMJUDE_FAKE_BACKEND=1 pnpm dev    # LLM 자격 증명 없이 (결정론 시나리오, 별도 DB)
 ```
 
-LLM 자격 증명 없이 UI만 확인하려면:
-
-```bash
-PMJUDE_FAKE_BACKEND=1 pnpm web   # 결정론적 시나리오, 별도 DB(data/pm-jude-fake.db)
-```
+http://localhost:3000 이 UI, http://127.0.0.1:8787 이 API다. 한쪽이 죽으면 같이 내려간다.
+따로 띄우려면 `pnpm web`(API) / `pnpm web:ui`(UI).
 
 API 서버 주소가 다르면 `PMJUDE_API_URL`로 프록시 대상을 바꾼다 (`next.config.ts`).
 
