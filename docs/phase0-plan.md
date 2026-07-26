@@ -1,10 +1,10 @@
 # Phase 0 실행 계획 — PoC + 소급 베이스라인
 
-> 근거: [PRD v1.4](../PRD.md) §9 Phase 0, F14. 기술 결정: [ADR-0005](adr/0005-phase0-agent-sdk-typescript.md)(Agent SDK + TypeScript), [ADR-0006](adr/0006-phase0-sqlite.md)(SQLite). 개별 실행 단위는 [이슈 보드](../issues/index.html)의 티켓 #1~#11.
+> 근거: [PRD v1.4](../PRD.md) §9 Phase 0, F14. 기술 결정: [ADR-0005](adr/0005-phase0-agent-sdk-typescript.md)(Agent SDK + TypeScript), [ADR-0006](adr/0006-phase0-sqlite.md)(SQLite). 개별 실행 단위는 [이슈 보드](../issues/index.html)의 티켓 #1~#11, 웹 우선 전환은 #16.
 
 ## 목표 — 서로 독립적인 두 갈래
 
-**갈래 A — Slack PoC**: 명확화·문서 생성 프롬프트 품질과 채택 가설을 스테이크홀더의 서식지(Slack 스레드)에서 동시 검증. 하네스는 Claude Agent SDK, Linear 연동은 `issueCreate` 1개 또는 수동.
+**갈래 A — 파이프라인 PoC (웹 우선, [ADR-0007](adr/0007-web-first-verification.md))**: 인테이크 → 명확화 루프 → 2층 완결성 판정 → requirements 문서 생성 파이프라인을 채널 비의존 코어 러너 + 로컬 웹 표면(`pnpm web`)에서 먼저 완성·검증. 하네스는 Claude Agent SDK. Slack 어댑터 운영(#8)과 외부 API 사용(Slack·Linear)은 후순위 — 채택 가설(완주율·재사용률)은 스테이크홀더의 서식지(Slack) 복귀 후 재검증한다.
 
 **갈래 B — 소급 아카이브 분석**: 최근 6~12개월 Linear 아카이브에서 재질문·reopen·스펙 편집을 추출해 ① 재질문 빈도 베이스라인(§10 감소율 지표의 분모), ② 재질문 유형 분류표(F2e 필수 슬롯 목록의 근거)를 산출.
 
@@ -47,7 +47,7 @@ graph LR
 | 5 | 명확화 프롬프트 v0 | 표적 질문 생성 — 해석 다중 전개, 「모르겠다」 경로 포함 | A |
 | 6 | 완결성 판정 프롬프트 v0 + 룰 층 초안 | 슬롯 3상태 판정, 금칙 모호어 사전 초안 | A |
 | 7 | requirements 생성 프롬프트 v0 | EARS·Given-When-Then, 오픈이슈 필드 | A |
-| 8 | Slack PoC 러너 | Bolt 스레드 인테이크 → 명확화 → 문서 전달 | A |
+| 8 | Slack PoC 러너 — 후순위 (ADR-0007) | Bolt 스레드 인테이크 → 명확화 → 문서 전달. 코어 러너의 얇은 어댑터로 유지, 운영은 웹 검증 뒤로 | A |
 | 9 | 소급 아카이브 분석 | 재질문 유형 분류표 + 베이스라인 수치 | B |
 | 10 | 필수 슬롯 초안 (F2e) | 분류표에서 도출, 슬롯 ↔ 재질문 유형 매핑 근거 | B→A |
 | 11 | 골든셋 시드 + PoC 리포트 | 익명화 세션 큐레이션, 검증 결과·중단 기준 판정 | A+B |
