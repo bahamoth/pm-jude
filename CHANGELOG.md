@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/bahamoth/pm-jude/compare/v0.3.1...v0.4.0) (2026-07-26)
+
+
+### Features
+
+* 웹 어댑터 — 로컬 http 서버·간이 식별·채팅 UI·pnpm web ([#16](https://github.com/bahamoth/pm-jude/issues/16)) ([27df7ba](https://github.com/bahamoth/pm-jude/commit/27df7bad533ba7c4daed9631a71f08ffc7476cd6))
+
 ## [0.3.1](https://github.com/bahamoth/pm-jude/compare/v0.3.0...v0.3.1) (2026-07-26)
 
 
