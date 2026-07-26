@@ -1,20 +1,17 @@
+import { randomUUID } from 'node:crypto';
 import type { LlmBackend } from '../gateway/backend';
-import { LlmGateway, type UsageLogger } from '../gateway/gateway';
-import { CLARIFICATION_V0 } from '../prompts/catalog';
+import type { UsageLogger } from '../gateway/gateway';
 import type { ClarificationOutput } from '../prompts/clarification-v0';
-import { COMPLETENESS_RUBRIC_V0 } from '../prompts/completeness-v0';
 import type { PromptRegistry } from '../prompts/registry';
 import type { SessionStore } from '../store/session-store';
+import {
+  detectRequesterLanguage,
+  IntakeRunner,
+  type ClarificationRoundPayload,
+} from './core-runner';
 
-/**
- * #10(필수 슬롯 초안, ←#9 소급 분석) 전까지 개발용으로 쓰는 임시 슬롯 목록.
- * 근거 있는 목록이 나오면 slot_schema_version을 올리고 이 상수를 교체한다 (F2e).
- */
-export const TEMP_REQUIRED_SLOTS = [
-  { key: 'target-user', label: '대상 사용자' },
-  { key: 'purpose', label: '해결하려는 문제' },
-  { key: 'data-source', label: '데이터 소스' },
-] as const;
+// 공유 심의 정의는 코어 러너로 옮겨졌다 (#16 — 순환 임포트 방지). 기존 참조 호환용 재수출.
+export { ensureVersionAxes, TEMP_REQUIRED_SLOTS } from './core-runner';
 
 export interface RunnerDeps {
   store: SessionStore;
@@ -36,91 +33,45 @@ export interface ClarificationRunResult {
   questions: ClarificationOutput['questions'];
 }
 
-/** 카탈로그의 프롬프트 버전과 임시 임계치·슬롯 스키마를 DB 버전 레지스트리에 아이덤포턴트하게 동기화한다. */
-export function ensureVersionAxes(store: SessionStore, registry: PromptRegistry) {
-  const clarification = registry.get(CLARIFICATION_V0);
-  const promptVersionId =
-    store.findVersionId('prompt', clarification.name, clarification.semver) ??
-    store.registerPromptVersion({
-      name: clarification.name,
-      semver: clarification.semver,
-      bodyRef: 'src/prompts/clarification-v0.ts',
-      regressionPassed: clarification.regressionPassed,
-    });
-  const thresholdVersionId =
-    store.findVersionId('threshold', COMPLETENESS_RUBRIC_V0.name, COMPLETENESS_RUBRIC_V0.semver) ??
-    store.registerThresholdVersion({
-      name: COMPLETENESS_RUBRIC_V0.name,
-      semver: COMPLETENESS_RUBRIC_V0.semver,
-      bodyRef: 'src/prompts/completeness-v0.ts',
-      regressionPassed: false,
-    });
-  const slotSchemaVersionId =
-    store.findVersionId('slot_schema', 'temp-required-slots', '0.0.0') ??
-    store.registerSlotSchemaVersion({
-      name: 'temp-required-slots',
-      semver: '0.0.0',
-      bodyRef: 'src/runner/local-runner.ts',
-      regressionPassed: false,
-      slots: TEMP_REQUIRED_SLOTS,
-      derivedFrom: [], // 임시 목록 — 실측 근거는 #10에서 합류
-    });
-  return { promptVersionId, thresholdVersionId, slotSchemaVersionId };
-}
-
 /**
- * 인테이크 1회 실행: 세션 생성 → 원문 기록 → 명확화 질문 생성 → 슬롯·신호 기록.
- * 모든 산출이 저장소에 버전 귀속으로 영속된다 — 실행이 끝나도 세션은 export 가능하게 남는다.
+ * 인테이크 1회 실행 — 코어 러너의 CLI 채널 어댑터 (#16, ADR-0007).
+ * 포트는 명확화 라운드의 구조화 페이로드를 수집해 되돌려주는 수집기다 (웹 어댑터와 동일 패턴).
+ * 세션 생성 → 원문 기록 → 접수 확인 → 명확화 질문 생성·게시가 전부 저장소에 버전 귀속으로
+ * 영속된다 — 게시한 질문도 전사에 남는다 (원칙 7).
  */
 export async function runClarificationSession(
   deps: RunnerDeps,
   input: IntakeInput,
 ): Promise<ClarificationRunResult> {
-  const versionAxes = ensureVersionAxes(deps.store, deps.registry);
-  const session = deps.store.createSession({
-    originChannel: input.channel,
-    modelVersion: deps.modelVersion,
-    ...versionAxes,
+  let captured: ClarificationRoundPayload | undefined;
+  const runner = new IntakeRunner<null>({
+    ...deps,
+    port: {
+      post: (_address, _text, payload) => {
+        if (payload?.kind === 'clarification_questions') captured = payload;
+        return Promise.resolve();
+      },
+    },
   });
-  deps.store.appendUtterance({
-    sessionId: session.id,
-    authorType: 'requester',
+
+  // 템플릿 회신이 ko·en 2종이라(F2d 초안) 그 외 --lang 값은 발화 문자 감지에 맡긴다.
+  const language =
+    input.requesterLanguage === 'ko' || input.requesterLanguage === 'en'
+      ? input.requesterLanguage
+      : detectRequesterLanguage(input.request);
+
+  const { sessionId } = await runner.handleIntake({
+    address: null,
+    threadKey: `cli:${randomUUID()}`,
     channel: input.channel,
-    originalText: input.request,
-    originalLanguage: input.requesterLanguage,
+    text: input.request,
+    language,
   });
-
-  const gateway = new LlmGateway({
-    backend: deps.backend,
-    registry: deps.registry,
-    ...(deps.usageLogger ? { usageLogger: deps.usageLogger } : {}),
-  });
-  const result = await gateway.complete<ClarificationOutput>(CLARIFICATION_V0, {
-    request: input.request,
-    requesterLanguage: input.requesterLanguage,
-    requiredSlots: TEMP_REQUIRED_SLOTS.map((slot) => ({ ...slot, state: 'unfilled' })),
-  });
-
-  for (const question of result.output.questions) {
-    if (question.target.type === 'slot') {
-      deps.store.setSlotState({
-        sessionId: session.id,
-        slotKey: question.target.slotKey,
-        state: 'unfilled',
-      });
-    }
-  }
-  deps.store.recordSignal({
-    sessionId: session.id,
-    type: 'clarification_round',
-    payload: { questionCount: result.output.questions.length },
-    modelVersion: deps.modelVersion,
-    ...versionAxes,
-  });
+  if (!captured) throw new Error('명확화 질문 페이로드가 게시되지 않았다');
 
   return {
-    sessionId: session.id,
-    interpretations: result.output.interpretations,
-    questions: result.output.questions,
+    sessionId,
+    interpretations: captured.interpretations,
+    questions: captured.questions,
   };
 }

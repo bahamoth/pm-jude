@@ -77,7 +77,7 @@ describe('trace-data — 저장소 export의 조형', () => {
     expect(data.generatedAt).toBe(GENERATED_AT);
     expect(data.summary).toMatchObject({
       sessionCount: 1,
-      statusCounts: { intake: 1 },
+      statusCounts: { clarifying: 1 },
       channelCounts: { web: 1 },
       slotStateCounts: { filled: 0, unfilled: 2, promoted: 0 },
       signalTypeCounts: { clarification_round: 1 },
@@ -85,7 +85,10 @@ describe('trace-data — 저장소 export의 조형', () => {
     const sess = data.sessions[0];
     if (!sess) throw new Error('세션 조형 결과 없음');
     expect(sess.id).toBe(result.sessionId);
-    expect(sess.utterances).toMatchObject([{ seq: 1, authorType: 'requester' }]);
+    expect(sess.utterances).toMatchObject([
+      { seq: 1, authorType: 'requester' },
+      { seq: 2, authorType: 'agent' }, // 게시한 질문 전사 (원칙 7) — 코어 러너 경유 (#16)
+    ]);
     expect(sess.versions.model).toBe('claude-sonnet-5');
     expect(sess.versions.slotSchema).toBe('temp-required-slots@0.0.0');
     // 해석 실패 시 원문 id(UUID)가 남는다 — 성공했으면 name@semver 표기라서 @를 포함한다.

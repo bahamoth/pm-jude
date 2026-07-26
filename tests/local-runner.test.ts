@@ -61,9 +61,15 @@ describe('로컬 러너 — 영속 인테이크 세션', () => {
     const exported = store.exportSessions();
     expect(exported).toHaveLength(1);
     expect(exported[0]).toMatchObject({
-      session: { id: result.sessionId, originChannel: 'web', modelVersion: 'claude-sonnet-5' },
+      session: {
+        id: result.sessionId,
+        originChannel: 'web',
+        modelVersion: 'claude-sonnet-5',
+        status: 'clarifying',
+      },
       utterances: [
         { originalText: '영업 실적 대시보드 만들어 주세요', originalLanguage: 'ko', seq: 1 },
+        { authorType: 'agent', seq: 2 }, // 게시한 질문도 전사에 남는다 (원칙 7)
       ],
       slotStates: [
         { slotKey: 'data-source', state: 'unfilled' },
