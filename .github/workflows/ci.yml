@@ -40,3 +40,16 @@ jobs:
 
       - name: Vitest
         run: pnpm test
+
+      # web-ui 워크스페이스 멤버 (ADR-0008) — 자체 도구 체인으로 검사한다
+      - name: Web UI typecheck
+        run: pnpm --dir web-ui typecheck
+
+      - name: Web UI ESLint
+        run: pnpm --dir web-ui lint
+
+      - name: Web UI Vitest
+        run: pnpm --dir web-ui test
+
+      - name: Web UI build
+        run: pnpm --dir web-ui build
