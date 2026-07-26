@@ -684,7 +684,13 @@
     "created": "2026-07-26",
     "updated": "2026-07-26",
     "body": "운영자 지시 (2026-07-26): #16 웹 표면의 UX·UI 품질 미달 판정에 따른 재작업.\n\n## 요구\n1. 시장 검증 프레임워크(Next.js)로 프론트 구축\n2. shadcn/ui(또는 그 기반의 검증된 확장) 디자인 시스템 적용\n3. 명확화 질답을 객관식 중심 마법사 동선으로 — 질문별 예시 선택지·「모르겠다 / 개발팀이 정할 문제」 경로는 이미 구조화 페이로드로 제공됨(#16), 자유 입력은 보조 경로\n4. LLM 대기 구간의 UX 처리 — 진행 표시, 입력 비활성화, 장기 대기(최대 2분) 안내\n\n## 구조 결정 (운영자 확인, 2026-07-26)\n- pnpm workspace 멤버로 `web-ui/` 추가 — 백엔드 단일 패키지 구조·tsconfig·CI 규칙 불변\n- 기존 http 어댑터는 API 서버로 유지, Next dev가 `/api` 프록시\n- #1의 「pnpm workspace 없음」 결정은 이 지시로 부분 개정 — ADR로 기록\n- PR #19 선머지 후 새 브랜치·새 PR (규칙 2)",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-26",
+        "body": "코드 완료 — PR #21 (rebase 머지 대기). 구성: ① ADR-0008(스택 확정, ARCHITECTURE.md 결정 대기 해소) ② web-ui 워크스페이스 멤버 — Next 16 + shadcn/ui 13종, /api 프록시, CI 4단계 ③ 마법사 복원 기반 — clarification_round 신호에 질문 구조 영속 + 세션 조회 latestQuestions(#16 이연 「재개 시 모르겠다 버튼 미복원」 해소) + PMJUDE_FAKE_BACKEND 데모 모드 ④ 마법사 UI — 한 화면 한 질문·객관식 기본·「모르겠다」/직접 입력 상시·답변 확인 단계·대기 카드(메시지 회전·경과·2분 안내·150초 타임아웃)·requirements 구조 렌더링·localStorage 재개. 검증: 루트 94 + web-ui 5 테스트, Chrome 실렌더링 완주(2라운드·재개 포함, 콘솔 오류 0, 시연 GIF pm-jude-wizard-flow.gif), 2축 리뷰 반영. **이연**: en 사용자에 한국어 chrome(UI 다국어화), 「모르겠다」 UI→서버 자연문 접기(구조화 회신 계약), 서버↔web-ui 계약 타입 공유 모듈, 「마법사」·「가짜 백엔드」 CONTEXT.md 등재."
+      }
+    ]
   }
 ]
 </script>
