@@ -635,7 +635,7 @@
   {
     "id": 21,
     "title": "Release Please 레이스 수정 — 워크플로우 동시 실행 직렬화",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
@@ -646,7 +646,13 @@
     "created": "2026-07-26",
     "updated": "2026-07-26",
     "body": "릴리스 PR 머지 푸시와 직후 보드 푸시가 Release Please 런 2개를 동시에 띄워, 한쪽이 v0.3.0 릴리스·라벨 교체를 끝낸 뒤 다른 쪽이 autorelease: pending 라벨 제거에서 404(Label does not exist)로 실패(run 30194970903). 릴리스 자체는 정상. 수정: 워크플로우에 concurrency 그룹(cancel-in-progress: false)을 넣어 런을 직렬화 — 뒤 런은 앞 런 종료 후 시작하므로 pending PR이 없으면 정상 종료한다.",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-26",
+        "body": "PR #17 rebase 머지로 종결. concurrency 직렬화 적용, 실패 런 30194970903 재실행 → success. v0.3.0 릴리스 상태는 수리 불필요(정상)였음."
+      }
+    ]
   }
 ]
 </script>
