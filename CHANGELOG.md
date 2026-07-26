@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/bahamoth/pm-jude/compare/v0.6.0...v0.7.0) (2026-07-26)
+
+
+### Features
+
+* pnpm dev 핫 리로드 — API를 tsx watch로 ([#35](https://github.com/bahamoth/pm-jude/issues/35)) ([351dbda](https://github.com/bahamoth/pm-jude/commit/351dbda830344213595599c73d3aee0225529a8c))
+
 ## [0.6.0](https://github.com/bahamoth/pm-jude/compare/v0.5.0...v0.6.0) (2026-07-26)
 
 
