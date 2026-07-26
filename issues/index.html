@@ -742,7 +742,7 @@
     "blockedBy": [],
     "created": "2026-07-26",
     "updated": "2026-07-26",
-    "body": "## Destination\n\ndocs/ux/requester-journey.md의 vNext 확정 — 검토(스트레스 테스트·프로토타입·리서치) 반영과 오픈 질문 5건(Q1~Q5)의 결정이 문서에 흡수되고 운영자 승인을 받은 상태. 프론트 스택 재검토(Next 유지/교체, AI 코딩 적합성 기준) 결정을 포함한다. 구현(갭 G-1~G-8 실행)은 이 맵의 범위 밖 — 설계 승인 후 별도 지시로 이어진다.\n\n## Notes\n\n- 정본: ARCHITECTURE.md §상태 머신, docs/prd/functional-requirements.md(F1~F8), CONTEXT.md 용어. 설계 대상: docs/ux/requester-journey.md (#23).\n- 스킬: 그릴링 티켓 = /grilling·/domain-modeling, 프로토타입 티켓 = /prototype, 리서치 티켓 = /research.\n- 운영자 상수: 검증된 디자인 시스템(shadcn 계열)·객관식 마법사·대기 UX 상시. 단 프레임워크 자체는 이 맵에서 재검토(#25) — 판단 기준은 AI 코딩 적합성 (운영자, 2026-07-26).\n- 보드 쓰기는 main 직행(워크플로우 규칙 6). HITL 티켓은 운영자와의 실문답으로만 해소 — 에이전트가 운영자 답을 대신하지 않는다.\n\n## Decisions so far\n\n- [리서치 — 유사 제품의 인테이크·대기·재개 UX 관례 조사](#27) — 관례 5축 정리 + 설계 수정 발견 M-1~M-9(내 차례 신호·「언제」 명시·localStorage 취약·카운트형 진행·재개 트리거). 산출물 docs/research/intake-ux-conventions.md(research/intake-ux-conventions)\n- [리서치 — AI 코딩에 적합한 프론트 스택 조사](#26) — 권고: Next.js 16 유지 + 클라이언트 SPA 사용 계약 명문화(ADR-0008 추인), 차선 Vite(전환 비용 앱 셸 수준). 산출물 docs/research/frontend-stack-ai-coding.md(research/frontend-stack)\n- [프론트 스택 확정 — Next.js 유지](#25) — 운영자 결정: Next 16 유지 + 클라이언트 SPA 사용 계약 명문화(rsc:false, 서버 기능 금지 — ADR-0008 추인). PR #21 머지 완료. Vite 전환은 마찰 실측 시 재론\n\n## Not yet specified\n\n- Slack 복귀 시 채널 등가(P-U6)의 검증 방법 — 설계 확정 후 구체화\n- 다국어 chrome(G-8)의 설계 상세 — 언어 결정 시점·번역 자원\n\n## Out of scope\n\n- 게이트·역보고(Phase 1) UX 상세 설계 — 자리만 확보(운영자 결정 2026-07-26), 게이트 구현 지시 때 별도 맵\n- 갭 G-1~G-8의 구현 실행 — 설계 vNext 승인 후 별도 지시\n- Slack 어댑터 운영 — #8 후순위 유지(ADR-0007)",
+    "body": "## Destination\n\ndocs/ux/requester-journey.md의 vNext 확정 — 검토(스트레스 테스트·프로토타입·리서치) 반영과 오픈 질문 5건(Q1~Q5)의 결정이 문서에 흡수되고 운영자 승인을 받은 상태. 프론트 스택 재검토(Next 유지/교체, AI 코딩 적합성 기준) 결정을 포함한다. 구현(갭 G-1~G-8 실행)은 이 맵의 범위 밖 — 설계 승인 후 별도 지시로 이어진다.\n\n## Notes\n\n- 정본: ARCHITECTURE.md §상태 머신, docs/prd/functional-requirements.md(F1~F8), CONTEXT.md 용어. 설계 대상: docs/ux/requester-journey.md (#23).\n- 스킬: 그릴링 티켓 = /grilling·/domain-modeling, 프로토타입 티켓 = /prototype, 리서치 티켓 = /research.\n- 운영자 상수: 검증된 디자인 시스템(shadcn 계열)·객관식 마법사·대기 UX 상시. 단 프레임워크 자체는 이 맵에서 재검토(#25) — 판단 기준은 AI 코딩 적합성 (운영자, 2026-07-26).\n- 보드 쓰기는 main 직행(워크플로우 규칙 6). HITL 티켓은 운영자와의 실문답으로만 해소 — 에이전트가 운영자 답을 대신하지 않는다.\n\n## Decisions so far\n\n- [리서치 — 유사 제품의 인테이크·대기·재개 UX 관례 조사](#27) — 관례 5축 정리 + 설계 수정 발견 M-1~M-9(내 차례 신호·「언제」 명시·localStorage 취약·카운트형 진행·재개 트리거). 산출물 docs/research/intake-ux-conventions.md(research/intake-ux-conventions)\n- [리서치 — AI 코딩에 적합한 프론트 스택 조사](#26) — 권고: Next.js 16 유지 + 클라이언트 SPA 사용 계약 명문화(ADR-0008 추인), 차선 Vite(전환 비용 앱 셸 수준). 산출물 docs/research/frontend-stack-ai-coding.md(research/frontend-stack)\n- [프론트 스택 확정 — Next.js 유지](#25) — 운영자 결정: Next 16 유지 + 클라이언트 SPA 사용 계약 명문화(rsc:false, 서버 기능 금지 — ADR-0008 추인). PR #21 머지 완료. Vite 전환은 마찰 실측 시 재론\n- [세션 접근 모델 결정 (Q1)](#29) — 브라우저 로컬 목록 + 딥링크, 서버 목록 없음, 개인화는 Phase 1\n- [상태 머신 상호작용 규칙 결정 (Q2·Q5)](#30) — 보류 재개는 입력=자동 재개(코어 전이 구현), 슬롯 확인 되물음은 상한 미산입\n- [접수 즉시성 구현 방식 결정 (Q3)](#31) — SSE 푸시(세션 이벤트 스트림), 폴링 기각\n- [Phase 1 자리 노출 수위 결정 (Q4)](#32) — 5단계 스테퍼 노출 + 준비 중 표기\n\n## Not yet specified\n\n- Slack 복귀 시 채널 등가(P-U6)의 검증 방법 — 설계 확정 후 구체화\n- 다국어 chrome(G-8)의 설계 상세 — 언어 결정 시점·번역 자원\n\n## Out of scope\n\n- 게이트·역보고(Phase 1) UX 상세 설계 — 자리만 확보(운영자 결정 2026-07-26), 게이트 구현 지시 때 별도 맵\n- 갭 G-1~G-8의 구현 실행 — 설계 vNext 승인 후 별도 지시\n- Slack 어댑터 운영 — #8 후순위 유지(ADR-0007)",
     "comments": []
   },
   {
@@ -826,58 +826,82 @@
   {
     "id": 29,
     "title": "세션 접근 모델 결정 (Q1) — 브라우저 로컬 목록 vs 서버 목록",
-    "state": "open",
+    "state": "closed",
     "labels": [],
     "type": "grilling",
-    "assignee": null,
+    "assignee": "claude",
     "parent": 24,
     "blockedBy": [],
     "created": "2026-07-26",
     "updated": "2026-07-26",
     "body": "## Question\n\n「내 요청 목록」의 경계를 무엇으로 하는가 — 브라우저 로컬 세션 ID 목록(설계 제안)인가, 간이 식별(이름) 기반 서버 목록인가. 후자는 타인 요청 열람 문제가 있어 Phase 1 매직 링크와 함께 푸는 경로가 자연스럽다. 딥링크 /s/:id의 접근 통제 수위도 함께 정한다.",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-26",
+        "body": "해소 (운영자 결정) — 브라우저 로컬 목록 + 딥링크. localStorage에는 세션 ID 포인터만, 데이터는 서버 영속(유실 시 딥링크 /s/:id로 복구 — M-2에 따라 접수 화면에서 링크 저장 안내). 서버 전체 목록 API는 열지 않음(타인 열람 방지). 개인화·계정 연결은 Phase 1 매직 링크와 함께."
+      }
+    ]
   },
   {
     "id": 30,
     "title": "상태 머신 상호작용 규칙 결정 (Q2·Q5) — 보류 재개 포함, 슬롯 확인의 상한 산입",
-    "state": "open",
+    "state": "closed",
     "labels": [],
     "type": "grilling",
-    "assignee": null,
+    "assignee": "claude",
     "parent": 24,
     "blockedBy": [],
     "created": "2026-07-26",
     "updated": "2026-07-26",
     "body": "## Question\n\n두 가지 상태 머신 접점 규칙을 정한다. ① 보류(정보 부족) → 명확화 재개 전이(정본에 존재, 코어 미구현)를 Phase 0 범위에 포함하는가(설계 제안: 포함). ② 슬롯 단위 확인의 「아니에요」 되물음을 왕복 상한에 산입하는가(설계 제안: 미산입 — 확정 시 PRD §12 등재).",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-26",
+        "body": "해소 (운영자 결정) — ① 보류 재개: 입력=자동 재개(같은 세션이 clarifying 복귀, 전사·슬롯·이력 유지 — 코어에 정본 전이 구현, Linear snooze 관례 M-8 동형). ② 슬롯 확인 되물음의 왕복 상한 산입: 미산입(설계 제안 채택 — 확인 정정은 새 왕복이 아님, PRD §12 등재 후보)."
+      }
+    ]
   },
   {
     "id": 31,
     "title": "접수 즉시성 구현 방식 결정 (Q3) — 2단계 API vs SSE",
-    "state": "open",
+    "state": "closed",
     "labels": [],
     "type": "grilling",
-    "assignee": null,
+    "assignee": "claude",
     "parent": 24,
     "blockedBy": [],
     "created": "2026-07-26",
     "updated": "2026-07-26",
     "body": "## Question\n\nF1(접수 확인 3초)을 성립시키는 웹 어댑터 구현 방식 — ⓐ 2단계 API(세션 생성 즉시 응답 + 질문 폴링, 설계 제안) ⓑ SSE 스트리밍. #25 스택 결정과 상호작용할 수 있다(프레임워크의 스트리밍 지원). PoC 단순성과 Phase 1 확장성을 기준으로 정한다.",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-26",
+        "body": "해소 (운영자 결정) — SSE 푸시. 접수 확인(요청 ID)은 POST 응답으로 즉시, 이후 이벤트(질문 도착·판정·문서)는 세션 이벤트 스트림(GET /api/sessions/:id/events, text/event-stream)으로 서버가 푸시. 운영자 논거: 이벤트 구동이 리소스 최소. EventSource 자동 재접속 + 연결 실패 시 세션 조회 폴백. 2단계 API+폴링 제안은 기각. Phase 1 게이트·역보고 실시간 알림의 기반."
+      }
+    ]
   },
   {
     "id": 32,
     "title": "Phase 1 자리 노출 수위 결정 (Q4) — 「개발팀 검토 준비 중」 예고 표시 여부",
-    "state": "open",
+    "state": "closed",
     "labels": [],
     "type": "grilling",
-    "assignee": null,
+    "assignee": "claude",
     "parent": 24,
     "blockedBy": [],
     "created": "2026-07-26",
     "updated": "2026-07-26",
     "body": "## Question\n\n문서 화면과 여정 스테퍼에서 아직 구현되지 않은 ④ 개발팀 검토·⑤ 진행 단계를 지금 노출하는가(정직한 「준비 중」 표기, P-U5 다음 예고), 게이트 구현 전까지 숨기는가(스테퍼 3단계로 축소). 요청자 기대 관리와 미완성 노출 사이의 결정.",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-26",
+        "body": "해소 (기본값 채택, 운영자 2회 무이견) — 5단계 스테퍼 전부 노출, ④ 개발팀 검토·⑤ 진행은 「준비 중」 표기 + 문서 화면에 「지금은 이 문서가 개발팀에 전달됩니다」 정직 예고(P-U5, M-7). 이견 시 즉시 변경 가능."
+      }
+    ]
   },
   {
     "id": 33,
@@ -913,6 +937,22 @@
     "created": "2026-07-26",
     "updated": "2026-07-26",
     "body": "## Question\n\n닫힌 결정 전부를 docs/ux/requester-journey.md vNext로 반영하고(오픈 질문 §8 해소, 갭 표 갱신, 스택 결정 반영) 운영자 승인을 받는다 — 이 맵의 목적지 도달 티켓. 승인 후 구현은 별도 지시.",
+    "comments": []
+  },
+  {
+    "id": 35,
+    "title": "UX 갭 구현 — 설계 결정 반영 (G-1~G-7 + M 반영)",
+    "state": "open",
+    "labels": [
+      "ready-for-agent"
+    ],
+    "type": "task",
+    "assignee": "claude",
+    "parent": null,
+    "blockedBy": [],
+    "created": "2026-07-26",
+    "updated": "2026-07-26",
+    "body": "운영자 /implement 지시 (2026-07-26). 맵 #24의 결정(Q1~Q5)과 리서치 발견(M-1~M-9)을 반영해 requester-journey.md의 갭을 구현한다.\\n\\n## 범위\\n- G-1 접수 즉시성: SSE 세션 이벤트 스트림(#31 결정) — POST 즉시 접수 확인, 질문·판정·문서는 서버 푸시\\n- G-2 라운드 맥락: maxRounds·남은 슬롯 노출 → 맥락 카드 + 마지막 라운드 예고(카운트형, M-5)\\n- G-3 슬롯 단위 확인: 정리 결과 카드(맞아요=confirmedByRequester 기록 / 아니에요=정정 재판정 — 상한 미산입 #30)\\n- G-4 보류 재개: 코어 재개 전이(입력=자동 재개 #30)\\n- G-5 세션 목록·딥링크: 로컬 목록 + /s/:id + 링크 저장 안내(M-2) (#29)\\n- G-6 전체 여정 스테퍼: 5단계 + 준비 중 표기(#32)\\n- G-7 승격 인과 마이크로카피 + M-1 내 차례 칩, M-3·M-4·M-6·M-7 문구\\n\\n## 범위 밖\\nG-8 다국어 chrome(이연 유지), 게이트·역보고 구현.",
     "comments": []
   }
 ]
