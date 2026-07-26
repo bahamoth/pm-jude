@@ -298,4 +298,4 @@ erDiagram
 
 ## 결정 대기 항목
 
-기술 선택 중 이 문서가 열어 두는 것: 웹 프레임워크, 프로바이더 추상화 구현체(Vercel AI SDK / LiteLLM / Bedrock Converse — Phase 1 전환 시 확정), 목업 호스팅 상세(R2+Workers 권장선), 평가 도구(Langfuse / promptfoo — Phase 2 채택), 배포 환경. 수치·정책 미결정 항목의 전체 목록은 PRD §12.
+기술 선택 중 이 문서가 열어 두는 것: 프로바이더 추상화 구현체(Vercel AI SDK / LiteLLM / Bedrock Converse — Phase 1 전환 시 확정), 목업 호스팅 상세(R2+Workers 권장선), 평가 도구(Langfuse / promptfoo — Phase 2 채택), 배포 환경. 웹 프레임워크는 Next.js + shadcn/ui로 확정됐다([ADR-0008](docs/adr/0008-frontend-nextjs-shadcn.md)). 수치·정책 미결정 항목의 전체 목록은 PRD §12.

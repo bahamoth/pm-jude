@@ -5,3 +5,6 @@ docs/
 *.md
 pnpm-lock.yaml
 src/store/migrations/
+# web-ui는 자체 도구 체인(Next) — 빌드 산출물 제외, 소스는 루트 프리티어가 포맷한다
+web-ui/.next/
+web-ui/next-env.d.ts
