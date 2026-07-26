@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/bahamoth/pm-jude/compare/v0.7.0...v0.8.0) (2026-07-26)
+
+
+### Features
+
+* 운영 표면 UI 통일 — shadcn 디자인 언어로 재스타일 ([#37](https://github.com/bahamoth/pm-jude/issues/37)) ([0032b3f](https://github.com/bahamoth/pm-jude/commit/0032b3faef12123f0493bfbf068d5fe14999495a))
+
 ## [0.7.0](https://github.com/bahamoth/pm-jude/compare/v0.6.0...v0.7.0) (2026-07-26)
 
 
