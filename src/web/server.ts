@@ -11,6 +11,7 @@ import {
   type ClarificationRoundPayload,
 } from '../runner/core-runner';
 import type { SessionStore } from '../store/session-store';
+import { handleDevSite } from './dev-site';
 
 /**
  * 웹 채널 어댑터 (#16·#35, ADR-0007/0008) — Node 내장 http 로컬 단일 프로세스 서버.
@@ -447,14 +448,8 @@ export function createWebServer(deps: WebServerDeps): Server {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const segments = url.pathname.split('/').filter(Boolean);
 
-    if (req.method === 'GET' && segments.length === 0) {
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-      res.end(
-        '<!doctype html><meta charset="utf-8"><title>pm-jude API</title>' +
-          '<p>pm-jude API 서버 — 웹 UI는 <code>pnpm web:ui</code> (http://localhost:3000)</p>',
-      );
-      return;
-    }
+    // 로컬 허브 (#36) — /, /board, /trace, /repo/** (운영자·개발팀 열람 표면)
+    if (handleDevSite(req, res, url, store)) return;
     if (segments[0] === 'api' && segments[1] === 'sessions') {
       if (segments.length === 2) {
         if (req.method === 'POST') {
