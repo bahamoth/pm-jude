@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0](https://github.com/bahamoth/pm-jude/compare/v0.2.0...v0.3.0) (2026-07-26)
+
+
+### Features
+
+* architecture.html 재작업 — 수제 SVG 렌더러 폐기, 정본 mermaid 직접 렌더링 ([#19](https://github.com/bahamoth/pm-jude/issues/19)) ([edb4af4](https://github.com/bahamoth/pm-jude/commit/edb4af445eaffeebe42533102d73e5408e450825))
+* 세션 트레이스 뷰어 — 세션·전사·슬롯·신호의 상시 추적 가시화 ([#20](https://github.com/bahamoth/pm-jude/issues/20)) ([001739d](https://github.com/bahamoth/pm-jude/commit/001739d4bf99ebb85d22e135b0fdc35e51cd7933))
+
 ## [0.2.0](https://github.com/bahamoth/pm-jude/compare/v0.1.0...v0.2.0) (2026-07-26)
 
 
