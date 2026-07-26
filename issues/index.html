@@ -591,7 +591,7 @@
   {
     "id": 19,
     "title": "architecture.html 재작업 — 수제 SVG 렌더러 폐기, 정본 mermaid 직접 렌더링",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
@@ -602,7 +602,13 @@
     "created": "2026-07-26",
     "updated": "2026-07-26",
     "body": "운영자 판정: 가시성 개선 지시(#15) 결과물의 가독성이 여전히 나쁨. 원인: 렌더링 라이브러리 시장조사 없이 수제 SVG 베지어·수동 라벨 좌표(labelT/ldx/ldy/bow/via)로 구현 — 레이아웃 엔진이 할 일을 손으로 했고 라벨 충돌·교차가 남음. 재작업: mermaid를 벤더링(docs/assets/mermaid.min.js)하고 정본 ARCHITECTURE.md의 mermaid 블록 5종(구성도·상태 머신·시퀀스 3종·ERD)을 그대로 렌더링. 중복 모델(#arch-data JSON island) 폐기 — 머신 가독 소스는 정본 mermaid DSL 자체. 정본↔HTML 블록 동기화 검사 스크립트 추가.",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-26",
+        "body": "PR #14 rebase 머지로 종결. mermaid 11.16.0 벤더링, 정본 6블록 렌더링, 동기화 스크립트 추가. 운영자 확인: 흐름 파악 가능해짐."
+      }
+    ]
   }
 ]
 </script>
