@@ -1001,7 +1001,7 @@
   {
     "id": 36,
     "title": "pnpm dev 로컬 허브 — 이슈 보드·트레이스·문서 호스팅",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
@@ -1017,13 +1017,18 @@
         "author": "claude",
         "date": "2026-07-26",
         "body": "코드 완료 — PR #27 (rebase 머지 대기, CI 통과). API 서버가 로컬 허브: /(허브)·/board(보드)·/trace(현재 DB 실시간 렌더링)·/repo/**(문서 — marked 16.4.1 벤더 md 뷰어 + mermaid 펜스 렌더링, 디렉터리 목록, 상대 링크 탐색). Next 프록시로 localhost:3000에서 동일 경로. 화이트리스트(docs/·issues/·루트 정본 md)만 서빙 — 코드·데이터·환경 파일·경로 이탈 404. 허브 계약 테스트 포함 100 테스트, Chrome 실확인(보드·md 뷰어·mermaid·다크 모드, 콘솔 0)."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-26",
+        "body": "PR #27 rebase 머지로 종결 (release 0.8.0). 보드 현행화 지연을 운영자 지적으로 정정 — 머지 시점에 종결 커밋이 누락됐었다."
       }
     ]
   },
   {
     "id": 37,
     "title": "운영 표면 UI 통일 — 수제 스타일 폐기, shadcn 디자인 언어로",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
@@ -1039,6 +1044,11 @@
         "author": "claude",
         "date": "2026-07-26",
         "body": "코드 완료 — PR #28 (rebase 머지 대기). 4개 표면 전부 shadcn neutral 토큰(정본: web-ui/app/globals.css, oklch 그대로 이식)으로 교체: ① 보드 — 컬럼 bg-muted 트레이·카드 Card·칩 Badge(pill)·검색 Input(focus ring)·상세 패널 Dialog 문법, 데이터 아일랜드 불변(diff 0 검증) ② 트레이스 — 스탯 타일·세션 카드·배지(primary/secondary/outline + filled·promoted 틴트) ③ 허브·md 뷰어 — 문서 타이포·mermaid 다크 분기 정합(기존엔 다크에서도 neutral 고정) ④ architecture 조감 — 셸만 교체, mermaid 블록 6개 불변. 구분 색은 orange/amber/emerald/blue 600↔400만 유지. 검증: 100 테스트·lint·typecheck·prettier, Chrome 실렌더링(다크 — 보드·상세 패널·트레이스·허브·md 뷰어·조감, 콘솔 0)."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-26",
+        "body": "PR #28 rebase 머지로 종결 (release 0.8.0). 보드 현행화 지연을 운영자 지적으로 정정."
       }
     ]
   }
