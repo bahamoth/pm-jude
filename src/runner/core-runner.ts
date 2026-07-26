@@ -196,14 +196,14 @@ export class IntakeRunner<A> {
     this.maxRounds = deps.maxRounds ?? 3;
   }
 
-  /** 새 threadKey면 세션을 만들고, 이미 있으면 진행 중 세션의 답변으로 라우팅한다. */
-  async handleIntake(event: IntakeEvent<A>): Promise<{ sessionId: string }> {
+  /**
+   * 세션 개설만 수행한다 — 생성·원문 기록·접수 확인 게시(F1 즉시 확인)까지. 명확화 라운드는
+   * startClarification 몫이라, 어댑터가 접수 응답을 먼저 돌려주고 라운드를 비동기로 돌릴 수 있다(G-1).
+   */
+  async openSession(event: IntakeEvent<A>): Promise<{ sessionId: string; existing: boolean }> {
     const { store, registry } = this.deps;
-    const existing = store.findSessionByThreadKey(event.threadKey);
-    if (existing) {
-      await this.handleReply(event);
-      return { sessionId: existing.id };
-    }
+    const found = store.findSessionByThreadKey(event.threadKey);
+    if (found) return { sessionId: found.id, existing: true };
 
     const versionAxes = ensureVersionAxes(store, registry);
     const session = store.createSession({
@@ -223,15 +223,49 @@ export class IntakeRunner<A> {
     });
     // 접수 확인은 LLM 호출보다 먼저 나간다 (F1 수용기준 — 즉시 확인 응답)
     await this.deps.port.post(event.address, MESSAGES[language].ack);
-    await this.runClarificationRound(session.id, event, language);
-    return { sessionId: session.id };
+    return { sessionId: session.id, existing: false };
   }
 
-  /** 진행 중 세션의 답변 처리. 세션이 없거나 종결됐으면 null을 돌려주고 아무것도 하지 않는다. */
+  /** 개설된 세션의 명확화 라운드 실행 — intake·clarifying 상태에서만 동작한다. */
+  async startClarification(event: IntakeEvent<A>): Promise<void> {
+    const session = this.deps.store.findSessionByThreadKey(event.threadKey);
+    if (!session || (session.status !== 'intake' && session.status !== 'clarifying')) return;
+    await this.runClarificationRound(session.id, event, this.languageOf(event));
+  }
+
+  /** 새 threadKey면 세션을 만들고 첫 라운드까지 원자적으로, 이미 있으면 답변으로 라우팅한다. */
+  async handleIntake(event: IntakeEvent<A>): Promise<{ sessionId: string }> {
+    const { sessionId, existing } = await this.openSession(event);
+    if (existing) {
+      await this.handleReply(event);
+      return { sessionId };
+    }
+    await this.startClarification(event);
+    return { sessionId };
+  }
+
+  /**
+   * 요청자 발화 처리. 세션이 없거나 재개 불가한 종결이면 null.
+   * 보류(정보 부족)는 입력=자동 재개(#30 — 정본 전이 보류→명확화), documented는
+   * 슬롯 확인 정정의 재판정 경로로 허용된다(docgen 상태 내부 루프).
+   */
   async handleReply(event: IntakeEvent<A>): Promise<ReplyOutcome | null> {
     const { store } = this.deps;
-    const session = store.findSessionByThreadKey(event.threadKey);
-    if (!session || session.status === 'documented' || session.status === 'closed') return null;
+    let session = store.findSessionByThreadKey(event.threadKey);
+    if (!session) return null;
+    if (session.status === 'closed') {
+      if (session.terminalState !== 'on_hold_insufficient_info') return null;
+      store.updateSessionState(session.id, { status: 'clarifying', terminalState: null });
+      store.recordSignal({
+        sessionId: session.id,
+        type: 'session_resumed',
+        payload: { previousRoundCount: session.roundCount },
+        modelVersion: this.deps.modelVersion,
+        ...this.versionAxesOf(session),
+      });
+      session = store.getSession(session.id);
+      if (!session) return null;
+    }
 
     const language = this.languageOf(event);
     store.appendUtterance({
@@ -252,9 +286,15 @@ export class IntakeRunner<A> {
       conversation,
     });
 
-    // LLM 슬롯 판정을 세션 슬롯 상태로 반영 — 승격 트리거 (F2c, US-10)
+    // LLM 슬롯 판정을 세션 슬롯 상태로 반영 — 승격 트리거 (F2c, US-10).
+    // 판정 근거를 value로 영속해 슬롯 단위 확인 카드(F3)의 표시 텍스트로 쓴다.
     for (const slot of completeness.output.slots) {
-      store.setSlotState({ sessionId: session.id, slotKey: slot.slotKey, state: slot.verdict });
+      store.setSlotState({
+        sessionId: session.id,
+        slotKey: slot.slotKey,
+        state: slot.verdict,
+        value: slot.rationale,
+      });
     }
     const rule = runRuleLayer({
       requiredSlots: TEMP_REQUIRED_SLOTS,
@@ -278,7 +318,7 @@ export class IntakeRunner<A> {
       await this.deliverDocument(session.id, event, completeness.output, request, conversation);
       return this.outcomeOf(session.id);
     }
-    if (session.roundCount < this.maxRounds) {
+    if (session.roundCount < this.roundBudgetOf(session.id)) {
       await this.runClarificationRound(session.id, event, language);
       return this.outcomeOf(session.id);
     }
@@ -303,6 +343,60 @@ export class IntakeRunner<A> {
       ...versionAxes,
     });
     return this.outcomeOf(session.id);
+  }
+
+  /**
+   * 슬롯 단위 요청자 확인 (F3, 원칙 7). documented 세션에서만 —
+   * 맞아요: confirmedByRequester 기록. 아니에요: 해당 슬롯을 미충족으로 되돌리고
+   * event.text(정정 내용)를 재판정에 태운다. 정정 자체는 왕복 상한에 산입되지 않는다(#30).
+   */
+  async confirmSlot(
+    event: IntakeEvent<A>,
+    slotKey: string,
+    confirmed: boolean,
+  ): Promise<ReplyOutcome | null> {
+    const { store } = this.deps;
+    const session = store.findSessionByThreadKey(event.threadKey);
+    if (!session || session.status !== 'documented') return null;
+    const row = store.listSlotStates(session.id).find((slot) => slot.slotKey === slotKey);
+    if (!row) return null;
+
+    if (confirmed) {
+      store.setSlotState({
+        sessionId: session.id,
+        slotKey,
+        state: row.state as 'filled' | 'unfilled' | 'promoted',
+        value: row.value ?? undefined,
+        confirmedByRequester: true,
+        ...(row.openIssueAssignee ? { openIssueAssignee: row.openIssueAssignee } : {}),
+      });
+      store.recordSignal({
+        sessionId: session.id,
+        type: 'slot_confirmed',
+        payload: { slotKey },
+        modelVersion: this.deps.modelVersion,
+        ...this.versionAxesOf(session),
+      });
+      return this.outcomeOf(session.id);
+    }
+
+    store.setSlotState({ sessionId: session.id, slotKey, state: 'unfilled' });
+    store.recordSignal({
+      sessionId: session.id,
+      type: 'slot_correction',
+      payload: { slotKey },
+      modelVersion: this.deps.modelVersion,
+      ...this.versionAxesOf(session),
+    });
+    return this.handleReply(event);
+  }
+
+  /** 왕복 예산 — 재개(#30)마다 상한이 한 번 더 주어진다. */
+  roundBudgetOf(sessionId: string): number {
+    const resumes = this.deps.store
+      .listSignals(sessionId)
+      .filter((signal) => signal.type === 'session_resumed').length;
+    return this.maxRounds * (1 + resumes);
   }
 
   private languageOf(event: IntakeEvent<A>): 'ko' | 'en' {
