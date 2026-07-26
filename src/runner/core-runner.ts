@@ -363,7 +363,12 @@ export class IntakeRunner<A> {
     store.recordSignal({
       sessionId,
       type: 'clarification_round',
-      payload: { round: session.roundCount + 1, questionCount: result.output.questions.length },
+      payload: {
+        round: session.roundCount + 1,
+        questionCount: result.output.questions.length,
+        // 질문 구조를 신호에 영속 — 세션 재개 시 어댑터가 질문별 UI를 복원한다 (F11 관측 겸용)
+        questions: result.output.questions,
+      },
       modelVersion: this.deps.modelVersion,
       ...versionAxes,
     });
