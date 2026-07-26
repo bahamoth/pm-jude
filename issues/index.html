@@ -609,6 +609,22 @@
         "body": "PR #14 rebase 머지로 종결. mermaid 11.16.0 벤더링, 정본 6블록 렌더링, 동기화 스크립트 추가. 운영자 확인: 흐름 파악 가능해짐."
       }
     ]
+  },
+  {
+    "id": 20,
+    "title": "세션 트레이스 뷰어 — 세션·전사·슬롯·신호의 상시 추적 가시화",
+    "state": "open",
+    "labels": [
+      "ready-for-agent"
+    ],
+    "type": "feature",
+    "assignee": "claude",
+    "parent": null,
+    "blockedBy": [],
+    "created": "2026-07-26",
+    "updated": "2026-07-26",
+    "body": "운영자 지시: 아키텍처 흐름 전체를 추적 가시화할 수 있는 수단을 상시 병행으로 유지할 것. 구현: SessionStore.exportSessions() 심을 소비하는 정적 뷰어 생성기 — pnpm trace가 DB를 읽어 data/trace.html(JSON data island + 렌더러 셸, issues/index.html과 동일 관례)을 생성. 내용: 요약 지표(세션 수·상태 분포·평균 왕복·슬롯 3상태 분포·신호 유형), 세션별 상태 경로·발화 타임라인·슬롯 상태·신호·버전 귀속 5축. 상시 병행 규칙(세션 데이터를 만지는 변경은 트레이스 뷰어 반영 동반)은 AGENTS.md에 기록. F13 판독 워크벤치(Phase 2)의 PoC 축소판 위치.",
+    "comments": []
   }
 ]
 </script>
