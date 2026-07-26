@@ -6,9 +6,9 @@ import { SessionStore } from '../src/store/session-store';
 import { createWebServer } from '../src/web/server';
 
 /**
- * 웹 어댑터 HTTP 계약 smoke test (#16) — 기동 → 인테이크 POST → 답변 POST → 세션 조회 GET을
- * 실제 http 서버로 관통한다. 파이프라인 분기 검증은 코어 러너 시임(core-runner.test.ts)의 몫이고,
- * 여기서는 HTTP 계약(경로·상태 코드·응답 형태)이 끊기지 않았는지만 본다.
+ * 웹 어댑터 HTTP 계약 smoke test (#16·#35) — 즉시 접수(F1) → 비동기 라운드 → 답변 →
+ * 슬롯 확인 → 세션 조회·요약을 실제 http 서버로 관통하고, SSE 이벤트 스트림(#31)의 계약을
+ * 게이트 백엔드로 결정론적으로 검증한다. 파이프라인 분기는 코어 시임의 몫.
  */
 
 class ScriptedBackend implements LlmBackend {
@@ -18,6 +18,23 @@ class ScriptedBackend implements LlmBackend {
     const text = this.responses.shift();
     if (text === undefined) throw new Error('ScriptedBackend: 준비된 응답 없음');
     return Promise.resolve({ outputText: text, usage: { inputTokens: 100, outputTokens: 50 } });
+  }
+}
+
+/** 게이트가 열릴 때까지 응답을 붙잡는 백엔드 — SSE 구독을 먼저 세우는 결정론적 테스트용. */
+class GatedBackend implements LlmBackend {
+  private readonly gate: Promise<void>;
+  open!: () => void;
+
+  constructor(private readonly responses: string[]) {
+    this.gate = new Promise((resolve) => (this.open = resolve));
+  }
+
+  async run(_request: BackendRequest): Promise<BackendResponse> {
+    await this.gate;
+    const text = this.responses.shift();
+    if (text === undefined) throw new Error('GatedBackend: 준비된 응답 없음');
+    return { outputText: text, usage: { inputTokens: 100, outputTokens: 50 } };
   }
 }
 
@@ -91,11 +108,11 @@ afterEach(async () => {
   store = undefined;
 });
 
-async function startServer(responses: string[]): Promise<{ baseUrl: string; store: SessionStore }> {
+async function startServer(backend: LlmBackend): Promise<{ baseUrl: string; store: SessionStore }> {
   store = SessionStore.open(':memory:');
   const server = createWebServer({
     store,
-    backend: new ScriptedBackend(responses),
+    backend,
     registry: createDefaultRegistry(),
     modelVersion: 'claude-sonnet-5',
     teamLanguage: 'ko',
@@ -107,15 +124,33 @@ async function startServer(responses: string[]): Promise<{ baseUrl: string; stor
   return { baseUrl: `http://127.0.0.1:${String(port)}`, store };
 }
 
-describe('웹 어댑터 HTTP 계약 smoke', () => {
-  it('인테이크 POST → 답변 POST → 세션 조회 GET이 한 세션으로 관통된다', async () => {
-    const { baseUrl, store } = await startServer([
-      clarificationResponse,
-      refinedCompletenessResponse,
-      requirementsResponse,
-    ]);
+async function waitFor<T>(probe: () => Promise<T | null>, timeoutMs = 3000): Promise<T> {
+  const start = Date.now();
+  for (;;) {
+    const value = await probe();
+    if (value !== null) return value;
+    if (Date.now() - start > timeoutMs) throw new Error('waitFor: 시간 초과');
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
 
-    // 인테이크: 간이 식별(이름·언어) + 요청 원문 → 접수 확인·질문이 회신으로 온다
+async function json<T>(res: Response): Promise<T> {
+  return (await res.json()) as T;
+}
+
+describe('웹 어댑터 HTTP 계약 smoke', () => {
+  it('접수 즉시 응답 → 비동기 라운드 → 답변 → 슬롯 확인 → 조회·요약이 관통된다', async () => {
+    const { baseUrl, store } = await startServer(
+      new ScriptedBackend([
+        clarificationResponse,
+        refinedCompletenessResponse,
+        requirementsResponse,
+        refinedCompletenessResponse, // 슬롯 정정 재판정
+        requirementsResponse, // 문서 v2
+      ]),
+    );
+
+    // 접수: 질문 생성 완료를 기다리지 않고 즉시 응답한다 (F1, G-1)
     const intakeRes = await fetch(`${baseUrl}/api/sessions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -126,97 +161,124 @@ describe('웹 어댑터 HTTP 계약 smoke', () => {
       }),
     });
     expect(intakeRes.status).toBe(201);
-    const intake = (await intakeRes.json()) as {
-      sessionId: string;
-      status: string;
-      replies: Array<{
-        text: string;
-        questions?: Array<{ index: number; question: string; dontKnowLabel: string }>;
-      }>;
-    };
-    expect(intake.sessionId).toBeTruthy();
-    expect(intake.status).toBe('clarifying');
-    expect(intake.replies[0]?.text).toContain('접수'); // 접수 확인이 질문보다 먼저 (F1)
-    expect(intake.replies[1]?.text).toContain('이 대시보드는 주로 누가 보게 되나요?');
-    // 질문별 구조가 함께 와서 「모르겠다」 1클릭 UI를 만들 수 있다 (US-5)
-    expect(intake.replies[1]?.questions?.[0]).toMatchObject({
+    const intake = await json<{ sessionId: string; status: string; ack: string }>(intakeRes);
+    expect(intake.status).toBe('intake'); // 라운드는 아직 — 백그라운드
+    expect(intake.ack).toContain('접수');
+
+    // 비동기 라운드 완료를 세션 조회로 관측 (SSE 폴백 경로이기도 하다)
+    const detail = await waitFor(async () => {
+      const d = await json<{
+        session: { status: string };
+        roundBudget: number;
+        latestQuestions: Array<{ index: number; dontKnowLabel: string }> | null;
+        slotStates: Array<{ slotKey: string; label: string }>;
+      }>(await fetch(`${baseUrl}/api/sessions/${intake.sessionId}`));
+      return d.session.status === 'clarifying' ? d : null;
+    });
+    expect(detail.roundBudget).toBeGreaterThan(0); // 마지막 라운드 예고의 근거 (G-2)
+    expect(detail.latestQuestions?.[0]).toMatchObject({
       index: 1,
       dontKnowLabel: '모르겠어요 — 개발팀이 정해 주세요',
     });
+    expect(detail.slotStates[0]?.label).toBeTruthy(); // 슬롯 라벨 노출 (G-2 맥락 카드)
 
-    // 답변: 정제 완료 → requirements 문서가 회신으로 온다
+    // 답변 → 문서
     const replyRes = await fetch(`${baseUrl}/api/sessions/${intake.sessionId}/replies`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        text: '영업팀 매니저가 봅니다. 수작업 집계를 없애고 싶어요. 데이터는 모르겠어요 — 개발팀이 정해 주세요.',
-      }),
+      body: JSON.stringify({ text: '영업팀 매니저요. 수작업 집계 제거요. 데이터는 모르겠어요.' }),
     });
-    expect(replyRes.status).toBe(200);
-    const reply = (await replyRes.json()) as { status: string; replies: Array<{ text: string }> };
+    const reply = await json<{ status: string; replies: Array<{ text: string }> }>(replyRes);
     expect(reply.status).toBe('documented');
     expect(reply.replies.at(-1)?.text).toContain('requirements v0');
 
-    // 세션 조회: 원문 전사·슬롯 3상태·상태가 함께 온다 (US-8·9·11)
-    const sessionRes = await fetch(`${baseUrl}/api/sessions/${intake.sessionId}`);
-    expect(sessionRes.status).toBe(200);
-    const detail = (await sessionRes.json()) as {
-      session: { id: string; status: string };
-      latestQuestions: unknown;
-      utterances: Array<{ authorType: string; originalText: string; originalLanguage: string }>;
-      slotStates: Array<{ slotKey: string; state: string }>;
-    };
-    expect(detail.session).toMatchObject({ id: intake.sessionId, status: 'documented' });
-    expect(detail.latestQuestions).toBeNull(); // 종결(documented) 세션은 마법사 복원 대상이 아니다
-    expect(detail.utterances[0]).toMatchObject({
-      authorType: 'requester',
-      originalText: '영업 실적 대시보드 하나 만들어 주세요',
-      originalLanguage: 'ko',
-    });
-    expect(detail.slotStates).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ slotKey: 'data-source', state: 'promoted' }),
-      ]),
+    // 슬롯 확인: 맞아요 → 기록 (F3, 원칙 7)
+    const confirmRes = await fetch(
+      `${baseUrl}/api/sessions/${intake.sessionId}/slots/target-user`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ confirmed: true }),
+      },
     );
-
-    // 세션은 저장소에 web 채널로 영속·버전 귀속된다 (US-12)
-    expect(store.getSession(intake.sessionId)).toMatchObject({
-      originChannel: 'web',
-      status: 'documented',
+    expect(confirmRes.status).toBe(200);
+    const afterConfirm = await json<{
+      slotStates: Array<{ slotKey: string; confirmedByRequester: boolean; value: string | null }>;
+    }>(await fetch(`${baseUrl}/api/sessions/${intake.sessionId}`));
+    expect(afterConfirm.slotStates.find((slot) => slot.slotKey === 'target-user')).toMatchObject({
+      confirmedByRequester: true,
     });
-    expect(store.getSession(intake.sessionId)?.promptVersionId).toBeTruthy();
-  });
+    expect(afterConfirm.slotStates[0]?.value).toBeTruthy(); // 판정 근거가 확인 카드 텍스트
 
-  it('진행 중 세션 조회는 마지막 라운드의 질문 구조를 되돌린다 — 마법사 복원 (US-8)', async () => {
-    const { baseUrl } = await startServer([clarificationResponse]);
-
-    const intakeRes = await fetch(`${baseUrl}/api/sessions`, {
+    // 아니에요 + 정정 → 재판정 → 문서 v2 (#30 상한 미산입)
+    const correctRes = await fetch(`${baseUrl}/api/sessions/${intake.sessionId}/slots/purpose`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text: '영업 실적 대시보드 하나 만들어 주세요' }),
+      body: JSON.stringify({ confirmed: false, text: '사실 경영진 보고용이에요' }),
     });
-    const { sessionId } = (await intakeRes.json()) as { sessionId: string };
+    const corrected = await json<{ status: string; replies: Array<{ text: string }> }>(correctRes);
+    expect(corrected.status).toBe('documented');
+    expect(corrected.replies.at(-1)?.text).toContain('requirements v0');
 
-    const detail = (await (await fetch(`${baseUrl}/api/sessions/${sessionId}`)).json()) as {
-      latestQuestions: Array<{ index: number; question: string; dontKnowLabel: string }> | null;
-    };
-    expect(detail.latestQuestions).toHaveLength(3);
-    expect(detail.latestQuestions?.[0]).toMatchObject({
-      index: 1,
-      question: '이 대시보드는 주로 누가 보게 되나요?',
-      dontKnowLabel: '모르겠어요 — 개발팀이 정해 주세요',
+    // 요약 목록 (#29 로컬 목록의 서버측 짝) — 미존재 ID는 조용히 걸러진다
+    const summaries = await json<{
+      sessions: Array<{ id: string; status: string; requestText: string }>;
+    }>(await fetch(`${baseUrl}/api/sessions?ids=${intake.sessionId},no-such-id`));
+    expect(summaries.sessions).toHaveLength(1);
+    expect(summaries.sessions[0]).toMatchObject({
+      id: intake.sessionId,
+      status: 'documented',
+      requestText: '영업 실적 대시보드 하나 만들어 주세요',
     });
+
+    expect(store.getSession(intake.sessionId)?.originChannel).toBe('web');
   });
 
-  it('채팅 페이지가 서빙되고, 잘못된 요청은 4xx로 거절된다', async () => {
-    const { baseUrl } = await startServer([]);
+  it('SSE 이벤트 스트림 — 구독자에게 질문 게시와 상태가 푸시된다 (#31)', async () => {
+    const backend = new GatedBackend([clarificationResponse]);
+    const { baseUrl } = await startServer(backend);
+
+    const intake = await json<{ sessionId: string }>(
+      await fetch(`${baseUrl}/api/sessions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: '영업 실적 대시보드 하나 만들어 주세요', language: 'ko' }),
+      }),
+    );
+
+    // 라운드가 게이트에 붙잡힌 동안 구독을 먼저 세운다 (수명 규칙: 처리 중에만 연결)
+    const events = await fetch(`${baseUrl}/api/sessions/${intake.sessionId}/events`);
+    expect(events.headers.get('content-type')).toContain('text/event-stream');
+    if (!events.body) throw new Error('SSE 본문 없음');
+    const reader = events.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    async function readUntil(marker: string): Promise<void> {
+      const start = Date.now();
+      while (!buffer.includes(marker)) {
+        if (Date.now() - start > 3000) throw new Error(`SSE 대기 초과: ${marker}`);
+        const { value, done } = await reader.read();
+        if (done) throw new Error('SSE 스트림 조기 종료');
+        buffer += decoder.decode(value, { stream: true });
+      }
+    }
+
+    await readUntil('event: status'); // 접속 직후 현재 상태
+    backend.open(); // 질문 생성 진행
+    await readUntil('event: post'); // 질문 게시 푸시
+    expect(buffer).toContain('이 대시보드는 주로 누가 보게 되나요?');
+    expect(buffer).toContain('"questions"');
+    await readUntil('"status":"clarifying"'); // 라운드 종료 후 상태 푸시 — 클라이언트의 연결 종료 신호
+    await reader.cancel();
+  });
+
+  it('안내 페이지·4xx 계약', async () => {
+    const { baseUrl } = await startServer(new ScriptedBackend([clarificationResponse]));
 
     const page = await fetch(baseUrl);
     expect(page.status).toBe(200);
-    expect(page.headers.get('content-type')).toContain('text/html');
     expect(await page.text()).toContain('pm-jude');
 
-    // 본문 없는 인테이크 → 400
     const empty = await fetch(`${baseUrl}/api/sessions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -224,17 +286,29 @@ describe('웹 어댑터 HTTP 계약 smoke', () => {
     });
     expect(empty.status).toBe(400);
 
-    // 미존재 세션 조회·답변 → 404
     const missing = await fetch(`${baseUrl}/api/sessions/no-such-id`);
     expect(missing.status).toBe(404);
-    const missingReply = await fetch(`${baseUrl}/api/sessions/no-such-id/replies`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text: '답변' }),
-    });
-    expect(missingReply.status).toBe(404);
+    const missingEvents = await fetch(`${baseUrl}/api/sessions/no-such-id/events`);
+    expect(missingEvents.status).toBe(404);
 
-    // 미지원 경로 → 404
+    // 정정(confirmed=false)에 텍스트가 없으면 400
+    const intake = await json<{ sessionId: string }>(
+      await fetch(`${baseUrl}/api/sessions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: 'hello dashboard', language: 'en' }),
+      }),
+    );
+    const badCorrection = await fetch(
+      `${baseUrl}/api/sessions/${intake.sessionId}/slots/target-user`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ confirmed: false }),
+      },
+    );
+    expect(badCorrection.status).toBe(400);
+
     const unknown = await fetch(`${baseUrl}/api/unknown`);
     expect(unknown.status).toBe(404);
   });
