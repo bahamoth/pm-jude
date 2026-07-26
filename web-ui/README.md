@@ -3,6 +3,16 @@
 Next.js(App Router) + shadcn/ui 프론트엔드 ([ADR-0008](../docs/adr/0008-frontend-nextjs-shadcn.md)).
 로직은 채널 비의존 코어 러너(백엔드)에 있고, 이 앱은 API 서버의 HTTP 계약만 소비한다.
 
+## 사용 계약 — 전면 클라이언트 SPA (#26 스택 재검토로 추인)
+
+이 앱은 Next를 **클라이언트 SPA 셸**로만 쓴다. Next의 AI 코딩 위험 축(암묵 캐싱,
+서버/클라이언트 경계, 메이저 간 breaking)은 이 계약 아래에서 비활성이다:
+
+- 페이지·컴포넌트는 `'use client'` — Server Components·Server Actions·Route Handlers 금지
+- 데이터는 전부 `/api` 프록시(→ API 서버) 경유 — Next 서버에서의 fetch·DB 접근 금지
+- `components.json`은 `rsc: false` — shadcn 생성물도 클라이언트 전용
+- 이 계약을 깨는 변경은 ADR 개정을 동반해야 한다
+
 ## 실행
 
 두 프로세스를 리포지토리 루트에서 띄운다:
