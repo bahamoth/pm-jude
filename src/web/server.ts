@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { LlmBackend } from '../gateway/backend';
 import type { UsageLogger } from '../gateway/gateway';
+import { clarificationOutputSchema } from '../prompts/clarification-v0';
 import type { PromptRegistry } from '../prompts/registry';
 import {
   IntakeRunner,
@@ -56,32 +57,19 @@ function toReplyQuestions(payload: ClarificationRoundPayload): ReplyQuestion[] {
 
 /**
  * clarification_round 신호에 영속된 질문 구조를 복원한다 (세션 재개용 — DB 값이라 런타임 검증).
- * 형태가 어긋나면 null — 어댑터는 자유 입력으로 강등한다.
+ * 검증은 명확화 출력 zod 스키마를 재사용한다. 어긋나면 null — 어댑터는 자유 입력으로 강등한다.
  */
 function parseStoredQuestions(payload: unknown): ReplyQuestion[] | null {
   if (typeof payload !== 'object' || payload === null) return null;
   const { questions } = payload as { questions?: unknown };
-  if (!Array.isArray(questions) || questions.length === 0) return null;
-  const parsed: ReplyQuestion[] = [];
-  for (const [i, raw] of questions.entries()) {
-    if (typeof raw !== 'object' || raw === null) return null;
-    const q = raw as {
-      question?: unknown;
-      exampleOptions?: unknown;
-      dontKnowPath?: { label?: unknown };
-    };
-    if (typeof q.question !== 'string' || typeof q.dontKnowPath?.label !== 'string') return null;
-    if (!Array.isArray(q.exampleOptions) || q.exampleOptions.some((o) => typeof o !== 'string')) {
-      return null;
-    }
-    parsed.push({
-      index: i + 1,
-      question: q.question,
-      exampleOptions: q.exampleOptions as string[],
-      dontKnowLabel: q.dontKnowPath.label,
-    });
-  }
-  return parsed;
+  const parsed = clarificationOutputSchema.shape.questions.safeParse(questions);
+  if (!parsed.success || parsed.data.length === 0) return null;
+  return parsed.data.map((question, i) => ({
+    index: i + 1,
+    question: question.question,
+    exampleOptions: [...question.exampleOptions],
+    dontKnowLabel: question.dontKnowPath.label,
+  }));
 }
 
 const collectorPort: ChannelPort<ReplyCollector> = {

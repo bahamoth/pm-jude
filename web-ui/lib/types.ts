@@ -12,9 +12,12 @@ export interface Reply {
   questions?: ReplyQuestion[];
 }
 
+/** 코어 러너가 세션에 부여하는 상태 집합 (src/runner/core-runner.ts). */
+export type SessionStatus = 'intake' | 'clarifying' | 'documented' | 'closed';
+
 export interface RoundResult {
   sessionId: string;
-  status: string;
+  status: SessionStatus;
   terminalState: string | null;
   replies: Reply[];
 }
@@ -31,7 +34,7 @@ export interface SessionDetail {
   latestQuestions: ReplyQuestion[] | null;
   session: {
     id: string;
-    status: string;
+    status: SessionStatus;
     terminalState: string | null;
     roundCount: number;
     originChannel: string;

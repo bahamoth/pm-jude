@@ -1,36 +1,33 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# web-ui — pm-jude 요청 인테이크 프론트
 
-## Getting Started
+Next.js(App Router) + shadcn/ui 프론트엔드 ([ADR-0008](../docs/adr/0008-frontend-nextjs-shadcn.md)).
+로직은 채널 비의존 코어 러너(백엔드)에 있고, 이 앱은 API 서버의 HTTP 계약만 소비한다.
 
-First, run the development server:
+## 실행
+
+두 프로세스를 리포지토리 루트에서 띄운다:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm web       # API 서버 (기본 http://127.0.0.1:8787) — ANTHROPIC_API_KEY 필요
+pnpm web:ui    # Next dev (http://localhost:3000) — /api를 API 서버로 프록시
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+LLM 자격 증명 없이 UI만 확인하려면:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+PMJUDE_FAKE_BACKEND=1 pnpm web   # 결정론적 시나리오, 별도 DB(data/pm-jude-fake.db)
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+API 서버 주소가 다르면 `PMJUDE_API_URL`로 프록시 대상을 바꾼다 (`next.config.ts`).
 
-## Learn More
+## 구조
 
-To learn more about Next.js, take a look at the following resources:
+- `app/page.tsx` — 화면 상태 머신: 인테이크 → 대기 → 명확화 마법사 → 문서/보류
+- `components/` — 인테이크 폼·대기 카드·질문 마법사·문서 뷰·전사 (shadcn/ui는 `components/ui/`)
+- `lib/` — API 클라이언트·답변 조립·문서 파서 (순수 로직, `pnpm --dir web-ui test`)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 검사
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+pnpm --dir web-ui typecheck && pnpm --dir web-ui lint && pnpm --dir web-ui test && pnpm --dir web-ui build
+```

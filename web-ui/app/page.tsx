@@ -94,11 +94,12 @@ export default function Home() {
 
   async function handleIntake(input: IntakeInput) {
     setStage({ kind: 'waiting', phase: 'intake' });
-    pushTranscript([{ who: 'requester', text: input.text }]);
     try {
       const result = await startSession(input);
       localStorage.setItem(SESSION_KEY, result.sessionId);
       setSessionId(result.sessionId);
+      // 전사 반영은 성공 후 — 실패한 발화가 이력에 남지 않게 한다
+      pushTranscript([{ who: 'requester', text: input.text }]);
       routeRound(result, 0);
     } catch (error) {
       setStage({ kind: 'error', message: error instanceof Error ? error.message : '요청 실패' });
@@ -108,9 +109,10 @@ export default function Home() {
   async function handleAnswer(text: string, round: number) {
     if (!sessionId) return;
     setStage({ kind: 'waiting', phase: 'reply' });
-    pushTranscript([{ who: 'requester', text }]);
     try {
-      routeRound(await sendReply(sessionId, text), round);
+      const result = await sendReply(sessionId, text);
+      pushTranscript([{ who: 'requester', text }]);
+      routeRound(result, round);
     } catch (error) {
       setStage({ kind: 'error', message: error instanceof Error ? error.message : '전송 실패' });
     }
