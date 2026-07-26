@@ -970,6 +970,22 @@
         "body": "PR #23 rebase 머지로 종결 (운영자 머지, release 0.5.0). 후속: pnpm dev 동시 기동에 핫 리로드(API tsx watch) 추가 — PR #25 (1커밋, CI 통과, 머지 대기). 이연 3건(슬롯 값 요청자 언어화·계약 타입 공유·슬롯 한정 되물음 프롬프트)은 앞선 코멘트 참조."
       }
     ]
+  },
+  {
+    "id": 36,
+    "title": "pnpm dev 로컬 허브 — 이슈 보드·트레이스·문서 호스팅",
+    "state": "open",
+    "labels": [
+      "ready-for-agent"
+    ],
+    "type": "task",
+    "assignee": "claude",
+    "parent": null,
+    "blockedBy": [],
+    "created": "2026-07-26",
+    "updated": "2026-07-26",
+    "body": "운영자 지시 (2026-07-26): pnpm dev 환경에서 문서와 이슈들도 호스팅.\n\n## 구현\n- API 서버가 로컬 허브: GET / 허브 페이지(웹 UI·보드·트레이스·핵심 문서 링크)\n- /board → 이슈 보드(issues/index.html)\n- /trace → 세션 트레이스를 현재 DB에서 실시간 렌더링(정적 data/trace.html 생성 불필요)\n- /repo/** → 저장소 문서 서빙(화이트리스트: docs/·issues/·루트 md) — md는 뷰어로 렌더링(marked 벤더링, mermaid 블록은 기존 벤더 mermaid), 디렉터리는 목록\n- Next 프록시에 /board·/trace·/repo 추가 — localhost:3000에서도 동일 경로\n- 경로 이탈 차단, 루프백 전제 유지",
+    "comments": []
   }
 ]
 </script>
