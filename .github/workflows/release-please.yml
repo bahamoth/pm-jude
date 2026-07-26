@@ -4,6 +4,13 @@ on:
   push:
     branches: [main]
 
+# 연속 푸시가 런 2개를 동시에 띄우면 뒤 런이 앞 런의 라벨 교체와 충돌한다
+# (autorelease: pending 제거 404). 직렬화하되 취소하지 않는다 — 뒤 런은
+# 앞 런 종료 후 시작해 pending PR이 없으면 정상 종료한다.
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
 permissions:
   contents: write
   pull-requests: write
