@@ -992,6 +992,22 @@
         "body": "코드 완료 — PR #27 (rebase 머지 대기, CI 통과). API 서버가 로컬 허브: /(허브)·/board(보드)·/trace(현재 DB 실시간 렌더링)·/repo/**(문서 — marked 16.4.1 벤더 md 뷰어 + mermaid 펜스 렌더링, 디렉터리 목록, 상대 링크 탐색). Next 프록시로 localhost:3000에서 동일 경로. 화이트리스트(docs/·issues/·루트 정본 md)만 서빙 — 코드·데이터·환경 파일·경로 이탈 404. 허브 계약 테스트 포함 100 테스트, Chrome 실확인(보드·md 뷰어·mermaid·다크 모드, 콘솔 0)."
       }
     ]
+  },
+  {
+    "id": 37,
+    "title": "운영 표면 UI 통일 — 수제 스타일 폐기, shadcn 디자인 언어로",
+    "state": "open",
+    "labels": [
+      "ready-for-agent"
+    ],
+    "type": "task",
+    "assignee": "claude",
+    "parent": null,
+    "blockedBy": [],
+    "created": "2026-07-26",
+    "updated": "2026-07-26",
+    "body": "운영자 지시 (2026-07-26): 전체 UI가 2종류 — 보드·트레이스·허브/문서·architecture의 수제 스타일(종이 질감·세리프 워드마크·주황 액센트)과 메인 intake(web-ui)의 shadcn 디자인. shadcn 쪽으로 일관되게 통일한다.\n\n## 범위\n- issues/index.html 셸 CSS — shadcn 토큰·컴포넌트 문법(카드·배지·인풋·다이얼로그)으로 재스타일. 데이터 아일랜드·렌더 로직은 불변\n- src/trace/render-html.ts — 트레이스 뷰어 셸 동일 처리\n- src/web/dev-site.ts — 허브·md 뷰어·디렉터리 목록 셸 동일 처리\n- docs/architecture.html — 셸 CSS 동일 처리 (mermaid 블록은 정본 미러이므로 불변)\n\n## 방침\n- web-ui/app/globals.css의 neutral oklch 토큰을 정본으로 삼아 self-contained CSS 변수로 이식 (테마 토글 없는 페이지이므로 prefers-color-scheme으로 다크 대응)\n- 세리프 워드마크·종이 질감·주황 액센트 폐기. 보드 컬럼·상태 배지의 구분 색만 절제된 팔레트로 유지\n- DOM 구조·클래스명·데이터 아일랜드 규약은 유지 — 시각 계층만 교체",
+    "comments": []
   }
 ]
 </script>
