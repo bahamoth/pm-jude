@@ -1,0 +1,54 @@
+// API 서버(src/web/server.ts)의 HTTP 계약과 1:1 — 서버가 진실 원천이다.
+
+export interface ReplyQuestion {
+  index: number;
+  question: string;
+  exampleOptions: string[];
+  dontKnowLabel: string;
+}
+
+export interface Reply {
+  text: string;
+  questions?: ReplyQuestion[];
+}
+
+export interface RoundResult {
+  sessionId: string;
+  status: string;
+  terminalState: string | null;
+  replies: Reply[];
+}
+
+export interface Utterance {
+  seq: number;
+  authorType: 'requester' | 'agent' | 'approver';
+  originalText: string;
+  originalLanguage: string;
+  createdAt: string;
+}
+
+export interface SessionDetail {
+  latestQuestions: ReplyQuestion[] | null;
+  session: {
+    id: string;
+    status: string;
+    terminalState: string | null;
+    roundCount: number;
+    originChannel: string;
+    createdAt: string;
+    updatedAt: string;
+    closedAt: string | null;
+  };
+  utterances: Utterance[];
+  slotStates: Array<{ slotKey: string; state: string; openIssueAssignee: string | null }>;
+}
+
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
