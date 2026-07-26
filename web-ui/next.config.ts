@@ -5,7 +5,13 @@ const API_URL = process.env.PMJUDE_API_URL ?? 'http://127.0.0.1:8787';
 
 const nextConfig: NextConfig = {
   async rewrites() {
-    return [{ source: '/api/:path*', destination: `${API_URL}/api/:path*` }];
+    return [
+      { source: '/api/:path*', destination: `${API_URL}/api/:path*` },
+      // 로컬 허브 (#36) — 운영자·개발팀 열람 표면도 3000에서 열리게 프록시
+      { source: '/board', destination: `${API_URL}/board` },
+      { source: '/trace', destination: `${API_URL}/trace` },
+      { source: '/repo/:path*', destination: `${API_URL}/repo/:path*` },
+    ];
   },
 };
 

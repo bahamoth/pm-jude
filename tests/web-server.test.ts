@@ -304,6 +304,31 @@ describe('웹 어댑터 HTTP 계약 smoke', () => {
     expect(idleBody).toContain('"processing":false');
   });
 
+  it('로컬 허브 (#36) — 보드·트레이스·문서가 호스팅되고 화이트리스트 밖은 닫힌다', async () => {
+    const { baseUrl } = await startServer(new ScriptedBackend([]));
+
+    const hub = await fetch(baseUrl);
+    expect(hub.status).toBe(200);
+    expect(await hub.text()).toContain('이슈 보드');
+
+    const board = await fetch(`${baseUrl}/board`);
+    expect(await board.text()).toContain('issues-data'); // 보드 data island
+
+    const trace = await fetch(`${baseUrl}/trace`);
+    expect(await trace.text()).toContain('trace-data'); // 실시간 렌더링된 트레이스
+
+    const prd = await fetch(`${baseUrl}/repo/PRD.md`);
+    expect(await prd.text()).toContain('marked.min.js'); // md 뷰어 셸
+
+    const adr = await fetch(`${baseUrl}/repo/docs/adr/`);
+    expect(await adr.text()).toContain('0001'); // 디렉터리 목록
+
+    // 화이트리스트 밖·경로 이탈은 404 — 코드·데이터·환경 파일은 열지 않는다
+    expect((await fetch(`${baseUrl}/repo/src/web/server.ts`)).status).toBe(404);
+    expect((await fetch(`${baseUrl}/repo/package.json`)).status).toBe(404);
+    expect((await fetch(`${baseUrl}/repo/docs/%2e%2e/package.json`)).status).toBe(404);
+  });
+
   it('안내 페이지·4xx 계약', async () => {
     const { baseUrl } = await startServer(new ScriptedBackend([clarificationResponse]));
 
