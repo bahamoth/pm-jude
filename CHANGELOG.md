@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.0](https://github.com/bahamoth/pm-jude/compare/v0.5.0...v0.6.0) (2026-07-26)
+
+
+### Features
+
+* pnpm dev — API 서버·웹 UI 동시 기동 러너 ([#35](https://github.com/bahamoth/pm-jude/issues/35)) ([f3d38ac](https://github.com/bahamoth/pm-jude/commit/f3d38ac14dceca958e23d56a5de2c8a6f681ae03))
+* 웹 서버 — 범위 제한 SSE 이벤트 스트림·요약 목록·슬롯 확인 API ([#35](https://github.com/bahamoth/pm-jude/issues/35)) ([dd42ccc](https://github.com/bahamoth/pm-jude/commit/dd42ccc3a1b134c0a49028dc8c790fdb3d90d6a7))
+* 코어 — 보류 재개·슬롯 확인·문서 정정·인테이크 분리 ([#35](https://github.com/bahamoth/pm-jude/issues/35)) ([6063064](https://github.com/bahamoth/pm-jude/commit/60630649ccbd62e0c110afd7516f8dd7d804c04f))
+
+
+### Bug Fixes
+
+* 포트 충돌 시 스택 대신 해결 안내 출력 ([#35](https://github.com/bahamoth/pm-jude/issues/35)) ([d3df77d](https://github.com/bahamoth/pm-jude/commit/d3df77ddc73f65d5f75602a5d26ba2047e3b88d1))
+
 ## [0.5.0](https://github.com/bahamoth/pm-jude/compare/v0.4.0...v0.5.0) (2026-07-26)
 
 
