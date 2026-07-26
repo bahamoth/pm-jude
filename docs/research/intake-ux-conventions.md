@@ -1,6 +1,6 @@
 # 리서치 — 인테이크·대기·재개 UX 관례 (#27)
 
-> 성격: 단계형 인테이크·트리아지를 가진 검증된 제품(Typeform, Jira Service Management, Zendesk, Linear, GitHub, Intercom)과 확립된 디자인 시스템·UX 리서치(GOV.UK Design System, HMRC, Atlassian Design System, Zendesk Garden, NN/g)의 공식 문서를 1차 출처로 조사한 결과다. 소비처는 [docs/ux/requester-journey.md](../ux/requester-journey.md)(feat/22-next-shadcn-frontend 브랜치, 보드 #23)이며, §3에서 그 문서의 화면 설계(§5.1~§5.7)에 시사점을 대응시킨다.
+> 성격: 단계형 인테이크·트리아지를 가진 검증된 제품(Typeform, Jira Service Management, Zendesk, Linear, GitHub, Intercom)과 확립된 디자인 시스템·UX 리서치(GOV.UK Design System, HMRC, Atlassian Design System, Zendesk Garden, NN/g)의 공식 문서를 1차 출처로 조사한 결과다. 소비처는 [docs/ux/requester-journey.md](../ux/requester-journey.md)(보드 #23 — 조사 시점엔 feat/22 브랜치, 이후 main 병합)이며, §3에서 그 문서의 화면 설계(§5.1~§5.7)에 시사점을 대응시킨다.
 
 ## 1. 요약 — 관례 5축
 
