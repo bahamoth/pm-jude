@@ -26,7 +26,10 @@ export function WaitingCard({ phase }: { phase: 'intake' | 'reply' }) {
   }, []);
 
   const messages = MESSAGES[phase];
-  const message = messages[Math.floor(seconds / 4) % messages.length];
+  const overdue = seconds > 120;
+  const message = overdue
+    ? '평소보다 오래 걸리고 있어요 — 조금만 더 기다려 주세요.'
+    : messages[Math.floor(seconds / 4) % messages.length];
 
   return (
     <Card aria-busy="true" aria-live="polite">
@@ -34,7 +37,8 @@ export function WaitingCard({ phase }: { phase: 'intake' | 'reply' }) {
         <Spinner className="size-8 text-primary" />
         <p className="text-base font-medium">{message}</p>
         <p className="text-sm text-muted-foreground">
-          {seconds}초 경과 · 보통 수십 초, 길면 2분까지 걸려요
+          {seconds}초 경과 ·{' '}
+          {overdue ? '응답이 없으면 곧 자동으로 중단돼요' : '보통 수십 초, 길면 2분까지 걸려요'}
         </p>
         <p className="text-xs text-muted-foreground">
           세션은 저장되고 있어요 — 페이지를 닫아도 이어서 진행할 수 있습니다.

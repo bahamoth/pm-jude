@@ -3,7 +3,8 @@ export interface TranscriptEntry {
   text: string;
 }
 
-// 대화 이력 — 서버 전사가 진실 원천이고(원칙 7) 여기는 표시만 한다. 기본 접힘.
+// 대화 이력 — 서버 세션 저장소의 원문 전사(상시 보존, US-11)를 표시만 한다. 기본 접힘.
+// 전사는 참고용이며 구현 근거는 requirements 문서뿐이다(원칙 7 — 문서 단일 진실 원천).
 export function Transcript({ entries }: { entries: TranscriptEntry[] }) {
   if (entries.length === 0) return null;
   return (

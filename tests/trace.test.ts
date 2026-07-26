@@ -82,6 +82,10 @@ describe('trace-data — 저장소 export의 조형', () => {
       slotStateCounts: { filled: 0, unfilled: 2, promoted: 0 },
       signalTypeCounts: { clarification_round: 1 },
     });
+    // 확장 신호 payload(질문 구조, #22)가 트레이스에 그대로 실린다 — 선택적 렌더링으로
+    // 바뀌어도 질문 소실을 여기서 잡는다 (AGENTS.md 상시 동반 지침)
+    const roundPayload = data.sessions[0]?.signals[0]?.payload as { questions?: unknown[] };
+    expect(roundPayload.questions).toHaveLength(3);
     const sess = data.sessions[0];
     if (!sess) throw new Error('세션 조형 결과 없음');
     expect(sess.id).toBe(result.sessionId);
