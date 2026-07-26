@@ -28,6 +28,8 @@ import {
 interface Props {
   questions: ReplyQuestion[];
   round: number;
+  /** 왕복 예산 소진 직전 — 예고 없는 강제 종결을 막는다 (P-U5, G-2) */
+  lastRound?: boolean;
   onSubmit: (text: string) => void;
 }
 
@@ -36,7 +38,7 @@ interface Props {
  * 「모르겠다 / 개발팀이 정할 문제」와 직접 입력은 모든 문항의 상시 경로다 (US-10).
  * 질문 구조가 없으면(구버전 세션 재개) 자유 입력으로 강등한다.
  */
-export function QuestionWizard({ questions, round, onSubmit }: Props) {
+export function QuestionWizard({ questions, round, lastRound, onSubmit }: Props) {
   const [step, setStep] = useState(0); // questions.length == 확인 단계
   const [answers, setAnswers] = useState<ReadonlyMap<number, WizardAnswer>>(new Map());
   const [freeText, setFreeText] = useState('');
@@ -88,11 +90,19 @@ export function QuestionWizard({ questions, round, onSubmit }: Props) {
     <Card>
       <CardHeader className="gap-3">
         <div className="flex items-center justify-between gap-3">
-          <Badge variant="secondary">명확화 {round}라운드</Badge>
+          <span className="flex items-center gap-2">
+            <Badge variant="secondary">명확화 {round}라운드</Badge>
+            {lastRound && <Badge>마지막 확인</Badge>}
+          </span>
           <span className="text-sm text-muted-foreground">
             {reviewing ? '답변 확인' : `질문 ${step + 1} / ${total}`}
           </span>
         </div>
+        {lastRound && (
+          <p className="text-xs text-muted-foreground">
+            이번 답변으로 정리되지 않은 항목은 개발팀 확인으로 넘기거나, 요청을 보류로 정리해요.
+          </p>
+        )}
         <Progress value={(Math.min(step, total) / total) * 100} />
         {current ? (
           <>

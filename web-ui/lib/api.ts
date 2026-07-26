@@ -1,8 +1,14 @@
-import { ApiError, type RoundResult, type SessionDetail } from './types';
+import {
+  ApiError,
+  type IntakeResult,
+  type RoundResult,
+  type SessionDetail,
+  type SessionSummary,
+} from './types';
 
 // /api는 next.config 프록시로 API 서버(pnpm web)에 닿는다 (ADR-0008).
 
-// 게이트웨이 LLM 타임아웃(기본 120초)보다 여유를 두고 끊는다 — 무한 대기 방지(요구 4).
+// 게이트웨이 LLM 타임아웃(기본 120초)보다 여유를 두고 끊는다 — 무한 대기 방지.
 const REQUEST_TIMEOUT_MS = 150_000;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -11,10 +17,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     res = await fetch(path, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
   } catch (error) {
     if (error instanceof DOMException && error.name === 'TimeoutError') {
-      throw new ApiError(
-        0,
-        '응답이 늦어지고 있어요 — 「이어서 진행」으로 세션을 다시 불러올 수 있어요.',
-      );
+      throw new ApiError(0, '응답이 늦어지고 있어요 — 잠시 후 새로고침으로 이어갈 수 있어요.');
     }
     throw error;
   }
@@ -33,7 +36,7 @@ export function startSession(input: {
   name?: string;
   language: 'ko' | 'en';
   text: string;
-}): Promise<RoundResult> {
+}): Promise<IntakeResult> {
   return request('/api/sessions', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -49,6 +52,32 @@ export function sendReply(sessionId: string, text: string): Promise<RoundResult>
   });
 }
 
+export function confirmSlot(
+  sessionId: string,
+  slotKey: string,
+  confirmed: boolean,
+  text?: string,
+): Promise<RoundResult> {
+  return request(
+    `/api/sessions/${encodeURIComponent(sessionId)}/slots/${encodeURIComponent(slotKey)}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ confirmed, ...(text !== undefined ? { text } : {}) }),
+    },
+  );
+}
+
 export function getSession(sessionId: string): Promise<SessionDetail> {
   return request(`/api/sessions/${encodeURIComponent(sessionId)}`);
+}
+
+export function getSummaries(ids: string[]): Promise<{ sessions: SessionSummary[] }> {
+  if (ids.length === 0) return Promise.resolve({ sessions: [] });
+  return request(`/api/sessions?ids=${ids.map(encodeURIComponent).join(',')}`);
+}
+
+/** 백그라운드 질문 생성 실패 시 재시도 (SSE error 이벤트의 복구 경로). */
+export function retryRound(sessionId: string): Promise<{ accepted: boolean }> {
+  return request(`/api/sessions/${encodeURIComponent(sessionId)}/rounds`, { method: 'POST' });
 }
