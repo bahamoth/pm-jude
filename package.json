@@ -30,6 +30,7 @@
     "retro": "tsx src/cli/retro.ts",
     "slack": "tsx src/cli/slack.ts",
     "web": "tsx src/cli/web.ts",
+    "web:watch": "tsx watch src/cli/web.ts",
     "web:ui": "pnpm --dir web-ui dev",
     "dev": "node scripts/dev.mjs"
   },

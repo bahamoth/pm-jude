@@ -23,7 +23,9 @@ PMJUDE_FAKE_BACKEND=1 pnpm dev    # LLM 자격 증명 없이 (결정론 시나�
 ```
 
 http://localhost:3000 이 UI, http://127.0.0.1:8787 이 API다. 한쪽이 죽으면 같이 내려간다.
-따로 띄우려면 `pnpm web`(API) / `pnpm web:ui`(UI).
+둘 다 라이브 리로드된다 — UI는 Fast Refresh(상태 유지), API는 `tsx watch` 재시작(세션은
+SQLite 영속이라 이어지고, 재시작에 끊긴 라운드는 화면의 재시도 경로로 복구).
+따로 띄우려면 `pnpm web`(API, 감시 없음) / `pnpm web:ui`(UI).
 
 API 서버 주소가 다르면 `PMJUDE_API_URL`로 프록시 대상을 바꾼다 (`next.config.ts`).
 
