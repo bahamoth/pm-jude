@@ -1,6 +1,6 @@
 {
   "name": "pm-jude",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "description": "AI PM 인테이크 레이어 — Phase 0 PoC",
   "type": "module",
