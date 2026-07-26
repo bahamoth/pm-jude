@@ -2,7 +2,7 @@
 
 비개발자 스테이크홀더의 모호한 요청을 인테이크하고, 개발자가 곧바로 구현에 착수할 수 있는 완결된 요구사항으로 정제하는 AI PM 인테이크 레이어. 이 문서는 프로젝트 전체가 따르는 정본 용어집이다 — 이슈 제목, 코드 식별자, 문서, 커밋 메시지에서 아래 용어를 그대로 쓴다.
 
-정본 출처: PRD.md v1.4 (§13 용어집 포함). 용어 충돌 시 이 문서가 우선하며, PRD 개정 시 이 문서를 함께 갱신한다.
+정본 출처: PRD v1.4. 개요·원칙은 [PRD.md](PRD.md)에, 나머지 섹션은 [docs/prd/](docs/prd/)에 분할되어 있다(목차: PRD.md). 용어 충돌 시 이 문서가 우선하며, PRD 개정 시 이 문서를 함께 갱신한다. 정의만으로 부족한 용어에는 원문 위치를 병기한다.
 
 ## Language
 
@@ -33,10 +33,12 @@ _Avoid_: 알림(일반 의미), 노티
 **2층 완결성 판정(Two-layer Completeness Check)**:
 룰 층(필수 슬롯·형식의 기계 검사, 결정론적)과 LLM 층(남은 의미적 모호성 판정) 두 겹으로 정제 완료를 결정하는 구조. 룰 층은 LLM의 과신 통과를 막는 백스톱이다.
 _Avoid_: 품질 검사, 밸리데이션
+원문: [§5 F2c](docs/prd/functional-requirements.md)
 
 **슬롯(Slot)**:
 요구사항이 완결되기 위해 채워져야 하는 필수 항목. 목록은 요구공학 문헌이 아니라 이 조직의 실측 재질문 유형 분류표에서 도출된다(F2e).
 _Avoid_: 필드, 항목
+원문: [§5 F2e](docs/prd/functional-requirements.md)
 
 **슬롯 3상태(Slot Tri-state)**:
 각 슬롯이 갖는 상태 — `충족` / `미충족` / `승격`. 통과 조건은 "모든 필수 슬롯이 충족 또는 승격".
@@ -44,6 +46,7 @@ _Avoid_: 필드, 항목
 **승격(Promotion)**:
 요청자가 원리적으로 답할 수 없는 슬롯을 담당자 지정 오픈이슈로 올리는 것. 요청은 멈추지 않고 조건부로 게이트에 상정된다.
 _Avoid_: 에스컬레이션, 이관
+원문: [§5 F2c](docs/prd/functional-requirements.md) — 판정 기준은 [§12-4 결정 대기](docs/prd/pending-decisions.md)
 
 **오픈이슈(Open Issue)**:
 승격된 슬롯과 담당자가 requirements 문서에 실리는 필드. Linear 이슈 본문에도 섹션으로 들어간다.
@@ -74,6 +77,7 @@ _Avoid_: 리뷰어, 담당자(모호)
 
 **종결 상태(Terminal State)**:
 `이슈 생성` / `중복 병합` / `백로그` / `거절` / `보류(정보 부족)` 5종. 모든 종결 상태는 사유를 담은 회신을 트리거하며, 회신 발송 없이는 세션 종료가 불가하다(원칙 5).
+원문: [§5 F8](docs/prd/functional-requirements.md)
 
 **중복 병합(Duplicate Merge)**:
 같은 요청이 이미 있을 때 새 이슈를 만들지 않고 기존 이슈에 요청자를 구독자로 등록하는 종결. 요청 원문·맥락은 기존 이슈에 코멘트로 첨부된다.
@@ -88,6 +92,7 @@ _Avoid_: 펜딩, 홀드
 
 **SLA 자동 백로그(SLA Auto-backlog)**:
 게이트 항목이 SLA를 초과하면 리마인더·대체자 통보를 거쳐 자동으로 백로그 전환되는 처리. 게이트가 무기한 대기하는 경로는 존재하지 않는다.
+원문: [§5 F5](docs/prd/functional-requirements.md)
 
 ### 산출물과 원칙
 
@@ -101,6 +106,7 @@ requirements 문서만이 구현 근거이며 대화 전사·목업·번역본·
 **역주입(Back-injection)**:
 목업 어노테이션에서 확정된 사항을 승인 시 requirements vN+1의 문장으로 흡수하는 것. 흡수 후 목업은 폐기 가능해야 한다.
 _Avoid_: 반영, 동기화
+원문: [§5 F4](docs/prd/functional-requirements.md)
 
 **원문 전사(Original Transcript)**:
 요청자 언어 그대로의 대화 기록. 옵션이 아니라 상시 보존 대상이며 Linear 이슈에 첨부된다.
@@ -117,6 +123,7 @@ _Avoid_: 프로토타입, 시안, 와이어프레임
 **고정 오케스트레이션(Predefined Control Flow)**:
 단계 전이를 코드로 작성된 상태 머신이 결정하고, LLM은 단계 안의 구조화 호출로만 존재하는 방식. 자율 에이전트 루프의 반대 개념.
 _Avoid_: 워크플로우 엔진, 파이프라인(모호)
+원문: [PRD.md §3 원칙 2](PRD.md) — 상태 머신 전 경로는 [§7](docs/prd/system.md)
 
 **결정론적(Deterministic)**:
 같은 입력이면 항상 같은 출력. 이 저장소에서는 룰 기반 구조 검사와 게이트 강제 코드에만 쓴다. LLM 호출에는 쓰지 않는다.
@@ -128,6 +135,7 @@ _Avoid_: 대화, 스레드, 티켓
 **세션 귀속(Provenance)**:
 생성된 이슈에 세션 ID를 기계 판독 가능한 형태로 남기는 것. 우회율 자동 집계의 전제.
 _Avoid_: 추적, 태깅
+원문: [§5 F6](docs/prd/functional-requirements.md)
 
 **채널 어댑터(Channel Adapter)**:
 코어를 특정 표면(웹/Slack, 향후 Teams/이메일)에 연결하는 탈부착 모듈. 모든 어댑터는 동일한 코어 API만 호출한다.
@@ -137,11 +145,13 @@ _Avoid_: 추적, 태깅
 
 **헤드리스 하네스(Headless Harness)**:
 Claude Code를 UI 없이 프로그램적으로 실행하는 Phase 0 한정 게이트웨이 백엔드. Claude Agent SDK로 구현한다(ADR-0005).
+원문: [§5 F14](docs/prd/functional-requirements.md)
 
 ### 품질과 개선
 
 **다운스트림 신호(Downstream Signal)**:
 정제 품질의 궁극 판정자 — 게이트 결정·사유 태그, 재질문, reopen, 스펙 변경, 목업 반복, 후행 피드백, CSAT. 내부 점수가 아니다.
+원문: [§5 F11 신호 표](docs/prd/functional-requirements.md)
 
 **재질문(Re-question)**:
 승인 통과 후 개발자가 요구사항 불충분으로 다시 묻는 행위. 유형 분류가 슬롯 목록 갱신(F2e)의 입력이다.
@@ -167,6 +177,7 @@ _Avoid_: 추가 질문, 문의
 
 **우회율(Bypass Rate)**:
 provenance 없는 기능 요청 이슈 수 / 전체 기능 요청 이슈 수. 롤아웃 정책 발효 후에는 채택이 아니라 컴플라이언스 지표로 읽는다.
+원문: [§10](docs/prd/metrics-and-risks.md)
 
 **선행 지표(Leading Indicator)**:
 문제 확정 전에 먼저 움직이는 채택 신호 — 세션 중도 이탈율, 재사용률, 요청자 소요 시간. 판단은 선행 지표로 한다.
@@ -176,3 +187,4 @@ provenance 없는 기능 요청 이슈 수 / 전체 기능 요청 이슈 수. �
 
 **소급 아카이브 분석(Retrospective Archive Analysis)**:
 최근 6~12개월 Linear 아카이브에서 재질문·reopen·스펙 편집을 추출해 베이스라인과 재질문 유형 분류표를 산출하는 Phase 0 작업(ADR-0004).
+원문: [§9](docs/prd/scope-and-milestones.md)
