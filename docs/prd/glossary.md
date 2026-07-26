@@ -18,7 +18,12 @@
 - **언퍼링** — 메신저의 링크 미리보기 자동 생성. 데이터 유출 통로가 될 수 있어 끈다.
 - **목업** — 요구 확인용 중간충실도 인터랙티브 화면. 구현 결과물·코드 기준이 아니다.
 - **우회율** — PM Jude를 거치지 않고 개발자에게 직접 간 요청의 비율. 정책 강제 후에는 채택이 아니라 **컴플라이언스** 지표로 읽는다.
-- **LLM-as-judge / 골든 데이터셋 / 회귀 평가 / 프롬프트 레지스트리 / 카나리 배포 / Goodhart 법칙** — v1.1 정의 유지(judge는 L2 도입 후 활성).
+- **LLM-as-judge** — LLM 출력의 품질 채점을 다른 LLM에게 맡기는 기법. 기본 비활성이며 L2 도입 조건(§12) 충족 후에만 활성.
+- **골든 데이터셋(골든셋)** — 회귀 평가의 기준으로 쓰는 익명화 실제 세션 모음. 평가용/개선용 분리, 분기 갱신, 자체 버전 관리(F12).
+- **회귀 평가** — 프롬프트·스키마 변경분을 골든셋에 다시 돌려 기존 품질이 깨지지 않았는지 확인하는 절차. 미통과 버전은 런타임에 로드되지 않는다(F12).
+- **프롬프트 레지스트리** — 프롬프트를 버전 단위로 등록·관리하는 저장소. 런타임 세션은 항상 명시적 버전을 참조한다(F12).
+- **카나리 배포** — 새 버전을 신규 세션 일부에만 적용하고 재측정 후 승격/롤백하는 배포 방식.
+- **Goodhart 법칙** — 지표가 목표가 되는 순간 좋은 지표이기를 멈춘다는 경험칙. 반려율을 단독 최적화하지 않고 짝지표와 함께 평가하는 근거(§10).
 - **헤드리스 하네스(`claude -p` / Claude Agent SDK)** — Claude Code를 UI 없이 프로그램적으로 실행하는 방식. Phase 0 한정 임시 백엔드.
 - **PoC** — 최소 구성으로 핵심 가설(명확화 품질·채택)을 검증하는 선행 단계.
 
@@ -35,7 +40,7 @@
 - Cloudflare R2/Workers: developers.cloudflare.com
 - 모델 추상화: ai-sdk.dev · docs.litellm.ai · AWS Bedrock Converse API
 - 오케스트레이션 원칙(workflows vs agents, "predefined code paths"): anthropic.com/research/building-effective-agents
-- 평가 도구(채택 후보): langfuse.com(셀프호스트) · promptfoo.dev · braintrust.dev
+- 평가 도구(채택 후보): langfuse.com(셀프호스트) · promptfoo.dev
 - Claude Code 헤드리스/Agent SDK: code.claude.com/docs
 
 *비고: 외부 도구·API 상태는 2026-07 기준이며 변동 가능. Linear for Agents API는 Developer Preview로 GA 전 변경 가능성이 명시되어 있고, Linear Agent는 2026-03 공개 베타 상태다. 벤더가 고볼륨 자동화 기능의 과금 모델을 GA 시점에 변경할 수 있다고 예고한 점은 Phase 3 네이티브화 판단 시 재확인 대상이다.*
