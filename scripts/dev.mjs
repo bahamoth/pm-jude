@@ -46,5 +46,7 @@ function shutdown(code) {
 process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
 
-run('api', ['web']);
+// api는 tsx watch — src/ 수정 시 자동 재시작 (세션은 SQLite 영속이라 이어진다).
+// ui는 next dev의 Fast Refresh. 감시 없는 1회 실행이 필요하면 pnpm web을 따로 쓴다.
+run('api', ['web:watch']);
 run('ui', ['web:ui']);
