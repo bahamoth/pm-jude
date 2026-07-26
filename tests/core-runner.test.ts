@@ -304,6 +304,83 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
     );
   });
 
+  it('보류(정보 부족) 세션은 입력으로 자동 재개된다 — 정본 전이 보류→명확화 (#30)', async () => {
+    const { runner, port, store } = makeRunner(
+      [
+        clarificationResponse,
+        unrefinedCompletenessResponse, // 1차 답변 → 상한 도달 → 보류
+        unrefinedCompletenessResponse, // 재개 답변 → 미정제
+        clarificationResponse, // 재개로 예산이 늘어 다음 라운드 질문
+      ],
+      { maxRounds: 1 },
+    );
+    await runner.handleIntake(intake);
+    await runner.handleReply({ ...intake, text: '잘 모르겠는데요' }); // → 보류 종결
+
+    const result = await runner.handleReply({ ...intake, text: '내용을 보탤게요 — 영업팀용입니다' });
+
+    expect(result).toMatchObject({ status: 'clarifying', terminalState: null });
+    const session = store.findSessionByThreadKey('web:thread-1');
+    expect(session?.closedAt).toBeNull(); // 재개는 종결 흔적을 지운다
+    expect(port.posted.at(-1)?.text).toContain('데이터는 어디에서 가져오면 되나요?');
+    expect(store.exportSessions()[0]?.signals).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'session_resumed' })]),
+    );
+  });
+
+  it('documented 세션의 슬롯 확인 — 맞아요는 확인 기록, 아니에요는 정정 재판정 (F3, 상한 미산입)', async () => {
+    const { runner, port, store } = makeRunner([
+      clarificationResponse,
+      refinedCompletenessResponse,
+      requirementsResponse,
+      refinedCompletenessResponse, // 정정 재판정 → 여전히 정제
+      requirementsResponse, // 문서 v2
+    ]);
+    await runner.handleIntake(intake);
+    await runner.handleReply({ ...intake, text: '영업팀 매니저요. 수작업 집계 제거요.' });
+    const before = store.findSessionByThreadKey('web:thread-1');
+    expect(before?.status).toBe('documented');
+
+    // 맞아요 — 확인이 슬롯 행에 기록된다 (원칙 7 슬롯 단위 확인)
+    await runner.confirmSlot(intake, 'target-user', true);
+    expect(
+      store.exportSessions()[0]?.slotStates.find((slot) => slot.slotKey === 'target-user'),
+    ).toMatchObject({ confirmedByRequester: true });
+
+    // 아니에요 + 정정 — 재판정 후 문서가 다시 게시되고, 왕복 상한(roundCount)은 늘지 않는다
+    const roundBefore = store.findSessionByThreadKey('web:thread-1')?.roundCount;
+    const outcome = await runner.confirmSlot(
+      { ...intake, text: '사실 경영진 보고용이에요' },
+      'purpose',
+      false,
+    );
+    expect(outcome?.status).toBe('documented');
+    expect(port.posted.at(-1)?.text).toContain('requirements v0');
+    expect(store.findSessionByThreadKey('web:thread-1')?.roundCount).toBe(roundBefore);
+    expect(store.exportSessions()[0]?.signals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'slot_confirmed' }),
+        expect.objectContaining({ type: 'slot_correction' }),
+      ]),
+    );
+  });
+
+  it('openSession/startClarification 분리 — 접수 확인이 먼저, 라운드는 나중에 (G-1)', async () => {
+    const { runner, port, store } = makeRunner([clarificationResponse]);
+
+    const opened = await runner.openSession(intake);
+    expect(opened.existing).toBe(false);
+    expect(port.posted).toHaveLength(1); // 접수 확인만 — LLM 호출 전
+    expect(store.getSession(opened.sessionId)?.status).toBe('intake');
+
+    await runner.startClarification(intake);
+    expect(port.posted).toHaveLength(2);
+    expect(store.getSession(opened.sessionId)).toMatchObject({
+      status: 'clarifying',
+      roundCount: 1,
+    });
+  });
+
   it('세션이 없는 threadKey의 답변은 무시한다', async () => {
     const { runner, port, store } = makeRunner([]);
 
@@ -314,13 +391,11 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
     expect(store.exportSessions()).toHaveLength(0);
   });
 
-  it('종결된 세션의 답변은 무시한다', async () => {
-    const { runner, port, store } = makeRunner(
-      [clarificationResponse, unrefinedCompletenessResponse],
-      { maxRounds: 1 },
-    );
-    await runner.handleIntake(intake);
-    await runner.handleReply({ ...intake, text: '잘 모르겠는데요' }); // → 보류 종결
+  it('보류 외의 종결 세션은 답변을 무시한다 — 재개는 보류(정보 부족) 전용 (#30)', async () => {
+    const { runner, port, store } = makeRunner([clarificationResponse]);
+    const { sessionId } = await runner.handleIntake(intake);
+    // Phase 1 종결 상태(거절 등)를 가정한 가드 회귀 방어
+    store.updateSessionState(sessionId, { status: 'closed', terminalState: 'rejected' });
 
     const postedBefore = port.posted.length;
     const result = await runner.handleReply({ ...intake, text: '추가로요' });

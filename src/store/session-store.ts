@@ -110,10 +110,13 @@ export class SessionStore {
     );
   }
 
-  /** 상태 값 집합과 전이 규칙은 호출하는 상태 머신의 것 (ADR-0001). 종결 상태를 넣으면 closedAt이 찍힌다. */
+  /**
+   * 상태 값 집합과 전이 규칙은 호출하는 상태 머신의 것 (ADR-0001).
+   * 종결 상태를 넣으면 closedAt이 찍히고, terminalState: null은 재개(보류 해제) — closedAt도 함께 비운다.
+   */
   updateSessionState(
     id: string,
-    patch: { status?: string; roundCount?: number; terminalState?: string },
+    patch: { status?: string; roundCount?: number; terminalState?: string | null },
   ): void {
     this.db
       .update(schema.session)
@@ -121,6 +124,7 @@ export class SessionStore {
         ...patch,
         updatedAt: now(),
         ...(patch.terminalState ? { closedAt: now() } : {}),
+        ...(patch.terminalState === null ? { closedAt: null } : {}),
       })
       .where(eq(schema.session.id, id))
       .run();
