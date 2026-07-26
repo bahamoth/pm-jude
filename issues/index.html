@@ -985,7 +985,13 @@
     "created": "2026-07-26",
     "updated": "2026-07-26",
     "body": "운영자 지시 (2026-07-26): pnpm dev 환경에서 문서와 이슈들도 호스팅.\n\n## 구현\n- API 서버가 로컬 허브: GET / 허브 페이지(웹 UI·보드·트레이스·핵심 문서 링크)\n- /board → 이슈 보드(issues/index.html)\n- /trace → 세션 트레이스를 현재 DB에서 실시간 렌더링(정적 data/trace.html 생성 불필요)\n- /repo/** → 저장소 문서 서빙(화이트리스트: docs/·issues/·루트 md) — md는 뷰어로 렌더링(marked 벤더링, mermaid 블록은 기존 벤더 mermaid), 디렉터리는 목록\n- Next 프록시에 /board·/trace·/repo 추가 — localhost:3000에서도 동일 경로\n- 경로 이탈 차단, 루프백 전제 유지",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-26",
+        "body": "코드 완료 — PR #27 (rebase 머지 대기, CI 통과). API 서버가 로컬 허브: /(허브)·/board(보드)·/trace(현재 DB 실시간 렌더링)·/repo/**(문서 — marked 16.4.1 벤더 md 뷰어 + mermaid 펜스 렌더링, 디렉터리 목록, 상대 링크 탐색). Next 프록시로 localhost:3000에서 동일 경로. 화이트리스트(docs/·issues/·루트 정본 md)만 서빙 — 코드·데이터·환경 파일·경로 이탈 404. 허브 계약 테스트 포함 100 테스트, Chrome 실확인(보드·md 뷰어·mermaid·다크 모드, 콘솔 0)."
+      }
+    ]
   }
 ]
 </script>
