@@ -97,7 +97,7 @@ _Avoid_: 리뷰어, 담당자(모호) / reviewer, owner (ambiguous)
 
 **Jude**:
 요청자에게 보이는 인테이크 에이전트의 인격 이름. 제품 전체를 가리키는 `PM Jude`(저장소·패키지 이름)와 구분한다 — 제품 안에서 요청자와 대화하는 주체가 Jude다.
-**EN** — The name of the character a requester talks to. Distinct from `PM Jude`, which names the product, the repository and the package. Jude is who speaks inside the product. Third person is they/them.
+**EN** — The name of the character a requester talks to. Distinct from `PM Jude`, which names the product, the repository and the package. Jude is who speaks inside the product. Third person is he/him.
 _Avoid_: 봇, 어시스턴트, 에이전트(모호) / bot, assistant, agent (ambiguous)
 원문: [docs/persona/jude.md](docs/persona/jude.md)
 
