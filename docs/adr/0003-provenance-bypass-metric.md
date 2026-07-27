@@ -1,5 +1,7 @@
 # 우회율은 세션 귀속(provenance) 스캔으로 자동 집계한다
 
+> **EN** — Bypass rate is computed by scanning issues for a machine-readable session id, not by asking developers to tag requests. Voluntary tagging fails in exactly the situations bypass happens, so the metric would bias optimistic precisely when the product is failing hardest.
+
 생성되는 모든 Linear 이슈에 세션 ID를 기계 판독 가능한 형태(커스텀 필드 또는 규약 라벨)로 남기고, 우회율은 "귀속 없는 기능 요청 이슈 수 / 전체 기능 요청 이슈 수"로 전수 집계한다. 개발자 액션은 0이다.
 
 ## Considered Options

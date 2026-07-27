@@ -1,5 +1,7 @@
 # 베이스라인은 소급 아카이브 분석으로 산출한다
 
+> **EN** — The baseline comes from a retrospective analysis of 6–12 months of Linear archive, not from a prospective two-week recording. One analysis yields both the denominator for the reduction metrics and the re-question taxonomy that the required slot list is derived from.
+
 도입 전 1~2주 전향적 기록(v1.3 방식)을 폐기하고, 최근 6~12개월의 Linear 아카이브에서 개발자의 명확화성 코멘트·reopen·스펙 편집을 추출해 두 가지를 산출한다: (a) 재질문 빈도 베이스라인(§10 감소율 지표의 분모), (b) 재질문 유형 분류표(F2e 필수 슬롯 목록의 근거).
 
 ## Considered Options

@@ -1,4 +1,7 @@
 ## 1. 문서 정보
+
+> **EN** — PRD §1 — version, revision history, intended audience. Currently v1.4.1, approved for build. Read the v1.4 entry if you need to know why the completeness schema is derived from measured re-question data rather than requirements-engineering literature.
+
 - **제품명**: **PM Jude** *(v1.3에서 확정. 유래: Product Manager의 약어 PM이 Paul McCartney의 이니셜과 같다는 데서 착안한 "Hey Jude" 언어유희. 이전 임시 코드명 Gatekeeper를 대체하며, 문서 내 역할 서술의 "게이트키퍼"는 보통명사로 유지)*
 - **버전**: v1.4.1 (확정 / Approved for build)
 - **상태**: Phase 0(PoC + 소급 베이스라인) 착수 가능

@@ -1,5 +1,7 @@
 # requirements 문서만이 구현의 근거다 (문서 단일 진실 원천)
 
+> **EN** — The `requirements` document is the only basis for implementation. Transcripts, mockups, translations and channel threads never substitute for it, which is why mockup annotations are back-injected into the document on approval and why requester confirmation happens on structured slot values in the requester's language rather than on a prose translation.
+
 대화 전사·목업·번역본·채널 스레드는 requirements 문서를 대체하지 않는다. 이 원칙에서 두 요구사항이 파생된다: ① 목업 어노테이션에서 확정된 사항은 승인 시 requirements vN+1의 문장으로 역주입되고, 흡수 후 목업은 폐기 가능해야 한다(목업에만 존재하는 확정 사항 0). ② 요청자 확인은 산문 번역본이 아니라 구조화 슬롯 값 단위로 요청자 언어로 수행하고, 원문 전사는 상시 보존한다.
 
 ## Consequences

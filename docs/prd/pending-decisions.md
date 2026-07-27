@@ -1,5 +1,7 @@
 ## 12. 오픈 이슈 / 결정 대기 항목
 
+> **EN** — PRD §12 — open decisions, and a record of which ones earlier revisions closed and why. The open list is where thresholds, the banned-vague-terms dictionary, gate SLA numbers and the promotion criterion still live.
+
 ### v1.4에서 닫힌 항목
 - ~~완결성 룰 층의 필수 슬롯 최종 목록~~ → **절차로 확정**: Phase 0 소급 분석의 재질문 유형 분류표에서 도출(F2e). 목록 자체는 데이터가 정한다.
 - ~~팀 표준 문서 언어와 원문 병기 정책~~ → **확정**: 문서는 팀 표준 언어, **원문 전사는 옵션이 아니라 상시 보존**, 요청자 확인은 슬롯 단위·요청자 언어(원칙 7).

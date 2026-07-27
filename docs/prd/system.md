@@ -1,4 +1,7 @@
 ## 6. 비기능 요구사항
+
+> **EN** — PRD §6 and §7 — non-functional requirements (mockup hosting defence in depth, multilingual and timezone handling, evaluation-data privacy, thin model neutrality, volume-fitted cost guardrails, observability) and the high-level system composition that ARCHITECTURE.md expands on.
+
 - **보안 — 목업 호스팅 다층 방어**: ① 샌드박스 usercontent 도메인 분리 ② 만료 서명 URL(HMAC-SHA256) ③ CSP `sandbox` + `default-src 'none'` + 외부 네트워크 차단 ④ 뷰어 iframe `sandbox="allow-scripts"`(allow-same-origin 배제) + postMessage origin 검증 ⑤ Slack 전송 시 `unfurl_links:false`/`unfurl_media:false` ⑥ Linear 웹훅 서명·타임스탬프 검증.
 - **다국어·시차**: 대화는 요청자 언어 / 문서는 팀 표준 언어 / **원문 전사 상시 보존** / 요청자 확인은 슬롯 단위·요청자 언어(원칙 7) / 알림·리마인더는 수신자 시간대 인지 / 게이트는 비동기 기본이되 SLA를 갖는다.
 - **평가 데이터 프라이버시**: 골든셋·판독 기록 큐레이션 시 개인·사내 민감 정보 익명화, 보존 기한, 목적 제한. 평가 도구는 셀프호스트 또는 사내 데이터 정책 충족(F12).

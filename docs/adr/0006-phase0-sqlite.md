@@ -4,6 +4,8 @@ status: accepted (2026-07-25)
 
 # Phase 0 세션 저장소는 SQLite다
 
+> **EN** — Phase 0 stores sessions, transcripts, slot states, signals and version attribution in SQLite — file-based, so there is no PoC infrastructure to run, but relational enough to enforce version attribution from day one. Postgres is the assumed Phase 1 target, so nothing depends on SQLite-only behaviour.
+
 세션·전사·슬롯 상태·신호·버전 귀속의 저장은 SQLite로 시작한다. 파일 기반이라 PoC 인프라 부담이 없으면서도 관계형 스키마로 버전 귀속(세션 × 프롬프트/모델/임계치/슬롯 스키마 버전)을 Phase 0부터 강제할 수 있고, PoC 세션이 골든셋 시드가 되므로(F12) 구조화 저장이 필요하다.
 
 ## Considered Options

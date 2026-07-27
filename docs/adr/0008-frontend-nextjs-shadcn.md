@@ -4,6 +4,8 @@ status: accepted (2026-07-26)
 
 # 웹 프론트엔드는 Next.js + shadcn/ui, pnpm workspace 멤버 `web-ui/`다
 
+> **EN** — The web frontend is Next.js (App Router) with shadcn/ui, added as the pnpm workspace member `web-ui/`. The backend keeps its single-package structure; the existing HTTP adapter stays as the API server and Next proxies `/api` to it, so the channel adapter boundary is unchanged.
+
 ARCHITECTURE.md 결정 대기 항목이던 웹 프레임워크를 확정한다(운영자 지시, 보드 #22). 프론트엔드는 시장 검증 프레임워크 Next.js(App Router)와 shadcn/ui 디자인 시스템으로 구축하고, 저장소에는 pnpm workspace 멤버 `web-ui/`로 추가한다.
 
 근거: #16의 수제 인라인 HTML 웹 표면이 UX·UI 품질 미달로 판정됐다 — 명확화 질답은 객관식 중심 마법사 동선이어야 하고, LLM 대기 구간(최대 2분)은 진행 표시·비활성화·장기 대기 안내로 처리돼야 한다. 검증된 컴포넌트 체계 없이 이 수준을 유지하는 비용이 프레임워크 도입 비용을 넘는다.

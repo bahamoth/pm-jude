@@ -1,4 +1,7 @@
 ## 10. 성공 지표
+
+> **EN** — PRD §10 and §11 — success metrics tiered into leading adoption signals (session drop-off, reuse rate, requester time spent), lagging adoption signals (bypass rate), and quality signals; plus risks and mitigations. Every reduction metric is measured against the Phase 0 retrospective baseline.
+
 > 모든 "감소율" 지표는 **Phase 0 소급 베이스라인**을 분모로 한다. 베이스라인 없는 지표는 채택하지 않는다.
 > *(v1.4)* 지표를 **선행(채택) / 후행(채택) / 품질**로 계층화한다. v1.3은 후행 지표(우회율)에 채택 판단을 전부 걸고 있었고, 그 지표가 움직였을 때는 이미 늦다.
 
