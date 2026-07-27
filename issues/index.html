@@ -1217,6 +1217,22 @@
         "body": "코드 완료 — PR #31. src/prompts/clarification-v1.ts → clarification@0.2.0, catalog에 CLARIFICATION_V1 추가, core-runner·fake-backend 참조 전환. v0은 등록 유지(버전 불변·과거 세션 귀속). 목소리 규칙 5건을 테스트로 고정. regressionPassed는 false — F12 회귀 몫."
       }
     ]
+  },
+  {
+    "id": 44,
+    "title": "요청자 여정 갭 구현 — G-9~G-11",
+    "state": "open",
+    "labels": [
+      "ready-for-agent"
+    ],
+    "type": "task",
+    "assignee": "claude",
+    "parent": 24,
+    "blockedBy": [],
+    "created": "2026-07-27",
+    "updated": "2026-07-27",
+    "body": "운영자 지시 (2026-07-27): 설계 vNext(#34)의 미구현 갭 3건을 구현한다 — docs/ux/requester-journey.md §7의 G-9·G-10·G-11.\n\n## G-9 상한 도달 시 승격 판정 (F2c ①②③, #28 S-1)\n현행은 미정제+상한이면 곧장 보류라, 승격 가능한데 미충족으로 남은 슬롯을 버린다. 남은 미충족 슬롯의 승격 가능 여부를 판정해 가능하면 오픈이슈로 올리고 조건부 문서로, 불가하면 보류로 분기한다.\n\n## G-10 오류·경합 계약 (#28 S-3·S-4)\n- 멱등 재시도: 재시도가 발화를 다시 적거나 라운드 예산을 먹지 않고, 죽은 단계(질문 생성 / 판정)만 다시 돌린다\n- 라운드 정합: 답변 제출이 응답 대상 라운드 식별자를 동반하고, 스테일 제출은 거부한다\n\n## G-11 문서 vN·종착 기록 (#28 S-2·S-5·S-6)\n- 정정 재생성 문서에 vN 표시 (정본 ERD requirements_doc vN·역주입 F4의 전제)\n- 전 슬롯 확인 완료를 세션에 기록 (#11 완주율의 분자)\n- 전면 승격 문서의 정직한 구분 표시\n\n## 범위 밖\nG-8(chrome 다국어 — 이연), O-1 보존 기간·O-2 폭주 상한 수치(운영자 결정 대기).",
+    "comments": []
   }
 ]
 </script>
