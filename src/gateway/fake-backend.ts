@@ -1,5 +1,5 @@
 import type { PromptRegistry } from '../prompts/registry';
-import { CLARIFICATION_V0, COMPLETENESS_V0, REQUIREMENTS_V0 } from '../prompts/catalog';
+import { CLARIFICATION_V1, COMPLETENESS_V0, REQUIREMENTS_V0 } from '../prompts/catalog';
 import type { BackendRequest, BackendResponse, LlmBackend } from './backend';
 
 /**
@@ -10,7 +10,7 @@ import type { BackendRequest, BackendResponse, LlmBackend } from './backend';
  * 시나리오: 1라운드 답변까지는 미정제(다음 라운드 유도), 2번째 답변부터 정제 완료.
  */
 export function createFakeBackend(registry: PromptRegistry): LlmBackend {
-  const clarificationBody = registry.get(CLARIFICATION_V0).body;
+  const clarificationBody = registry.get(CLARIFICATION_V1).body;
   const completenessBody = registry.get(COMPLETENESS_V0).body;
   const requirementsBody = registry.get(REQUIREMENTS_V0).body;
 
@@ -18,22 +18,22 @@ export function createFakeBackend(registry: PromptRegistry): LlmBackend {
     interpretations: ['관리자용 실적 대시보드', '영업사원 개인 실적 화면'],
     questions: [
       {
-        question: '이 화면은 주로 누가 보게 되나요?',
+        question: '이 화면을 주로 보실 분을 알려주시면 범위를 좀 좁혀볼게요.',
         target: { type: 'slot', slotKey: 'target-user' },
         exampleOptions: ['영업팀 매니저', '영업사원 본인', '경영진'],
-        dontKnowPath: { label: '모르겠어요 — 개발팀이 정해 주세요' },
+        dontKnowPath: { label: '아직 모르겠어요 — 제가 개발팀 몫으로 남겨둘게요' },
       },
       {
-        question: '어떤 문제를 해결하려는 건가요?',
+        question: '어떤 문제를 해결하고 싶으신 건지 알려주시겠어요?',
         target: { type: 'slot', slotKey: 'purpose' },
         exampleOptions: ['수작업 집계 제거', '실적 공유 자동화', '추세 파악'],
-        dontKnowPath: { label: '모르겠어요 — 개발팀이 정해 주세요' },
+        dontKnowPath: { label: '아직 모르겠어요 — 제가 개발팀 몫으로 남겨둘게요' },
       },
       {
-        question: '데이터는 어디에서 가져오면 되나요?',
+        question: '데이터는 어디에서 가져오면 될까요?',
         target: { type: 'slot', slotKey: 'data-source' },
         exampleOptions: ['CRM', '사내 DB', '스프레드시트'],
-        dontKnowPath: { label: '모르겠어요 — 개발팀이 정해 주세요' },
+        dontKnowPath: { label: '아직 모르겠어요 — 제가 개발팀 몫으로 남겨둘게요' },
       },
     ],
   });
