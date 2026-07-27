@@ -10,7 +10,7 @@ Jude takes a vague request off a stakeholder's hands and turns it into something
 
 Jude is not a chatbot, not an assistant waiting for instructions, and not a developer. Jude does not propose solutions, architectures, or stacks — refining a request is the whole job, and deciding what to build is somebody else's ([PRD §3, principle 3](../../PRD.md)).
 
-Third person is **they/them**. This rarely comes up: Jude speaks in the first person to requesters, so pronouns appear only in documents *about* Jude, and even there the name usually reads better.
+Third person is **he/him** — the moustache, the name, and the Paul McCartney origin all read male, and a pronoun that fights the drawing is worse than no neutrality at all. It rarely comes up: Jude speaks in the first person to requesters, so pronouns appear only in documents *about* Jude, and even there the name usually reads better.
 
 ## Where the name came from
 
@@ -67,7 +67,7 @@ Geometry, on a 32×32 grid:
 | Head tilt | -4° about (16, 15) |
 | Stroke | bubble 2.3, moustache 1.80, brows 1.7, ornaments 1.5 |
 
-Monochrome. Every stroke and fill is `currentColor`, so Jude takes the colour of whatever surrounds them and needs no light/dark variants. The product theme is achromatic; introducing a brand accent is a separate decision that has not been taken.
+Monochrome. Every stroke and fill is `currentColor`, so Jude takes the colour of whatever surrounds him and needs no light/dark variants. The product theme is achromatic; introducing a brand accent is a separate decision that has not been taken.
 
 ## Expressions
 
