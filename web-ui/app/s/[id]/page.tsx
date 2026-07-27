@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AckCard } from '@/components/ack-card';
 import { DocumentView } from '@/components/document-view';
 import { HoldCard } from '@/components/hold-card';
+import { Jude, type JudeHandle } from '@/components/jude';
 import { JourneyStepper } from '@/components/journey-stepper';
 import { QuestionWizard } from '@/components/question-wizard';
 import { RoundContext } from '@/components/round-context';
@@ -18,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { confirmSlotOk, correctSlot, getSession, retryRound, sendReply } from '@/lib/api';
 import { rememberSession } from '@/lib/local-sessions';
+import { judeState, type JudeState } from '@/lib/jude-geometry';
 import { isLastRound, journeyStep } from '@/lib/stage';
 import type { SessionDetail } from '@/lib/types';
 import { watchProcessing } from '@/lib/watch-processing';
@@ -33,7 +35,18 @@ export default function SessionPage() {
   const [notFound, setNotFound] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [typing, setTyping] = useState(false);
   const watchingRef = useRef(false);
+  const judeRef = useRef<JudeHandle>(null);
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** 키 입력 한 번 = 소리 한 번. 멎으면 자세가 곧 풀린다 (docs/persona/jude.md). */
+  const onType = useCallback(() => {
+    judeRef.current?.hear();
+    setTyping(true);
+    if (typingTimer.current) clearTimeout(typingTimer.current);
+    typingTimer.current = setTimeout(() => setTyping(false), 700);
+  }, []);
 
   const refetch = useCallback(async () => {
     try {
@@ -85,7 +98,7 @@ export default function SessionPage() {
 
   if (notFound) {
     return (
-      <Shell sessionId={sessionId}>
+      <Shell sessionId={sessionId} judeState="failed">
         <Alert variant="destructive">
           <AlertTitle>요청을 찾을 수 없어요</AlertTitle>
           <AlertDescription>
@@ -100,7 +113,7 @@ export default function SessionPage() {
   }
   if (!detail) {
     return (
-      <Shell sessionId={sessionId}>
+      <Shell sessionId={sessionId} judeState="thinking">
         <Skeleton className="h-10 w-full" />
         <Skeleton className="h-64 w-full" />
       </Shell>
@@ -114,8 +127,16 @@ export default function SessionPage() {
   const roundFailed = session.status === 'intake' && !processing && !busy;
   const documentText = utterances.findLast((u) => u.authorType === 'agent')?.originalText ?? '';
 
+  const face = judeState({
+    status: session.status,
+    terminalState: session.terminalState,
+    processing: processing || busy,
+    typing,
+    failed: roundFailed,
+  });
+
   return (
-    <Shell sessionId={sessionId}>
+    <Shell sessionId={sessionId} judeState={face} judeRef={judeRef}>
       <JourneyStepper current={journeyStep(session.status)} note={onHold ? '보류' : undefined} />
 
       <Transcript
@@ -145,6 +166,7 @@ export default function SessionPage() {
             questions={latestQuestions ?? []}
             round={Math.max(session.roundCount, 1)}
             lastRound={isLastRound(session.roundCount, roundBudget)}
+            onType={onType}
             onSubmit={(text) => void act(() => sendReply(sessionId, text))}
           />
         </div>
@@ -170,6 +192,7 @@ export default function SessionPage() {
         <HoldCard
           slots={slotStates}
           submitting={busy}
+          onType={onType}
           onResume={(text) => void act(() => sendReply(sessionId, text))}
         />
       ) : (
@@ -196,12 +219,23 @@ export default function SessionPage() {
   );
 }
 
-function Shell({ sessionId, children }: { sessionId: string; children: React.ReactNode }) {
+function Shell({
+  sessionId,
+  judeState: face,
+  judeRef,
+  children,
+}: {
+  sessionId: string;
+  judeState: JudeState;
+  judeRef?: React.RefObject<JudeHandle | null>;
+  children: React.ReactNode;
+}) {
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 px-5 py-8">
       <header className="flex items-center gap-3">
+        <Jude ref={judeRef} state={face} size={56} className="-my-1" />
         <Link href="/" className="text-lg font-semibold tracking-tight">
-          pm-jude <span className="font-normal text-muted-foreground">· 요청 인테이크</span>
+          Jude <span className="font-normal text-muted-foreground">· 요청 인테이크</span>
         </Link>
         <div className="ml-auto flex items-center gap-2">
           <Badge variant="outline" className="font-mono text-[11px]">

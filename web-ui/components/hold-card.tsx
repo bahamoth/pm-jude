@@ -16,6 +16,8 @@ import type { SlotView } from '@/lib/types';
 interface Props {
   slots: SlotView[];
   submitting: boolean;
+  /** 키 입력 한 번 = Jude에게 소리 한 번 */
+  onType?: () => void;
   onResume: (text: string) => void;
 }
 
@@ -23,7 +25,7 @@ interface Props {
  * 보류(정보 부족) 화면 (G-4) — 무엇이 부족했는지 보여주고, 「이어서 보태기」가 주 경로다.
  * 입력하면 같은 세션이 자동 재개된다(#30) — 지금까지의 대화·정리는 그대로 이어진다.
  */
-export function HoldCard({ slots, submitting, onResume }: Props) {
+export function HoldCard({ slots, submitting, onType, onResume }: Props) {
   const [text, setText] = useState('');
   const missing = slots.filter((slot) => slot.state === 'unfilled');
 
@@ -46,7 +48,10 @@ export function HoldCard({ slots, submitting, onResume }: Props) {
           rows={3}
           placeholder="보탤 내용을 적어 주세요 — 예: 어떤 팀이 쓰는지, 어떤 문제를 풀고 싶은지"
           value={text}
-          onChange={(event) => setText(event.target.value)}
+          onChange={(event) => {
+            setText(event.target.value);
+            onType?.();
+          }}
         />
       </CardContent>
       <CardFooter>

@@ -22,7 +22,14 @@ export interface IntakeInput {
 }
 
 // 간이 식별(이름·언어) + 요청 원문 — SSO·매직 링크 대체 (ADR-0007).
-export function IntakeForm({ onSubmit }: { onSubmit: (input: IntakeInput) => void }) {
+export function IntakeForm({
+  onSubmit,
+  onType,
+}: {
+  onSubmit: (input: IntakeInput) => void;
+  /** 키 입력 한 번 = Jude에게 소리 한 번 (docs/persona/jude.md) */
+  onType?: () => void;
+}) {
   const [name, setName] = useState('');
   const [language, setLanguage] = useState<'ko' | 'en'>('ko');
   const [text, setText] = useState('');
@@ -76,7 +83,10 @@ export function IntakeForm({ onSubmit }: { onSubmit: (input: IntakeInput) => voi
             rows={5}
             placeholder="예: 영업 실적 대시보드 하나 만들어 주세요"
             value={text}
-            onChange={(event) => setText(event.target.value)}
+            onChange={(event) => {
+              setText(event.target.value);
+              onType?.();
+            }}
           />
           <p className="text-xs text-muted-foreground">
             완벽하지 않아도 괜찮아요 — 모호한 부분은 이어지는 질문에서 함께 정리합니다.
