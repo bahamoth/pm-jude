@@ -16,6 +16,7 @@ import { Progress } from '@/components/ui/progress';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
+import { t, type Lang } from '@/lib/i18n';
 import type { ReplyQuestion } from '@/lib/types';
 import {
   answerLabel,
@@ -26,6 +27,7 @@ import {
 } from '@/lib/wizard';
 
 interface Props {
+  lang: Lang;
   questions: ReplyQuestion[];
   round: number;
   /** 왕복 예산 소진 직전 — 예고 없는 강제 종결을 막는다 (P-U5, G-2) */
@@ -40,7 +42,7 @@ interface Props {
  * 「모르겠다 / 개발팀이 정할 문제」와 직접 입력은 모든 문항의 상시 경로다 (US-10).
  * 질문 구조가 없으면(구버전 세션 재개) 자유 입력으로 강등한다.
  */
-export function QuestionWizard({ questions, round, lastRound, onType, onSubmit }: Props) {
+export function QuestionWizard({ lang, questions, round, lastRound, onType, onSubmit }: Props) {
   const [step, setStep] = useState(0); // questions.length == 확인 단계
   const [answers, setAnswers] = useState<ReadonlyMap<number, WizardAnswer>>(new Map());
   const [freeText, setFreeText] = useState('');
@@ -49,8 +51,8 @@ export function QuestionWizard({ questions, round, lastRound, onType, onSubmit }
     return (
       <Card>
         <CardHeader>
-          <CardTitle>이어서 답해 주세요</CardTitle>
-          <CardDescription>진행 중인 요청에 보탤 내용을 자유롭게 적어 주세요.</CardDescription>
+          <CardTitle>{t(lang, 'wizard.freeTitle')}</CardTitle>
+          <CardDescription>{t(lang, 'wizard.freeLede')}</CardDescription>
         </CardHeader>
         <CardContent>
           <Textarea
@@ -60,7 +62,7 @@ export function QuestionWizard({ questions, round, lastRound, onType, onSubmit }
               setFreeText(event.target.value);
               onType?.();
             }}
-            placeholder="추가로 알려줄 내용"
+            placeholder={t(lang, 'wizard.freeInputPlaceholder')}
           />
         </CardContent>
         <CardFooter>
@@ -69,7 +71,7 @@ export function QuestionWizard({ questions, round, lastRound, onType, onSubmit }
             disabled={freeText.trim().length === 0}
             onClick={() => onSubmit(freeText.trim())}
           >
-            답변 보내기
+            {t(lang, 'wizard.send')}
           </Button>
         </CardFooter>
       </Card>
@@ -96,32 +98,28 @@ export function QuestionWizard({ questions, round, lastRound, onType, onSubmit }
       <CardHeader className="gap-3">
         <div className="flex items-center justify-between gap-3">
           <span className="flex items-center gap-2">
-            <Badge variant="secondary">명확화 {round}라운드</Badge>
-            {lastRound && <Badge>마지막 확인</Badge>}
+            <Badge variant="secondary">{t(lang, 'wizard.roundBadge', { round })}</Badge>
+            {lastRound && <Badge>{t(lang, 'wizard.lastRound')}</Badge>}
           </span>
           <span className="text-sm text-muted-foreground">
-            {reviewing ? '답변 확인' : `질문 ${step + 1} / ${total}`}
+            {reviewing
+              ? t(lang, 'wizard.reviewing')
+              : t(lang, 'wizard.progress', { step: step + 1, total })}
           </span>
         </div>
         {lastRound && (
-          <p className="text-xs text-muted-foreground">
-            이번 답변으로 정리되지 않은 항목은 개발팀 확인으로 넘기거나, 요청을 보류로 정리해요.
-          </p>
+          <p className="text-xs text-muted-foreground">{t(lang, 'wizard.lastRoundNote')}</p>
         )}
         <Progress value={(Math.min(step, total) / total) * 100} />
         {current ? (
           <>
             <CardTitle className="text-lg leading-relaxed">{current.question}</CardTitle>
-            <CardDescription>
-              보기에서 고르거나, 직접 입력해 주세요. 답하기 어려우면 「모르겠어요」도 답입니다.
-            </CardDescription>
+            <CardDescription>{t(lang, 'wizard.pickHint')}</CardDescription>
           </>
         ) : (
           <>
-            <CardTitle className="text-lg">이렇게 보낼게요</CardTitle>
-            <CardDescription>
-              답변을 확인하고 보내 주세요. 문항을 눌러 고칠 수 있어요.
-            </CardDescription>
+            <CardTitle className="text-lg">{t(lang, 'wizard.reviewTitle')}</CardTitle>
+            <CardDescription>{t(lang, 'wizard.reviewHint')}</CardDescription>
           </>
         )}
       </CardHeader>
@@ -160,12 +158,12 @@ export function QuestionWizard({ questions, round, lastRound, onType, onSubmit }
             </Label>
             <Label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed p-3.5 font-normal text-muted-foreground transition-colors hover:bg-accent has-data-checked:border-primary has-data-checked:bg-primary/5 has-data-checked:text-foreground">
               <RadioGroupItem value="free" />
-              <span>직접 입력할게요</span>
+              <span>{t(lang, 'wizard.freeChoice')}</span>
             </Label>
           </RadioGroup>
           {answers.get(current.index)?.kind === 'dontKnow' && (
             <p className="mt-3 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-              이 항목은 개발팀 확인 목록에 올라가요 — 요청은 멈추지 않고 계속 진행됩니다.
+              {t(lang, 'wizard.dontKnowNote')}
             </p>
           )}
           {answers.get(current.index)?.kind === 'free' && (
@@ -173,7 +171,7 @@ export function QuestionWizard({ questions, round, lastRound, onType, onSubmit }
               className="mt-3"
               rows={3}
               autoFocus
-              placeholder="답변을 입력해 주세요"
+              placeholder={t(lang, 'wizard.freePlaceholder')}
               value={(() => {
                 const answer = answers.get(current.index);
                 return answer?.kind === 'free' ? answer.value : '';
@@ -199,10 +197,12 @@ export function QuestionWizard({ questions, round, lastRound, onType, onSubmit }
                   {question.index}. {question.question}
                 </p>
                 <p className="mt-1 text-sm font-medium">
-                  {isAnswered(answer) ? answerLabel(question, answer) : '— 미응답'}
+                  {isAnswered(answer)
+                    ? answerLabel(question, answer)
+                    : t(lang, 'wizard.unanswered')}
                   {answer?.kind === 'dontKnow' && (
                     <Badge variant="outline" className="ml-2">
-                      개발팀 확인
+                      {t(lang, 'wizard.forTeam')}
                     </Badge>
                   )}
                 </p>
@@ -219,7 +219,7 @@ export function QuestionWizard({ questions, round, lastRound, onType, onSubmit }
           disabled={step === 0}
           onClick={() => setStep((value) => Math.max(0, value - 1))}
         >
-          이전
+          {t(lang, 'common.prev')}
         </Button>
         {reviewing ? (
           <Button
@@ -227,14 +227,14 @@ export function QuestionWizard({ questions, round, lastRound, onType, onSubmit }
             disabled={!isComplete(questions, answers)}
             onClick={() => onSubmit(composeAnswerText(questions, answers))}
           >
-            답변 보내기
+            {t(lang, 'wizard.send')}
           </Button>
         ) : (
           <Button
             disabled={current !== undefined && !isAnswered(answers.get(current.index))}
             onClick={() => setStep((value) => value + 1)}
           >
-            {step === total - 1 ? '답변 확인' : '다음'}
+            {t(lang, step === total - 1 ? 'wizard.reviewing' : 'common.next')}
           </Button>
         )}
       </CardFooter>

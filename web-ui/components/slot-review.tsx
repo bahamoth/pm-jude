@@ -6,9 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
+import { t, type Lang } from '@/lib/i18n';
 import type { SlotView } from '@/lib/types';
 
 interface Props {
+  lang: Lang;
   slots: SlotView[];
   submitting: boolean;
   onConfirm: (slotKey: string) => void;
@@ -19,7 +21,7 @@ interface Props {
  * 슬롯 단위 요청자 확인 (G-3, F3 — 원칙 7 번역 무결성 장치).
  * 정리된 값을 슬롯 단위·요청자 언어로 확인한다. 「아니에요」는 해당 슬롯만 정정한다.
  */
-export function SlotReview({ slots, submitting, onConfirm, onCorrect }: Props) {
+export function SlotReview({ lang, slots, submitting, onConfirm, onCorrect }: Props) {
   const [correcting, setCorrecting] = useState<string | null>(null);
   const [text, setText] = useState('');
   const reviewable = slots.filter((slot) => slot.state === 'filled');
@@ -29,8 +31,8 @@ export function SlotReview({ slots, submitting, onConfirm, onCorrect }: Props) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">정리한 내용이 맞는지 확인해 주세요</CardTitle>
-        <CardDescription>항목별로 확인해 주시면 문서의 정확도가 올라가요.</CardDescription>
+        <CardTitle className="text-base">{t(lang, 'slots.title')}</CardTitle>
+        <CardDescription>{t(lang, 'slots.lede')}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">
         {reviewable.map((slot, i) => (
@@ -42,7 +44,7 @@ export function SlotReview({ slots, submitting, onConfirm, onCorrect }: Props) {
                 <p className="text-muted-foreground">{slot.value ?? '—'}</p>
               </div>
               {slot.confirmedByRequester ? (
-                <Badge variant="secondary">확인됨 ✓</Badge>
+                <Badge variant="secondary">{t(lang, 'slots.confirmed')}</Badge>
               ) : (
                 <div className="flex shrink-0 gap-2">
                   <Button
@@ -51,7 +53,7 @@ export function SlotReview({ slots, submitting, onConfirm, onCorrect }: Props) {
                     disabled={submitting}
                     onClick={() => onConfirm(slot.slotKey)}
                   >
-                    맞아요
+                    {t(lang, 'slots.yes')}
                   </Button>
                   <Button
                     size="sm"
@@ -62,7 +64,7 @@ export function SlotReview({ slots, submitting, onConfirm, onCorrect }: Props) {
                       setText('');
                     }}
                   >
-                    아니에요
+                    {t(lang, 'slots.no')}
                   </Button>
                 </div>
               )}
@@ -72,7 +74,7 @@ export function SlotReview({ slots, submitting, onConfirm, onCorrect }: Props) {
                 <Textarea
                   rows={2}
                   autoFocus
-                  placeholder="실제로는 어떤가요? 바로잡아 주세요"
+                  placeholder={t(lang, 'slots.correctPlaceholder')}
                   value={text}
                   onChange={(event) => setText(event.target.value)}
                 />
@@ -85,7 +87,7 @@ export function SlotReview({ slots, submitting, onConfirm, onCorrect }: Props) {
                     setCorrecting(null);
                   }}
                 >
-                  정정 보내기
+                  {t(lang, 'slots.sendCorrection')}
                 </Button>
               </div>
             )}
@@ -94,11 +96,11 @@ export function SlotReview({ slots, submitting, onConfirm, onCorrect }: Props) {
         {promoted.length > 0 && (
           <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
             <p className="mb-1 font-medium text-foreground">
-              개발팀이 확인할 항목 {promoted.length}건
+              {t(lang, 'slots.promotedTitle', { count: promoted.length })}
             </p>
             {promoted.map((slot) => (
               <p key={slot.slotKey}>
-                · {slot.label} — 당신이 답하지 않아도 됩니다. 개발팀 검토에서 확정돼요.
+                · {slot.label} — {t(lang, 'slots.promotedNote')}
               </p>
             ))}
           </div>

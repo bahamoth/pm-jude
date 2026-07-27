@@ -103,20 +103,21 @@ export function detectRequesterLanguage(text: string): 'ko' | 'en' {
   return /[가-힣]/.test(text) ? 'ko' : 'en';
 }
 
+/** 요청자에게 그대로 가는 문장 — Jude의 목소리다 (docs/persona/jude.md). */
 const MESSAGES = {
   ko: {
-    ack: '접수했습니다 — 요청을 정리하기 위해 몇 가지만 여쭤볼게요.',
-    questionsHeader: '몇 가지 확인이 필요해요:',
-    dontKnowHint: '각 질문에 답하기 어려우면 그대로 알려주세요',
+    ack: '접수했어요. 요청을 정리하려고 몇 가지만 여쭤볼게요.',
+    questionsHeader: '몇 가지만 확인할게요:',
+    dontKnowHint: '답하기 어려운 게 있으면 그대로 알려주세요 — 제가 개발팀 몫으로 남겨둘게요',
     onHold:
-      '이번 요청은 정보가 부족해 보류(정보 부족)로 종결합니다. 내용을 보태 다시 요청을 이어가시면 언제든 재개할 수 있어요.',
+      '지금은 정리하기에 정보가 부족해서 보류로 두었어요. 내용을 보태 주시면 이 자리에서 그대로 다시 진행할게요 — 지금까지 답하신 건 남아 있어요.',
   },
   en: {
-    ack: 'Got it — let me ask a few questions to pin down the request.',
-    questionsHeader: 'A few things to confirm:',
-    dontKnowHint: 'If you cannot answer a question, just say so',
+    ack: "Got it. I'll ask a few questions to pin the request down.",
+    questionsHeader: 'A few things to check:',
+    dontKnowHint: "If you can't answer one, just say so — I'll flag it for the team",
     onHold:
-      'This request is being closed as on-hold (insufficient info). Come back with more detail to resume anytime.',
+      "There wasn't enough to work with yet, so I've parked this as on-hold. Add a little and I'll pick it up right here — everything you answered is still there.",
   },
 } as const;
 

@@ -11,6 +11,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getSummaries, startSession } from '@/lib/api';
 import { listSessionIds, rememberSession } from '@/lib/local-sessions';
+import { t, useLang, type Lang } from '@/lib/i18n';
 import { statusChip } from '@/lib/stage';
 import type { SessionSummary } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -32,6 +33,8 @@ export default function Home() {
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [typing, setTyping] = useState(false);
+  const [langPick, setLangPick] = useState<Lang | null>(null);
+  const lang = useLang(langPick);
   const judeRef = useRef<JudeHandle>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -62,7 +65,7 @@ export default function Home() {
       rememberSession(result.sessionId);
       router.push(`/s/${result.sessionId}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '요청 실패');
+      setError(e instanceof Error ? e.message : t(lang, 'intake.failed'));
     }
   }
 
@@ -73,11 +76,11 @@ export default function Home() {
       <header className="flex items-center gap-3">
         <Jude ref={judeRef} state={typing ? 'listening' : 'idle'} size={56} className="-my-1" />
         <h1 className="text-lg font-semibold tracking-tight">
-          Jude <span className="font-normal text-muted-foreground">· 요청 인테이크</span>
+          Jude <span className="font-normal text-muted-foreground">· {t(lang, 'brand.sub')}</span>
         </h1>
         {hasSessions && !showForm && (
           <Button className="ml-auto" size="sm" onClick={() => setShowForm(true)}>
-            새 요청
+            {t(lang, 'nav.newRequest')}
           </Button>
         )}
       </header>
@@ -86,14 +89,19 @@ export default function Home() {
 
       {summaries !== null && (!hasSessions || showForm) && (
         <>
-          <IntakeForm onType={onType} onSubmit={(input) => void handleIntake(input)} />
+          <IntakeForm
+            lang={lang}
+            onLangChange={setLangPick}
+            onType={onType}
+            onSubmit={(input) => void handleIntake(input)}
+          />
           {error && <p className="text-sm text-destructive">{error}</p>}
         </>
       )}
 
       {hasSessions && (
         <section className="grid gap-3">
-          <h2 className="text-sm font-medium text-muted-foreground">내 요청</h2>
+          <h2 className="text-sm font-medium text-muted-foreground">{t(lang, 'nav.myRequests')}</h2>
           {summaries?.map((summary) => {
             const chip = statusChip(summary.status, summary.terminalState);
             return (
@@ -104,20 +112,19 @@ export default function Home() {
                       <p className="truncate text-sm font-medium">{summary.requestText}</p>
                       <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
                         {summary.id.slice(0, 8)} · {new Date(summary.updatedAt).toLocaleString()}
-                        {summary.openIssueCount > 0 && ` · 개발팀 확인 ${summary.openIssueCount}건`}
+                        {summary.openIssueCount > 0 &&
+                          ` · ${t(lang, 'home.openIssues', { count: summary.openIssueCount })}`}
                       </p>
                     </div>
                     <Badge className={cn('shrink-0 border-transparent', CHIP_TONE[chip.tone])}>
-                      {chip.label}
+                      {t(lang, chip.labelKey)}
                     </Badge>
                   </CardContent>
                 </Card>
               </Link>
             );
           })}
-          <p className="text-xs text-muted-foreground">
-            이 목록은 이 브라우저에만 저장돼요 — 각 요청의 링크를 저장해 두면 어디서든 이어집니다.
-          </p>
+          <p className="text-xs text-muted-foreground">{t(lang, 'home.listNote')}</p>
         </section>
       )}
     </div>

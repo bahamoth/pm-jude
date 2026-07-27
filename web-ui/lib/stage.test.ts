@@ -9,6 +9,11 @@ describe('상태 → 여정·칩 매핑', () => {
     expect(journeyStep('closed')).toBe(2);
   });
 
+  it('칩 라벨은 사전 키로만 내보낸다 — 문자열을 직접 담지 않는다', () => {
+    expect(statusChip('clarifying', null).labelKey).toBe('chip.clarifying');
+    expect(statusChip('closed', 'on_hold_insufficient_info').labelKey).toBe('chip.onHold');
+  });
+
   it('상태 칩 — 요청자 차례(action)가 구분된다 (M-1)', () => {
     expect(statusChip('clarifying', null).tone).toBe('action');
     expect(statusChip('documented', null).tone).toBe('action');

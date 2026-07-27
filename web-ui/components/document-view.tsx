@@ -2,16 +2,17 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { parseDocumentText } from '@/lib/document';
+import { t, type Lang } from '@/lib/i18n';
 
 // requirements 문서 열람 (US-9·10) — 코어가 게시한 문서 텍스트를 구조대로 표시한다.
-export function DocumentView({ text }: { text: string }) {
+export function DocumentView({ lang, text }: { lang: Lang; text: string }) {
   const lines = parseDocumentText(text);
 
   return (
     <Card>
       <CardHeader className="flex-row items-center gap-3">
-        <CardTitle className="text-lg">requirements 문서</CardTitle>
-        <Badge>정제 완료</Badge>
+        <CardTitle className="text-lg">{t(lang, 'doc.title')}</CardTitle>
+        <Badge>{t(lang, 'doc.badge')}</Badge>
       </CardHeader>
       <CardContent className="grid gap-2.5 text-[15px] leading-relaxed">
         {lines.map((line, i) => {
