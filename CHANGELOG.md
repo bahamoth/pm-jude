@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.9.0](https://github.com/bahamoth/pm-jude/compare/v0.8.0...v0.9.0) (2026-07-27)
+
+
+### Features
+
+* clarification@0.2.0 — Jude의 목소리 반영 ([#43](https://github.com/bahamoth/pm-jude/issues/43)) ([9e52683](https://github.com/bahamoth/pm-jude/commit/9e526839465375067969810231b3c4c2c0adfa4a))
+* Jude 아바타 컴포넌트 — 상태 반응 리그 ([#42](https://github.com/bahamoth/pm-jude/issues/42)) ([7d945ac](https://github.com/bahamoth/pm-jude/commit/7d945ac451b900e8ccd7ed6c03eae00ef7bfe2e6))
+* UI 카피 전환 + i18n 사전 모듈 ([#41](https://github.com/bahamoth/pm-jude/issues/41)) ([1a88005](https://github.com/bahamoth/pm-jude/commit/1a88005c12f2a560c74ca9999f5673e687292488))
+
 ## [0.8.0](https://github.com/bahamoth/pm-jude/compare/v0.7.0...v0.8.0) (2026-07-26)
 
 
