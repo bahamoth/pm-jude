@@ -125,6 +125,28 @@ const blockingPromotionResponse = JSON.stringify({
   ],
 } satisfies PromotionOutput);
 
+/** 슬롯은 전부 해소됐지만 루브릭이 임계치 미달 — 룰 층은 통과하는데 미정제인 판정. */
+const lowScoreCompletenessResponse = JSON.stringify({
+  slots: [
+    { slotKey: 'target-user', verdict: 'filled', rationale: '「영업팀 매니저」라고 확답' },
+    { slotKey: 'purpose', verdict: 'filled', rationale: '수작업 집계 제거라고 답함' },
+    { slotKey: 'data-source', verdict: 'filled', rationale: 'CRM이라고 답함' },
+  ],
+  remainingAmbiguities: ['어느 기간 단위로 보는지'],
+  rubric: { score: 60, rationale: '슬롯은 찼지만 해석이 갈라진다' },
+} satisfies CompletenessOutput);
+
+/** 전 문항 「모르겠다」 — 전 슬롯 승격으로 룰 층을 통과하는 판정 (#28 S-5). */
+const fullyPromotedCompletenessResponse = JSON.stringify({
+  slots: [
+    { slotKey: 'target-user', verdict: 'promoted', rationale: '요청자가 「모르겠어요」를 택함' },
+    { slotKey: 'purpose', verdict: 'promoted', rationale: '요청자가 「모르겠어요」를 택함' },
+    { slotKey: 'data-source', verdict: 'promoted', rationale: '요청자가 「모르겠어요」를 택함' },
+  ],
+  remainingAmbiguities: [],
+  rubric: { score: 85, rationale: '전 항목이 담당자 몫으로 정리됨' },
+} satisfies CompletenessOutput);
+
 const requirementsResponse = JSON.stringify({
   problem: '영업 실적을 정리해 볼 수단이 없어 매니저가 수작업으로 집계한다',
   users: ['영업팀 매니저'],
@@ -354,6 +376,27 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
     expect(signals.some((signal) => signal.type === 'session_on_hold')).toBe(false);
   });
 
+  it('상한 도달 + 미충족 슬롯이 없으면 승격 판정 없이 조건부 문서로 간다 (G-9)', async () => {
+    const { runner, store, backend } = makeRunner(
+      [
+        clarificationResponse,
+        lowScoreCompletenessResponse, // 룰 층 통과, 루브릭 미달 → 미정제
+        requirementsResponse,
+      ],
+      { maxRounds: 1 },
+    );
+    await runner.handleIntake(intake);
+
+    const result = await runner.handleReply({ ...intake, text: '영업팀 매니저요. CRM이요.' });
+
+    // 「정보 부족」이 아니므로 보류가 아니다 — 남은 것은 해석 모호성이고 왕복은 끝났다
+    expect(result?.status).toBe('documented');
+    expect(backend.requests).toHaveLength(3); // 승격 판정 호출은 없다 (승격시킬 슬롯이 없다)
+    const signals = store.exportSessions()[0]?.signals ?? [];
+    expect(signals.some((signal) => signal.type === 'promotion_judged')).toBe(false);
+    expect(signals.some((signal) => signal.type === 'session_on_hold')).toBe(false);
+  });
+
   it('상한 도달 + 승격 불가 슬롯이 남으면 승격 없이 보류로 종결된다 (F2c ③)', async () => {
     const { runner, store } = makeRunner(
       [clarificationResponse, unrefinedCompletenessResponse, blockingPromotionResponse],
@@ -500,6 +543,59 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
 
     await runner.confirmSlot(intake, 'target-user', true);
     expect(completedSignals()).toHaveLength(1); // 재확인이 완주를 중복 기록하지 않는다
+    expect(completedSignals()[0]?.payload).toMatchObject({ version: 1 });
+  });
+
+  it('정정으로 문서가 다시 나오면 완주도 새 버전에서 다시 성립한다 (G-11)', async () => {
+    const { runner, store } = makeRunner([
+      clarificationResponse,
+      refinedCompletenessResponse,
+      requirementsResponse,
+      refinedCompletenessResponse, // 정정 재판정 → 여전히 정제
+      requirementsResponse, // 문서 v2
+    ]);
+    await runner.handleIntake(intake);
+    await runner.handleReply({ ...intake, text: '영업팀 매니저요. 수작업 집계 제거요.' });
+    const completions = () =>
+      store
+        .exportSessions()[0]
+        ?.signals.filter((signal) => signal.type === 'session_completed')
+        .map((signal) => (signal.payload as { version?: number }).version) ?? [];
+
+    await runner.confirmSlot(intake, 'target-user', true);
+    await runner.confirmSlot(intake, 'purpose', true);
+    expect(completions()).toEqual([1]);
+
+    // 정정은 문서를 새로 만들고 확인을 되돌린다 — 완주는 v1에 남고 v2는 아직 아니다
+    await runner.confirmSlot({ ...intake, text: '사실 경영진 보고용이에요' }, 'purpose', false);
+    expect(completions()).toEqual([1]);
+
+    await runner.confirmSlot(intake, 'target-user', true);
+    await runner.confirmSlot(intake, 'purpose', true);
+    expect(completions()).toEqual([1, 2]);
+  });
+
+  it('전면 승격 문서는 확인할 슬롯이 없으므로 게시 시점이 종착이다 (G-11, #28 S-5)', async () => {
+    const { runner, store } = makeRunner([
+      clarificationResponse,
+      fullyPromotedCompletenessResponse,
+      requirementsResponse,
+    ]);
+    await runner.handleIntake(intake);
+
+    const result = await runner.handleReply({ ...intake, text: '전부 모르겠어요' });
+
+    expect(result?.status).toBe('documented');
+    const completed = store
+      .exportSessions()[0]
+      ?.signals.find((signal) => signal.type === 'session_completed');
+    // P-U3 — 요청자가 답할 수 없어서 완주에서 빠지는 세션은 없다
+    expect(completed?.payload).toMatchObject({
+      reason: 'fully_promoted',
+      version: 1,
+      confirmedSlotCount: 0,
+      promotedSlotCount: 3,
+    });
   });
 
   it('정정이 미정제로 판명돼도 문서를 보류로 파괴하지 않고, 상한 미산입 되물음을 연다 (§6)', async () => {

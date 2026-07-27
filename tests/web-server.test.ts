@@ -86,6 +86,22 @@ const unrefinedCompletenessResponse = JSON.stringify({
   rubric: { score: 35, rationale: '핵심이 비어 있음' },
 });
 
+/** 승격 불가 판정 — 상한 도달 세션을 보류로 종결시킨다. */
+const blockingPromotionResponse = JSON.stringify({
+  decisions: [
+    {
+      slotKey: 'purpose',
+      promotable: false,
+      rationale: '무엇을 해결하려는지가 대화 어디에도 없다',
+    },
+    {
+      slotKey: 'data-source',
+      promotable: false,
+      rationale: '요청 자체가 판별 불가라 담당자도 정할 수 없다',
+    },
+  ],
+});
+
 const requirementsResponse = JSON.stringify({
   problem: '영업 실적을 정리해 볼 수단이 없어 매니저가 수작업으로 집계한다',
   users: ['영업팀 매니저'],
@@ -118,7 +134,10 @@ afterEach(async () => {
   store = undefined;
 });
 
-async function startServer(backend: LlmBackend): Promise<{ baseUrl: string; store: SessionStore }> {
+async function startServer(
+  backend: LlmBackend,
+  options?: { maxRounds?: number },
+): Promise<{ baseUrl: string; store: SessionStore }> {
   store = SessionStore.open(':memory:');
   const server = createWebServer({
     store,
@@ -126,6 +145,7 @@ async function startServer(backend: LlmBackend): Promise<{ baseUrl: string; stor
     registry: createDefaultRegistry(),
     modelVersion: 'claude-sonnet-5',
     teamLanguage: 'ko',
+    ...(options?.maxRounds !== undefined ? { maxRounds: options.maxRounds } : {}),
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   closeServer = () =>
@@ -392,6 +412,39 @@ describe('웹 어댑터 HTTP 계약 smoke', () => {
     expect(stale.status).toBe(409);
     expect(await json<{ code: string }>(stale)).toMatchObject({ code: 'stale_round' });
     expect(second).not.toBe(first);
+  });
+
+  it('이미 답을 받은 라운드의 재제출은 종결된 세션에서도 거부된다 (G-10, #28 S-3)', async () => {
+    const { baseUrl, store } = await startServer(
+      new ScriptedBackend([
+        clarificationResponse,
+        unrefinedCompletenessResponse,
+        blockingPromotionResponse, // 상한 도달 → 승격 불가 → 보류 종결
+      ]),
+      { maxRounds: 1 },
+    );
+    const sessionId = await openClarifyingSession(baseUrl);
+    const roundId = await roundIdOf(baseUrl, sessionId);
+
+    expect((await postReply(baseUrl, sessionId, '잘 모르겠는데요', roundId)).status).toBe(202);
+    await waitFor(async () => {
+      const d = await json<{ session: { terminalState: string | null }; processing: boolean }>(
+        await fetch(`${baseUrl}/api/sessions/${sessionId}`),
+      );
+      return !d.processing && d.session.terminalState === 'on_hold_insufficient_info' ? d : null;
+    });
+
+    // 다른 탭이 같은 라운드 질문에 답한 경우 — 재개 입력으로 오인해 예산을 다시 주면 안 된다
+    const stale = await postReply(baseUrl, sessionId, '늦게 도착한 답', roundId);
+    expect(stale.status).toBe(409);
+    expect(await json<{ code: string }>(stale)).toMatchObject({ code: 'stale_round' });
+    expect(
+      store.listUtterances(sessionId).filter((u) => u.authorType === 'requester'),
+    ).toHaveLength(2);
+
+    // 보류 화면의 재개 입력은 답할 라운드가 없으므로 그대로 접수된다 (#30)
+    const resume = await postReply(baseUrl, sessionId, '내용을 보탤게요 — 영업팀용입니다');
+    expect(resume.status).toBe(202);
   });
 
   it('실패한 라운드의 재시도는 멱등이다 — 발화·예산을 다시 먹지 않는다 (G-10, #28 S-4)', async () => {

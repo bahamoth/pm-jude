@@ -109,8 +109,14 @@ interface SignalVersionAxes {
 }
 
 /** JSON 컬럼에서 읽은 값을 표시용 문자열로만 받아들인다 — 그 외 형태는 근거로 쓰지 않는다. */
-function asText(value: unknown): string | null {
+function nonEmptyText(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+/** 요청 원문 + Q/A 쌍 — LLM 호출 3종이 함께 받는 대화 맥락 (무상태 게이트웨이, F14). */
+interface ConversationContext {
+  request: string;
+  conversation: Array<{ question: string; answer: string }>;
 }
 
 /**
@@ -348,12 +354,11 @@ export class IntakeRunner<A> {
     }
 
     const versionAxes = this.versionAxesOf(session);
-    const { request, conversation } = this.buildConversation(session.id);
+    const context = this.buildConversation(session.id);
     const completeness = await this.gateway.complete<CompletenessOutput>(COMPLETENESS_V0, {
-      request,
+      ...context,
       teamLanguage: this.teamLanguage,
       requiredSlots: TEMP_REQUIRED_SLOTS,
-      conversation,
     });
 
     // LLM 슬롯 판정을 세션 슬롯 상태로 반영 — 승격 트리거 (F2c, US-10).
@@ -385,7 +390,7 @@ export class IntakeRunner<A> {
     });
 
     if (verdict.refined) {
-      await this.deliverDocument(session.id, event, completeness.output, request, conversation);
+      await this.deliverDocument(session.id, event, completeness.output, context);
       return this.outcomeOf(session.id);
     }
     if (options.correction) {
@@ -400,8 +405,8 @@ export class IntakeRunner<A> {
     }
     // 상한 도달 — 남은 미충족 슬롯의 승격 가능 판정이 먼저다 (F2c ①②, G-9).
     // 승격 가능하면 오픈이슈를 실은 조건부 문서로, 불가하면 아래 보류로 흐른다.
-    if (await this.promoteRemainingSlots(session.id, request, conversation, versionAxes)) {
-      await this.deliverDocument(session.id, event, completeness.output, request, conversation, {
+    if ((await this.judgeCapReached(session.id, context, versionAxes)) === 'deliver') {
+      await this.deliverDocument(session.id, event, completeness.output, context, {
         conditional: true,
       });
       return this.outcomeOf(session.id);
@@ -477,33 +482,32 @@ export class IntakeRunner<A> {
   }
 
   /**
-   * 상한 도달 시점의 승격 판정 (F2c ①②, G-9, #28 S-1) — 남은 미충족 슬롯 각각이 담당자 몫으로
+   * 상한 도달 시점의 판정 (F2c ①②③, G-9, #28 S-1) — 남은 미충족 슬롯 각각이 담당자 몫으로
    * 넘어갈 수 있는지 LLM 층에 묻고, **전부 가능할 때만** 승격시킨다. 하나라도 불가하면 슬롯 상태를
    * 건드리지 않는다: 핵심이 빈 부분 승격 문서는 구현 착수의 근거가 되지 못하므로 보류가 정직하다.
-   * 반환값은 「조건부 문서로 갈 수 있는가」뿐 — 전이 결정은 호출자 코드의 몫이다 (ADR-0001).
+   * 전이 자체는 호출자 코드가 결정한다 (ADR-0001) — 여기서 돌려주는 것은 판정 결과뿐이다.
    */
-  private async promoteRemainingSlots(
+  private async judgeCapReached(
     sessionId: string,
-    request: string,
-    conversation: Array<{ question: string; answer: string }>,
+    context: ConversationContext,
     versionAxes: SignalVersionAxes,
-  ): Promise<boolean> {
+  ): Promise<'deliver' | 'hold'> {
     const { store } = this.deps;
     const rowBySlot = new Map(store.listSlotStates(sessionId).map((slot) => [slot.slotKey, slot]));
     const unfilled = TEMP_REQUIRED_SLOTS.filter(
       (slot) => (rowBySlot.get(slot.key)?.state ?? 'unfilled') === 'unfilled',
     );
-    // 미충족 슬롯이 없는데 미정제라면 원인이 슬롯이 아니다 — 승격이 고칠 수 있는 상태가 아니다
-    if (unfilled.length === 0) return false;
+    // 미충족 슬롯이 없으면 룰 층은 이미 통과다 — 남은 것은 해석 모호성(루브릭)이고 왕복은 끝났다.
+    // 「정보 부족」이 아니므로 보류로 보내지 않는다. 모호성은 completeness_check 신호에 남아 F12 몫.
+    if (unfilled.length === 0) return 'deliver';
 
     const result = await this.gateway.complete<PromotionOutput>(PROMOTION_V0, {
-      request,
+      ...context,
       teamLanguage: this.teamLanguage,
-      conversation,
       unfilledSlots: unfilled.map((slot) => ({
         key: slot.key,
         label: slot.label,
-        rationale: asText(rowBySlot.get(slot.key)?.value) ?? '',
+        rationale: nonEmptyText(rowBySlot.get(slot.key)?.value) ?? '',
       })),
     });
     const decisionBySlot = new Map(
@@ -523,7 +527,7 @@ export class IntakeRunner<A> {
       modelVersion: this.deps.modelVersion,
       ...versionAxes,
     });
-    if (blocking.length > 0) return false;
+    if (blocking.length > 0) return 'hold';
 
     for (const slot of promotable) {
       const decision = decisionBySlot.get(slot.key);
@@ -536,35 +540,62 @@ export class IntakeRunner<A> {
       });
     }
     // 승격 후에도 판정은 룰 층이 한다 (원칙 2 — 결정론적 백스톱을 우회하지 않는다)
-    return runRuleLayer({
+    const rule = runRuleLayer({
       requiredSlots: TEMP_REQUIRED_SLOTS,
       slotStates: store.listSlotStates(sessionId),
-    }).passed;
+    });
+    return rule.passed ? 'deliver' : 'hold';
   }
 
   /**
    * Phase 0 종착 기록 (G-11, #28 S-6) — 문서가 나온 뒤 요청자가 확인할 수 있는 슬롯(충족)이
-   * 모두 「맞아요」로 확인되면 완주다. 승격 슬롯은 담당자 몫이라 분모에 넣지 않는다.
-   * #11 완주율의 분자가 이 신호이므로, 재확인이 완주를 두 번 세지 않게 한 번만 기록한다.
+   * 모두 「맞아요」로 확인되면 완주다. 승격 슬롯은 담당자 몫이라 분모에 넣지 않으므로,
+   * 전면 승격 문서는 확인할 것이 없어 게시 시점에 곧바로 완주다 (P-U3 — 요청자가 답할 수 없어서
+   * 멈추는 상태는 없다). #11 완주율의 분자가 이 신호다.
+   *
+   * 기록 단위는 **문서 버전**이다: 정정 재판정은 모든 슬롯 확인을 되돌리므로, 새 문서에는 새 확인이
+   * 필요하고 완주도 그 버전에서 다시 성립한다. 같은 버전을 두 번 세지 않는다.
    */
   private recordCompletion(sessionId: string, versionAxes: SignalVersionAxes): void {
     const { store } = this.deps;
+    const version = this.documentVersionOf(sessionId);
+    if (version === 0) return; // 문서 없이 완주는 없다
     const slots = store.listSlotStates(sessionId);
     const confirmable = slots.filter((slot) => slot.state === 'filled');
-    if (confirmable.length === 0) return;
     if (!confirmable.every((slot) => slot.confirmedByRequester)) return;
-    if (store.listSignals(sessionId).some((signal) => signal.type === 'session_completed')) return;
+    const recorded = store
+      .listSignals(sessionId)
+      .some(
+        (signal) =>
+          signal.type === 'session_completed' &&
+          (signal.payload as { version?: number } | null)?.version === version,
+      );
+    if (recorded) return;
     store.recordSignal({
       sessionId,
       type: 'session_completed',
       payload: {
-        reason: 'all_slots_confirmed',
+        reason: confirmable.length > 0 ? 'all_slots_confirmed' : 'fully_promoted',
+        version,
         confirmedSlotCount: confirmable.length,
         promotedSlotCount: slots.filter((slot) => slot.state === 'promoted').length,
       },
       modelVersion: this.deps.modelVersion,
       ...versionAxes,
     });
+  }
+
+  /** 현재 문서 버전에서 완주가 기록됐는가 — 어댑터의 완료 표시 근거 (G-11). */
+  isCompleted(sessionId: string): boolean {
+    const version = this.documentVersionOf(sessionId);
+    if (version === 0) return false;
+    return this.deps.store
+      .listSignals(sessionId)
+      .some(
+        (signal) =>
+          signal.type === 'session_completed' &&
+          (signal.payload as { version?: number } | null)?.version === version,
+      );
   }
 
   /** 왕복 예산 — 재개(#30)마다 상한이 한 번 더 주어진다. */
@@ -637,7 +668,7 @@ export class IntakeRunner<A> {
       interpretations: result.output.interpretations,
       questions: result.output.questions,
     });
-    store.appendUtterance({
+    const posted = store.appendUtterance({
       sessionId,
       authorType: 'agent',
       channel: event.channel,
@@ -650,6 +681,8 @@ export class IntakeRunner<A> {
       payload: {
         round: options.countRound ? session.roundCount + 1 : session.roundCount,
         questionCount: result.output.questions.length,
+        // 질문 발화의 순번 — 이 라운드가 이미 답을 받았는지 판별하는 기준점 (G-10 라운드 정합)
+        utteranceSeq: posted.seq,
         // 정정 되물음은 상한 미산입 (#30) — 관측을 위해 표식만 남긴다
         ...(options.countRound ? {} : { correction: true }),
         // 질문 구조를 신호에 영속 — 세션 재개 시 어댑터가 질문별 UI를 복원한다 (F11 관측 겸용)
@@ -668,8 +701,7 @@ export class IntakeRunner<A> {
     sessionId: string,
     event: IntakeEvent<A>,
     completeness: CompletenessOutput,
-    request: string,
-    conversation: Array<{ question: string; answer: string }>,
+    context: ConversationContext,
     options: { conditional: boolean } = { conditional: false },
   ): Promise<void> {
     const { store } = this.deps;
@@ -688,13 +720,15 @@ export class IntakeRunner<A> {
         openIssueAssignee: slot.openIssueAssignee,
         // 슬롯에 남은 값이 1순위 — 상한 승격(G-9)은 담당자용 오픈이슈 질문을 여기 적어 둔다
         question:
-          asText(slot.value) ?? rationaleBySlot.get(slot.slotKey) ?? `${slot.slotKey} 확정 필요`,
+          nonEmptyText(slot.value) ??
+          rationaleBySlot.get(slot.slotKey) ??
+          `${slot.slotKey} 확정 필요`,
       }));
 
     const result = await this.gateway.complete<RequirementsOutput>(REQUIREMENTS_V0, {
-      request,
+      request: context.request,
       teamLanguage: this.teamLanguage,
-      clarifications: conversation,
+      clarifications: context.conversation,
       promotedSlots: promotedSlots.map(({ slotKey, question }) => ({ key: slotKey, question })),
     });
     const doc = assembleRequirementsDocument({
@@ -732,9 +766,11 @@ export class IntakeRunner<A> {
       modelVersion: this.deps.modelVersion,
       ...versionAxes,
     });
+    // 확인할 슬롯이 없는 문서(전면 승격)는 게시 시점이 곧 종착이다 (G-11)
+    this.recordCompletion(sessionId, versionAxes);
   }
 
-  /** 지금까지 게시된 requirements 문서 수 — 다음 문서의 vN 근거 (G-11). */
+  /** 지금까지 게시된 requirements 문서 수 = 현재 문서의 버전. 문서 전이면 0 (G-11). */
   documentVersionOf(sessionId: string): number {
     return this.deps.store
       .listSignals(sessionId)
@@ -755,10 +791,7 @@ export class IntakeRunner<A> {
   }
 
   /** 전사에서 요청 원문과 Q/A 쌍을 조립한다 — 게이트웨이 호출은 무상태이므로 매번 저장소에서 만든다 (F14). */
-  private buildConversation(sessionId: string): {
-    request: string;
-    conversation: Array<{ question: string; answer: string }>;
-  } {
+  private buildConversation(sessionId: string): ConversationContext {
     const utterances = this.deps.store.listUtterances(sessionId);
     const request = utterances.find((u) => u.authorType === 'requester')?.originalText ?? '';
     const conversation: Array<{ question: string; answer: string }> = [];
