@@ -1,4 +1,7 @@
 ## 8. 스코프 제외 (Non-goals)
+
+> **EN** — PRD §8 and §9 — explicit non-goals (no production code, no priority arbitration, no model routing) and the phased plan. Each phase carries kill/pivot criteria as well as pass criteria, on the principle that a plan without a branch for the hypothesis being wrong is not a plan.
+
 - 프로덕션 코드 생성·아키텍처 설계·기술 스택 결정.
 - 외부 판매·멀티테넌시·과금·임의 조직 온보딩(내부 도구 확정).
 - 목업을 구현 결과물로 납품하거나 하이파이 디자인 제공.

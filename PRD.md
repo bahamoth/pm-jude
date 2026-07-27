@@ -1,5 +1,7 @@
 # PRD — AI PM 인테이크 에이전트 "PM Jude"
 
+> **EN** — Product requirements for PM Jude, an AI intake layer that defends developers from vague stakeholder requests and refines them into buildable requirements. This file holds only §2 (product overview) and §3 (the seven core principles); the remaining sections are split under `docs/prd/` — see the table of contents. Read this first if you want to know what the product is and what constraints every other document inherits.
+
 본 문서는 §2 제품 개요와 §3 핵심 원칙만 담는다. 나머지 섹션은 `docs/prd/` 아래 파일로 분할되어 있다. 버전·변경 이력은 [docs/prd/document-info.md](docs/prd/document-info.md).
 
 ## 목차

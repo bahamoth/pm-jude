@@ -1,5 +1,7 @@
 ## 5. 기능 요구사항 (F1–F14)
 
+> **EN** — PRD §5 — functional requirements F1 through F14, grouped into core (channel-agnostic), channel adapters, evaluation and improvement, and the PoC harness. The load-bearing ones are F2 (clarification engine: context grounding, targeted questions, two-layer completeness check, slot tri-state), F5 (gate routing and SLA), F8 (terminal states) and F12 (deployment gate).
+
 기능은 **코어(채널 무관)**, **채널 어댑터**, **평가·개선**, **PoC 하네스**로 구분한다.
 
 ### F1 — 인테이크 (코어 + 웹 + Slack 어댑터)

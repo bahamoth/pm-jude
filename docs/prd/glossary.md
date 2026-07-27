@@ -1,4 +1,7 @@
 ## 13. 용어집 (비개발자 독자용)
+
+> **EN** — PRD §13 — plain-language glossary written for non-developer readers, plus Appendix A reference links. For the canonical engineering vocabulary used in code and issue titles, use `CONTEXT.md` instead.
+
 - **인테이크(Intake)** — 들어온 요청을 받아 방어·정제하는 첫 단계.
 - **명확화 루프** — 질문-답변 반복으로 모호성을 해소하는 대화 과정. 수행 주체는 LLM.
 - **컨텍스트 그라운딩** — 질문을 만들기 전에 기존 이슈·문서·과거 결정을 검색해 요청을 맥락 위에 놓는 것. 이미 답이 있는 것을 묻지 않기 위한 장치.

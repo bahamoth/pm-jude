@@ -1,5 +1,7 @@
 # PM Jude 아키텍처
 
+> **EN** — Visualises and concretises the logical boundaries of PRD §7: system diagram, request lifecycle state machine, representative sequences (happy path, promotion, duplicate merge), data model ERD, component ownership, and the technology decisions settled for Phase 0 versus those still open. The mermaid blocks here are canonical; `docs/architecture.html` mirrors them.
+
 > 성격: [PRD v1.4](PRD.md) §7의 논리 경계를 시각화·구체화한 문서. "어떻게"의 상세는 개발팀 재량이며, Phase 0 착수에 필요한 결정만 확정 상태로 담는다([ADR](docs/adr/) 참조). 나머지 기술 선택은 「결정 대기」로 남긴다. 브라우저 조감은 [docs/architecture.html](docs/architecture.html) — 이 문서 mermaid 블록의 렌더링이며, 블록 수정 시 `node scripts/check-arch-sync.mjs --write`로 동기화한다. 용어는 [CONTEXT.md](CONTEXT.md), 데이터 모델 상세는 [docs/data-model.md](docs/data-model.md).
 
 ## 시스템 구성도

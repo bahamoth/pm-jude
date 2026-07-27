@@ -4,6 +4,8 @@ status: accepted (2026-07-26)
 
 # Phase 0 검증 표면은 웹을 우선하고 Slack을 후순위로 미룬다
 
+> **EN** — Inverts the PRD's Slack-first delivery order. The pipeline is built and verified on a local web surface first, because Slack workspace provisioning and Linear API tokens are operator-dependent and were blocking PoC work. The trade-off is that the adoption hypothesis stays unverified until Slack returns.
+
 PRD §9의 「Slack 우선 전달」(채택 가설을 스테이크홀더의 서식지에서 검증) 전달 순서를 뒤집는다. 헤드리스 하네스(Claude Agent SDK, ADR-0005)와 로컬 웹 표면으로 인테이크 → 명확화 루프 → 2층 완결성 판정 → requirements 문서 생성 파이프라인을 먼저 완성·검증하고, Slack 어댑터 운영과 외부 API 사용(Slack·Linear, 직접 API 전환)은 후순위로 미룬다.
 
 근거: Slack 워크스페이스 앱 프로비저닝과 Linear API 토큰이 운영자 의존이라 검증 착수가 막혀 있다(#8 ready-for-human, #10·#11 착수 불가 판정). PoC의 본래 목적 — 프롬프트 품질·파이프라인 검증 — 이 외부 연동 일정에 블로킹되는 것을 해소한다.

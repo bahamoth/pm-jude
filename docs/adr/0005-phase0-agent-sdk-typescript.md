@@ -4,6 +4,8 @@ status: accepted (2026-07-25)
 
 # Phase 0 하네스는 Claude Agent SDK + TypeScript다
 
+> **EN** — The Phase 0 gateway backend is the Claude Agent SDK on TypeScript, isolated behind the gateway's `complete(promptVersion, input) → structuredOutput` interface so it can be swapped for direct API calls once the PoC clears its exit criteria.
+
 Phase 0의 LLM 게이트웨이 백엔드를 Claude Agent SDK(TypeScript)로 확정한다. 하네스는 게이트웨이 표준 인터페이스(`complete(promptVersion, input) → structuredOutput`) 뒤에 격리하고, PoC 목표 달성 시 직접 API로 교체한다(F14 Exit 기준 — 전환 전후 골든셋 시드로 출력 동등성 확인).
 
 ## Considered Options

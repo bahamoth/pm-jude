@@ -1,5 +1,7 @@
 ## 4. 사용자 시나리오 / 유저 스토리와 수용 기준
 
+> **EN** — PRD §4 — user stories US-1 through US-11 with acceptance criteria, covering intake on both channels, the clarification loop, mockup review, the approval gate, and progress report-back.
+
 ### US-1 — 인테이크 (웹)
 스테이크홀더로서, 웹 채팅창에 자유롭게 요청을 입력하고 싶다.
 - **수용기준**: 간편 로그인(매직 링크/SSO) 후 입력 가능 / 접수 즉시 확인 + 요청 ID 발급 / 코어 세션 생성 / 대시보드에 "명확화 중" 표시.
