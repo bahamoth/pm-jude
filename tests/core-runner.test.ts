@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { BackendRequest, BackendResponse, LlmBackend } from '../src/gateway/backend';
 import { createDefaultRegistry } from '../src/prompts/catalog';
 import type { CompletenessOutput } from '../src/prompts/completeness-v0';
+import type { PromotionOutput } from '../src/prompts/promotion-v0';
 import type { RequirementsOutput } from '../src/prompts/requirements-v0';
 import {
   detectRequesterLanguage,
@@ -88,6 +89,41 @@ const unrefinedCompletenessResponse = JSON.stringify({
   remainingAmbiguities: ['해결하려는 문제가 불명'],
   rubric: { score: 35, rationale: '핵심이 비어 있음' },
 } satisfies CompletenessOutput);
+
+/** 상한 도달 시점의 승격 판정 — 남은 미충족 슬롯이 전부 담당자 몫으로 넘어간다 (F2c ①②). */
+const promotableResponse = JSON.stringify({
+  decisions: [
+    {
+      slotKey: 'purpose',
+      promotable: true,
+      rationale: '대화에 문제 상황이 드러나 담당자가 범위를 정할 수 있다',
+      openIssueQuestion: '대시보드가 답해야 할 핵심 질문을 무엇으로 확정할 것인가',
+    },
+    {
+      slotKey: 'data-source',
+      promotable: true,
+      rationale: '데이터의 진실 원천은 담당자가 정하는 항목이다',
+      openIssueQuestion: '매출 집계의 진실 원천으로 어느 저장소를 쓸 것인가',
+    },
+  ],
+} satisfies PromotionOutput);
+
+/** purpose는 담당자도 대신 정할 수 없다 — 보류로 이끄는 판정 (F2c ③). */
+const blockingPromotionResponse = JSON.stringify({
+  decisions: [
+    {
+      slotKey: 'purpose',
+      promotable: false,
+      rationale: '무엇을 해결하려는지가 대화 어디에도 없어 담당자가 대신 정할 수 없다',
+    },
+    {
+      slotKey: 'data-source',
+      promotable: true,
+      rationale: '진실 원천은 담당자가 정하는 항목이다',
+      openIssueQuestion: '매출 집계의 진실 원천으로 어느 저장소를 쓸 것인가',
+    },
+  ],
+} satisfies PromotionOutput);
 
 const requirementsResponse = JSON.stringify({
   problem: '영업 실적을 정리해 볼 수단이 없어 매니저가 수작업으로 집계한다',
@@ -281,9 +317,71 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
     });
   });
 
-  it('상한 도달 후에도 미정제면 사유 회신 후 보류(정보 부족)로 종결된다 (원칙 5)', async () => {
+  it('상한 도달 + 남은 미충족 슬롯이 전부 승격 가능이면 조건부 문서가 게시된다 (G-9)', async () => {
     const { runner, port, store } = makeRunner(
-      [clarificationResponse, unrefinedCompletenessResponse],
+      [
+        clarificationResponse,
+        unrefinedCompletenessResponse, // 상한 도달 시점에 purpose·data-source 미충족
+        promotableResponse, // 승격 판정 — 둘 다 담당자 몫
+        requirementsResponse,
+      ],
+      { maxRounds: 1 },
+    );
+    await runner.handleIntake(intake);
+
+    const result = await runner.handleReply({ ...intake, text: '영업팀 매니저가 봅니다' });
+
+    expect(result?.status).toBe('documented'); // 보류가 아니라 조건부 상정
+    const doc = port.posted.at(-1)?.text ?? '';
+    expect(doc).toContain('오픈이슈');
+    // 오픈이슈 질문은 담당자가 읽는 문장이다 — 요청자에게 되묻지 않는다
+    expect(doc).toContain('매출 집계의 진실 원천으로 어느 저장소를 쓸 것인가');
+
+    expect(store.exportSessions()[0]?.slotStates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ slotKey: 'purpose', state: 'promoted' }),
+        expect.objectContaining({ slotKey: 'data-source', state: 'promoted' }),
+      ]),
+    );
+    const signals = store.exportSessions()[0]?.signals ?? [];
+    expect(signals.find((signal) => signal.type === 'promotion_judged')?.payload).toMatchObject({
+      promotable: ['purpose', 'data-source'],
+      blocking: [],
+    });
+    expect(signals.find((signal) => signal.type === 'document_delivered')?.payload).toMatchObject({
+      conditional: true,
+    });
+    expect(signals.some((signal) => signal.type === 'session_on_hold')).toBe(false);
+  });
+
+  it('상한 도달 + 승격 불가 슬롯이 남으면 승격 없이 보류로 종결된다 (F2c ③)', async () => {
+    const { runner, store } = makeRunner(
+      [clarificationResponse, unrefinedCompletenessResponse, blockingPromotionResponse],
+      { maxRounds: 1 },
+    );
+    await runner.handleIntake(intake);
+
+    const result = await runner.handleReply({ ...intake, text: '잘 모르겠는데요' });
+
+    expect(result).toMatchObject({ status: 'closed', terminalState: 'on_hold_insufficient_info' });
+    expect(store.exportSessions()[0]?.signals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'promotion_judged' }),
+        expect.objectContaining({ type: 'session_on_hold' }),
+      ]),
+    );
+    // 부분 승격은 하지 않는다 — 하나라도 승격 불가면 문서가 근거가 되지 못하므로 상태를 건드리지 않는다
+    expect(store.exportSessions()[0]?.slotStates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ slotKey: 'purpose', state: 'unfilled' }),
+        expect.objectContaining({ slotKey: 'data-source', state: 'unfilled' }),
+      ]),
+    );
+  });
+
+  it('승격 판정도 통과하지 못하면 사유 회신이 종결을 앞선다 (원칙 5)', async () => {
+    const { runner, port, store } = makeRunner(
+      [clarificationResponse, unrefinedCompletenessResponse, blockingPromotionResponse],
       { maxRounds: 1 },
     );
     await runner.handleIntake(intake);
@@ -308,7 +406,8 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
     const { runner, port, store } = makeRunner(
       [
         clarificationResponse,
-        unrefinedCompletenessResponse, // 1차 답변 → 상한 도달 → 보류
+        unrefinedCompletenessResponse, // 1차 답변 → 상한 도달
+        blockingPromotionResponse, // 승격 불가 → 보류
         unrefinedCompletenessResponse, // 재개 답변 → 미정제
         clarificationResponse, // 재개로 예산이 늘어 다음 라운드 질문
       ],
@@ -358,14 +457,49 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
       false,
     );
     expect(outcome?.status).toBe('documented');
-    expect(port.posted.at(-1)?.text).toContain('requirements v0');
+    // 정정 재생성은 무버전 덮어쓰기가 아니다 — 문서에 vN이 실린다 (G-11)
+    expect(port.posted.at(-1)?.text).toContain('requirements 문서 v2');
     expect(store.findSessionByThreadKey('web:thread-1')?.roundCount).toBe(roundBefore);
-    expect(store.exportSessions()[0]?.signals).toEqual(
+    const signals = store.exportSessions()[0]?.signals ?? [];
+    expect(signals).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: 'slot_confirmed' }),
         expect.objectContaining({ type: 'slot_correction' }),
       ]),
     );
+    expect(
+      signals
+        .filter((signal) => signal.type === 'document_delivered')
+        .map((signal) => (signal.payload as { version?: number }).version),
+    ).toEqual([1, 2]);
+  });
+
+  it('전 슬롯 확인이 끝나면 완주가 세션에 한 번 기록된다 (G-11 — #11 완주율의 분자)', async () => {
+    const { runner, store } = makeRunner([
+      clarificationResponse,
+      refinedCompletenessResponse,
+      requirementsResponse,
+    ]);
+    await runner.handleIntake(intake);
+    await runner.handleReply({ ...intake, text: '영업팀 매니저요. 수작업 집계 제거요.' });
+
+    const completedSignals = () =>
+      store.exportSessions()[0]?.signals.filter((signal) => signal.type === 'session_completed') ??
+      [];
+
+    await runner.confirmSlot(intake, 'target-user', true);
+    expect(completedSignals()).toHaveLength(0); // purpose가 아직 미확인
+
+    await runner.confirmSlot(intake, 'purpose', true);
+    // data-source는 승격 슬롯이라 요청자 확인 대상이 아니다 (문서 오픈이슈로 간다)
+    expect(completedSignals()).toHaveLength(1);
+    expect(completedSignals()[0]?.payload).toMatchObject({
+      confirmedSlotCount: 2,
+      promotedSlotCount: 1,
+    });
+
+    await runner.confirmSlot(intake, 'target-user', true);
+    expect(completedSignals()).toHaveLength(1); // 재확인이 완주를 중복 기록하지 않는다
   });
 
   it('정정이 미정제로 판명돼도 문서를 보류로 파괴하지 않고, 상한 미산입 되물음을 연다 (§6)', async () => {
@@ -410,6 +544,74 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
       status: 'clarifying',
       roundCount: 1,
     });
+  });
+
+  it('실패한 판정의 재시도는 발화를 다시 기록하지 않고 판정만 다시 수행한다 (G-10)', async () => {
+    const script = [clarificationResponse]; // 판정 응답을 준비하지 않아 답변 라운드가 죽는다
+    const { runner, store } = makeRunner(script, { maxRounds: 3 });
+    await runner.handleIntake(intake);
+
+    await expect(
+      runner.handleReply({ ...intake, text: '영업팀 매니저가 봅니다' }),
+    ).rejects.toThrow();
+    const roundBefore = store.findSessionByThreadKey('web:thread-1')?.roundCount;
+    expect(runner.pendingRound('web:thread-1')).toBe('judgement');
+
+    script.push(unrefinedCompletenessResponse, clarificationResponse);
+    const outcome = await runner.retryRound({ ...intake, text: '' });
+
+    expect(outcome?.status).toBe('clarifying');
+    // 발화는 이미 저장돼 있다 — 재시도가 요청자 발화를 다시 적지 않는다 (#28 S-4)
+    expect(
+      store
+        .exportSessions()[0]
+        ?.utterances.filter((u) => u.originalText === '영업팀 매니저가 봅니다'),
+    ).toHaveLength(1);
+    // 죽은 라운드의 몫만 소모한다 — 재시도가 예산을 추가로 먹지 않는다
+    expect(store.findSessionByThreadKey('web:thread-1')?.roundCount).toBe((roundBefore ?? 0) + 1);
+    expect(runner.pendingRound('web:thread-1')).toBeNull();
+  });
+
+  it('intake 상태의 재시도는 질문 생성만 다시 수행한다 (G-10)', async () => {
+    const script: string[] = [];
+    const { runner, port, store } = makeRunner(script);
+    await runner.openSession(intake);
+
+    await expect(runner.startClarification(intake)).rejects.toThrow();
+    expect(runner.pendingRound('web:thread-1')).toBe('clarification');
+
+    script.push(clarificationResponse);
+    const outcome = await runner.retryRound({ ...intake, text: '' });
+
+    expect(outcome?.status).toBe('clarifying');
+    expect(store.findSessionByThreadKey('web:thread-1')?.roundCount).toBe(1);
+    expect(port.posted.at(-1)?.text).toContain('이 대시보드는 주로 누가 보게 되나요?');
+    // 접수 확인도 한 번뿐이다 — 재시도가 인테이크를 되돌리지 않는다
+    expect(
+      store.exportSessions()[0]?.utterances.filter((u) => u.authorType === 'requester'),
+    ).toHaveLength(1);
+  });
+
+  it('미완 라운드가 없으면 재시도는 아무 것도 하지 않는다 (G-10 멱등)', async () => {
+    const { runner, port } = makeRunner([clarificationResponse]);
+    await runner.handleIntake(intake);
+    const postedBefore = port.posted.length;
+
+    expect(runner.pendingRound('web:thread-1')).toBeNull();
+    expect(await runner.retryRound({ ...intake, text: '' })).toBeNull();
+    expect(port.posted.length).toBe(postedBefore);
+  });
+
+  it('보류로 종결된 세션은 재시도 대상이 아니다 — 재개는 입력으로만 (G-10, #30)', async () => {
+    const { runner } = makeRunner(
+      [clarificationResponse, unrefinedCompletenessResponse, blockingPromotionResponse],
+      { maxRounds: 1 },
+    );
+    await runner.handleIntake(intake);
+    await runner.handleReply({ ...intake, text: '잘 모르겠는데요' });
+
+    expect(runner.pendingRound('web:thread-1')).toBeNull();
+    expect(await runner.retryRound({ ...intake, text: '' })).toBeNull();
   });
 
   it('세션이 없는 threadKey의 답변은 무시한다', async () => {

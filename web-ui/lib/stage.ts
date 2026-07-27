@@ -1,5 +1,5 @@
 import type { Key } from './i18n';
-import type { SessionStatus } from './types';
+import type { SessionStatus, SlotView, Utterance } from './types';
 
 // 상태 → 여정 스테퍼·상태 칩 매핑 (G-6·M-1). 서버 status가 유일한 근거다.
 
@@ -49,4 +49,36 @@ export function statusChip(status: SessionStatus, terminalState: string | null):
 /** 현재 답변 중인 라운드가 마지막인지 — 상한 발동 예고(P-U5). */
 export function isLastRound(roundCount: number, roundBudget: number): boolean {
   return roundCount >= roundBudget;
+}
+
+/**
+ * 미완 라운드 판정 (G-10, #28 S-4) — 처리 중이 아닌데 마지막 발화가 요청자면 라운드가 죽은 것이다.
+ * 답변은 이미 서버에 저장돼 있으므로 화면이 할 일은 재제출이 아니라 멱등 재시도 CTA다.
+ * 종결 세션은 대상이 아니다 — 보류 재개는 입력이 하는 일이다(#30).
+ */
+export function roundFailed(
+  status: SessionStatus,
+  utterances: readonly Utterance[],
+  processing: boolean,
+): boolean {
+  if (processing || status === 'closed') return false;
+  if (status === 'intake') return true; // 질문이 아직 없다 = 첫 라운드가 죽었다
+  return utterances.at(-1)?.authorType === 'requester';
+}
+
+/**
+ * Phase 0 종착 (G-11, #28 S-6) — 요청자가 확인할 수 있는 슬롯(충족)이 모두 확인된 상태.
+ * 승격 슬롯은 담당자 몫이라 분모에 넣지 않는다.
+ */
+export function allSlotsConfirmed(slots: readonly SlotView[]): boolean {
+  const confirmable = slots.filter((slot) => slot.state === 'filled');
+  return confirmable.length > 0 && confirmable.every((slot) => slot.confirmedByRequester);
+}
+
+/** 전면 승격 문서 (#28 S-5) — 채워진 슬롯 없이 전부 개발팀 확인으로 넘어간 경우. */
+export function fullyPromoted(slots: readonly SlotView[]): boolean {
+  return (
+    slots.some((slot) => slot.state === 'promoted') &&
+    !slots.some((slot) => slot.state === 'filled')
+  );
 }

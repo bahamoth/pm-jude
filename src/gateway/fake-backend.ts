@@ -1,5 +1,10 @@
 import type { PromptRegistry } from '../prompts/registry';
-import { CLARIFICATION_V1, COMPLETENESS_V0, REQUIREMENTS_V0 } from '../prompts/catalog';
+import {
+  CLARIFICATION_V1,
+  COMPLETENESS_V0,
+  PROMOTION_V0,
+  REQUIREMENTS_V0,
+} from '../prompts/catalog';
 import type { BackendRequest, BackendResponse, LlmBackend } from './backend';
 
 /**
@@ -12,6 +17,7 @@ import type { BackendRequest, BackendResponse, LlmBackend } from './backend';
 export function createFakeBackend(registry: PromptRegistry): LlmBackend {
   const clarificationBody = registry.get(CLARIFICATION_V1).body;
   const completenessBody = registry.get(COMPLETENESS_V0).body;
+  const promotionBody = registry.get(PROMOTION_V0).body;
   const requirementsBody = registry.get(REQUIREMENTS_V0).body;
 
   const clarification = JSON.stringify({
@@ -62,6 +68,24 @@ export function createFakeBackend(registry: PromptRegistry): LlmBackend {
     rubric: { score: 90, rationale: '핵심 슬롯 모두 해소' },
   });
 
+  /** 상한 도달 데모(maxRounds를 낮춘 경우) — 남은 슬롯을 담당자 몫으로 넘겨 조건부 문서로 간다. */
+  const promotion = JSON.stringify({
+    decisions: [
+      {
+        slotKey: 'purpose',
+        promotable: true,
+        rationale: '대화에 문제 상황이 드러나 담당자가 범위를 정할 수 있다',
+        openIssueQuestion: '대시보드가 답해야 할 핵심 질문을 무엇으로 확정할 것인가',
+      },
+      {
+        slotKey: 'data-source',
+        promotable: true,
+        rationale: '데이터의 진실 원천은 담당자가 정하는 항목이다',
+        openIssueQuestion: '매출 집계의 진실 원천으로 어느 저장소를 쓸 것인가',
+      },
+    ],
+  });
+
   const requirements = JSON.stringify({
     problem: '영업 실적을 정리해 볼 수단이 없어 매니저가 수작업으로 집계한다',
     users: ['영업팀 매니저'],
@@ -97,6 +121,9 @@ export function createFakeBackend(registry: PromptRegistry): LlmBackend {
           outputText: conversation.length < 2 ? unrefined : refined,
           usage,
         });
+      }
+      if (request.promptBody === promotionBody) {
+        return Promise.resolve({ outputText: promotion, usage });
       }
       if (request.promptBody === requirementsBody) {
         return Promise.resolve({ outputText: requirements, usage });

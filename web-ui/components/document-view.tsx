@@ -4,8 +4,17 @@ import { Separator } from '@/components/ui/separator';
 import { parseDocumentText } from '@/lib/document';
 import { t, type Lang } from '@/lib/i18n';
 
+interface Props {
+  lang: Lang;
+  text: string;
+  /** 문서 vN — 슬롯 정정 재생성마다 올라간다 (G-11). 0이면 표시하지 않는다. */
+  version?: number;
+  /** 전 슬롯이 승격으로 통과한 문서인지 — 정직한 구분 표시 (G-11, #28 S-5). */
+  fullyPromoted?: boolean;
+}
+
 // requirements 문서 열람 (US-9·10) — 코어가 게시한 문서 텍스트를 구조대로 표시한다.
-export function DocumentView({ lang, text }: { lang: Lang; text: string }) {
+export function DocumentView({ lang, text, version = 0, fullyPromoted = false }: Props) {
   const lines = parseDocumentText(text);
 
   return (
@@ -13,8 +22,19 @@ export function DocumentView({ lang, text }: { lang: Lang; text: string }) {
       <CardHeader className="flex-row items-center gap-3">
         <CardTitle className="text-lg">{t(lang, 'doc.title')}</CardTitle>
         <Badge>{t(lang, 'doc.badge')}</Badge>
+        {version > 0 && (
+          <Badge variant="outline" className="font-mono text-[11px]">
+            {t(lang, 'doc.version', { version })}
+          </Badge>
+        )}
       </CardHeader>
       <CardContent className="grid gap-2.5 text-[15px] leading-relaxed">
+        {fullyPromoted && (
+          <div className="rounded-lg border border-dashed p-3 text-sm">
+            <p className="font-medium">{t(lang, 'doc.fullyPromotedTitle')}</p>
+            <p className="text-muted-foreground">{t(lang, 'doc.fullyPromotedNote')}</p>
+          </div>
+        )}
         {lines.map((line, i) => {
           switch (line.kind) {
             case 'title':

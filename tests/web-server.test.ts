@@ -76,6 +76,16 @@ const refinedCompletenessResponse = JSON.stringify({
   rubric: { score: 90, rationale: '핵심 슬롯 모두 해소' },
 });
 
+const unrefinedCompletenessResponse = JSON.stringify({
+  slots: [
+    { slotKey: 'target-user', verdict: 'filled', rationale: '「영업팀 매니저」라고 확답' },
+    { slotKey: 'purpose', verdict: 'unfilled', rationale: '어떤 문제를 푸는지 답이 없음' },
+    { slotKey: 'data-source', verdict: 'unfilled', rationale: '데이터 출처 답이 없음' },
+  ],
+  remainingAmbiguities: ['해결하려는 문제가 불명'],
+  rubric: { score: 35, rationale: '핵심이 비어 있음' },
+});
+
 const requirementsResponse = JSON.stringify({
   problem: '영업 실적을 정리해 볼 수단이 없어 매니저가 수작업으로 집계한다',
   users: ['영업팀 매니저'],
@@ -138,6 +148,44 @@ async function json<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
 
+/** 접수 → 첫 라운드 게시 완료까지 — 라운드 계약 테스트의 공통 준비. */
+async function openClarifyingSession(baseUrl: string): Promise<string> {
+  const intake = await json<{ sessionId: string }>(
+    await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: '영업 실적 대시보드 하나 만들어 주세요', language: 'ko' }),
+    }),
+  );
+  await waitFor(async () => {
+    const d = await json<{ session: { status: string }; processing: boolean }>(
+      await fetch(`${baseUrl}/api/sessions/${intake.sessionId}`),
+    );
+    return !d.processing && d.session.status === 'clarifying' ? d : null;
+  });
+  return intake.sessionId;
+}
+
+async function roundIdOf(baseUrl: string, sessionId: string): Promise<string | null> {
+  const detail = await json<{ roundId: string | null }>(
+    await fetch(`${baseUrl}/api/sessions/${sessionId}`),
+  );
+  return detail.roundId;
+}
+
+function postReply(
+  baseUrl: string,
+  sessionId: string,
+  text: string,
+  roundId?: string | null,
+): Promise<Response> {
+  return fetch(`${baseUrl}/api/sessions/${sessionId}/replies`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ text, ...(roundId ? { roundId } : {}) }),
+  });
+}
+
 describe('웹 어댑터 HTTP 계약 smoke', () => {
   it('접수 즉시 응답 → 비동기 라운드 → 답변 → 슬롯 확인 → 조회·요약이 관통된다', async () => {
     const { baseUrl, store } = await startServer(
@@ -170,12 +218,16 @@ describe('웹 어댑터 HTTP 계약 smoke', () => {
       const d = await json<{
         session: { status: string };
         roundBudget: number;
+        roundId: string | null;
+        documentVersion: number;
         latestQuestions: Array<{ index: number; dontKnowLabel: string }> | null;
         slotStates: Array<{ slotKey: string; label: string }>;
       }>(await fetch(`${baseUrl}/api/sessions/${intake.sessionId}`));
       return d.session.status === 'clarifying' ? d : null;
     });
     expect(detail.roundBudget).toBeGreaterThan(0); // 마지막 라운드 예고의 근거 (G-2)
+    expect(detail.roundId).toBeTruthy(); // 답변이 응답할 라운드 식별자 (G-10)
+    expect(detail.documentVersion).toBe(0); // 아직 문서 없음 (G-11)
     expect(detail.latestQuestions?.[0]).toMatchObject({
       index: 1,
       dontKnowLabel: '모르겠어요 — 개발팀이 정해 주세요',
@@ -186,16 +238,22 @@ describe('웹 어댑터 HTTP 계약 smoke', () => {
     const replyRes = await fetch(`${baseUrl}/api/sessions/${intake.sessionId}/replies`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text: '영업팀 매니저요. 수작업 집계 제거요. 데이터는 모르겠어요.' }),
+      body: JSON.stringify({
+        text: '영업팀 매니저요. 수작업 집계 제거요. 데이터는 모르겠어요.',
+        roundId: detail.roundId,
+      }),
     });
     expect(replyRes.status).toBe(202);
     const documented = await waitFor(async () => {
-      const d = await json<{ session: { status: string }; processing: boolean }>(
-        await fetch(`${baseUrl}/api/sessions/${intake.sessionId}`),
-      );
+      const d = await json<{
+        session: { status: string };
+        processing: boolean;
+        documentVersion: number;
+      }>(await fetch(`${baseUrl}/api/sessions/${intake.sessionId}`));
       return !d.processing && d.session.status === 'documented' ? d : null;
     });
     expect(documented.session.status).toBe('documented');
+    expect(documented.documentVersion).toBe(1); // 문서 vN 노출 (G-11)
 
     // documented의 일반 답변은 409 — 정정은 슬롯 확인 경로만 (§6)
     const directReply = await fetch(`${baseUrl}/api/sessions/${intake.sessionId}/replies`, {
@@ -231,13 +289,16 @@ describe('웹 어댑터 HTTP 계약 smoke', () => {
       body: JSON.stringify({ confirmed: false, text: '사실 경영진 보고용이에요' }),
     });
     expect(correctRes.status).toBe(202);
-    await waitFor(async () => {
-      const d = await json<{ session: { status: string }; processing: boolean }>(
-        await fetch(`${baseUrl}/api/sessions/${intake.sessionId}`),
-      );
+    const regenerated = await waitFor(async () => {
+      const d = await json<{
+        session: { status: string };
+        processing: boolean;
+        documentVersion: number;
+      }>(await fetch(`${baseUrl}/api/sessions/${intake.sessionId}`));
       return !d.processing && d.session.status === 'documented' ? d : null;
     });
     expect(store.getSession(intake.sessionId)?.roundCount).toBe(roundBefore); // 상한 미산입
+    expect(regenerated.documentVersion).toBe(2); // 정정 재생성은 v2 (G-11)
 
     // 요약 목록 (#29 로컬 목록의 서버측 짝) — 미존재 ID는 조용히 걸러진다
     const summaries = await json<{
@@ -302,6 +363,71 @@ describe('웹 어댑터 HTTP 계약 smoke', () => {
     const idle = await fetch(`${baseUrl}/api/sessions/${intake.sessionId}/events`);
     const idleBody = await idle.text(); // 서버가 닫아야 반환된다
     expect(idleBody).toContain('"processing":false');
+  });
+
+  it('스테일 라운드 제출은 거부되고 최신 라운드만 접수된다 (G-10, #28 S-3)', async () => {
+    const { baseUrl } = await startServer(
+      new ScriptedBackend([
+        clarificationResponse,
+        unrefinedCompletenessResponse, // 1라운드 답변 → 미정제
+        clarificationResponse, // 2라운드 질문
+      ]),
+    );
+    const sessionId = await openClarifyingSession(baseUrl);
+    const first = await roundIdOf(baseUrl, sessionId);
+
+    // roundId 없는 제출은 계약 위반 — 어느 질문에 답한 것인지 알 수 없다
+    const noRound = await postReply(baseUrl, sessionId, '영업팀 매니저요');
+    expect(noRound.status).toBe(400);
+
+    const accepted = await postReply(baseUrl, sessionId, '영업팀 매니저요', first);
+    expect(accepted.status).toBe(202);
+    const second = await waitFor(async () => {
+      const id = await roundIdOf(baseUrl, sessionId);
+      return id !== null && id !== first ? id : null;
+    });
+
+    // 다른 탭이 1라운드 질문에 답한 경우 — 최신 질문의 답으로 오결합되지 않게 거부한다
+    const stale = await postReply(baseUrl, sessionId, '아까 그 질문 답이요', first);
+    expect(stale.status).toBe(409);
+    expect(await json<{ code: string }>(stale)).toMatchObject({ code: 'stale_round' });
+    expect(second).not.toBe(first);
+  });
+
+  it('실패한 라운드의 재시도는 멱등이다 — 발화·예산을 다시 먹지 않는다 (G-10, #28 S-4)', async () => {
+    const script = [clarificationResponse]; // 판정 응답이 없어 답변 라운드가 죽는다
+    const { baseUrl, store } = await startServer(new ScriptedBackend(script));
+    const sessionId = await openClarifyingSession(baseUrl);
+    const roundId = await roundIdOf(baseUrl, sessionId);
+
+    expect((await postReply(baseUrl, sessionId, '영업팀 매니저요', roundId)).status).toBe(202);
+    await waitFor(async () => {
+      const d = await json<{ processing: boolean }>(
+        await fetch(`${baseUrl}/api/sessions/${sessionId}`),
+      );
+      return d.processing ? null : true;
+    });
+    const roundCountAfterFailure = store.getSession(sessionId)?.roundCount;
+    const utterancesAfterFailure = store.listUtterances(sessionId).length;
+
+    script.push(unrefinedCompletenessResponse, clarificationResponse);
+    const retry = await fetch(`${baseUrl}/api/sessions/${sessionId}/rounds`, { method: 'POST' });
+    expect(retry.status).toBe(202);
+    await waitFor(async () => {
+      const id = await roundIdOf(baseUrl, sessionId);
+      return id !== null && id !== roundId ? id : null;
+    });
+
+    // 재시도는 죽은 라운드의 몫만 소모하고 요청자 발화를 다시 적지 않는다
+    expect(store.getSession(sessionId)?.roundCount).toBe((roundCountAfterFailure ?? 0) + 1);
+    expect(
+      store.listUtterances(sessionId).filter((u) => u.authorType === 'requester'),
+    ).toHaveLength(2);
+    expect(store.listUtterances(sessionId).length).toBe(utterancesAfterFailure + 1); // 질문 1건만 추가
+
+    // 미완 라운드가 없으면 재시도는 거부된다 — 재시도가 새 라운드를 만들지 않는다
+    const again = await fetch(`${baseUrl}/api/sessions/${sessionId}/rounds`, { method: 'POST' });
+    expect(again.status).toBe(409);
   });
 
   it('로컬 허브 (#36) — 보드·트레이스·문서가 호스팅되고 화이트리스트 밖은 닫힌다', async () => {
