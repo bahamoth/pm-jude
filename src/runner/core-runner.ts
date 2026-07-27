@@ -1,6 +1,6 @@
 import type { LlmBackend } from '../gateway/backend';
 import { LlmGateway, type UsageLogger } from '../gateway/gateway';
-import { CLARIFICATION_V0, COMPLETENESS_V0, REQUIREMENTS_V0 } from '../prompts/catalog';
+import { CLARIFICATION_V1, COMPLETENESS_V0, REQUIREMENTS_V0 } from '../prompts/catalog';
 import type { ClarificationOutput } from '../prompts/clarification-v0';
 import {
   COMPLETENESS_RUBRIC_V0,
@@ -28,7 +28,7 @@ export const TEMP_REQUIRED_SLOTS = [
 
 /** 카탈로그의 프롬프트 버전과 임시 임계치·슬롯 스키마를 DB 버전 레지스트리에 아이덤포턴트하게 동기화한다. */
 export function ensureVersionAxes(store: SessionStore, registry: PromptRegistry) {
-  const clarification = registry.get(CLARIFICATION_V0);
+  const clarification = registry.get(CLARIFICATION_V1);
   const promptVersionId =
     store.findVersionId('prompt', clarification.name, clarification.semver) ??
     store.registerPromptVersion({
@@ -445,7 +445,7 @@ export class IntakeRunner<A> {
     const stateBySlot = new Map(
       store.listSlotStates(sessionId).map((slot) => [slot.slotKey, slot.state]),
     );
-    const result = await this.gateway.complete<ClarificationOutput>(CLARIFICATION_V0, {
+    const result = await this.gateway.complete<ClarificationOutput>(CLARIFICATION_V1, {
       request,
       requesterLanguage: language,
       requiredSlots: TEMP_REQUIRED_SLOTS.map((slot) => ({
