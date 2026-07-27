@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
+import { rememberLang, t, type Lang } from '@/lib/i18n';
 
 export interface IntakeInput {
   name?: string;
@@ -23,43 +24,51 @@ export interface IntakeInput {
 
 // 간이 식별(이름·언어) + 요청 원문 — SSO·매직 링크 대체 (ADR-0007).
 export function IntakeForm({
+  lang,
+  onLangChange,
   onSubmit,
   onType,
 }: {
+  lang: Lang;
+  /** 언어 라디오를 바꾸면 화면 언어도 따라간다 */
+  onLangChange?: (lang: Lang) => void;
   onSubmit: (input: IntakeInput) => void;
   /** 키 입력 한 번 = Jude에게 소리 한 번 (docs/persona/jude.md) */
   onType?: () => void;
 }) {
   const [name, setName] = useState('');
-  const [language, setLanguage] = useState<'ko' | 'en'>('ko');
+  // 요청자가 고른 언어는 화면 언어이자 명확화 질문의 언어다 (F2b)
+  const [language, setLanguage] = useState<Lang>(lang);
   const [text, setText] = useState('');
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-xl">무엇을 만들어 드릴까요?</CardTitle>
-        <CardDescription>
-          요청을 남기면 몇 가지 확인 질문으로 내용을 정리해, 개발팀이 바로 착수할 수 있는
-          requirements 문서로 만들어 드립니다.
-        </CardDescription>
+        <CardTitle className="text-xl">{t(lang, 'intake.title')}</CardTitle>
+        <CardDescription>{t(lang, 'intake.lede')}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-5">
         <div className="grid gap-2">
-          <Label htmlFor="intake-name">이름 (선택)</Label>
+          <Label htmlFor="intake-name">{t(lang, 'intake.name')}</Label>
           <Input
             id="intake-name"
             autoComplete="name"
-            placeholder="홍길동"
+            placeholder={t(lang, 'intake.namePlaceholder')}
             value={name}
             onChange={(event) => setName(event.target.value)}
           />
         </div>
         <div className="grid gap-2">
-          <Label>언어 · Language</Label>
+          <Label>{t(lang, 'intake.language')}</Label>
           <RadioGroup
             className="flex gap-6"
             value={language}
-            onValueChange={(value) => setLanguage(value === 'en' ? 'en' : 'ko')}
+            onValueChange={(value) => {
+              const next: Lang = value === 'en' ? 'en' : 'ko';
+              setLanguage(next);
+              rememberLang(next);
+              onLangChange?.(next);
+            }}
           >
             <div className="flex items-center gap-2">
               <RadioGroupItem value="ko" id="lang-ko" />
@@ -76,21 +85,19 @@ export function IntakeForm({
           </RadioGroup>
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="intake-text">요청 내용</Label>
+          <Label htmlFor="intake-text">{t(lang, 'intake.text')}</Label>
           <Textarea
             id="intake-text"
             required
             rows={5}
-            placeholder="예: 영업 실적 대시보드 하나 만들어 주세요"
+            placeholder={t(lang, 'intake.textPlaceholder')}
             value={text}
             onChange={(event) => {
               setText(event.target.value);
               onType?.();
             }}
           />
-          <p className="text-xs text-muted-foreground">
-            완벽하지 않아도 괜찮아요 — 모호한 부분은 이어지는 질문에서 함께 정리합니다.
-          </p>
+          <p className="text-xs text-muted-foreground">{t(lang, 'intake.hint')}</p>
         </div>
       </CardContent>
       <CardFooter>
@@ -107,7 +114,7 @@ export function IntakeForm({
             });
           }}
         >
-          요청 보내기
+          {t(lang, 'intake.submit')}
         </Button>
       </CardFooter>
     </Card>

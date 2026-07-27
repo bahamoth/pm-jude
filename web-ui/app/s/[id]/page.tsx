@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { confirmSlotOk, correctSlot, getSession, retryRound, sendReply } from '@/lib/api';
 import { rememberSession } from '@/lib/local-sessions';
+import { t, sessionLang, useLang, type Lang } from '@/lib/i18n';
 import { judeState, type JudeState } from '@/lib/jude-geometry';
 import { isLastRound, journeyStep } from '@/lib/stage';
 import type { SessionDetail } from '@/lib/types';
@@ -39,6 +40,8 @@ export default function SessionPage() {
   const watchingRef = useRef(false);
   const judeRef = useRef<JudeHandle>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 화면 언어는 세션의 요청자 언어를 따른다 — 전사가 근거다 (F2b)
+  const lang = useLang(detail ? sessionLang(detail.utterances) : null);
 
   /** 키 입력 한 번 = 소리 한 번. 멎으면 자세가 곧 풀린다 (docs/persona/jude.md). */
   const onType = useCallback(() => {
@@ -89,7 +92,7 @@ export default function SessionPage() {
       await kick();
       await watchThenRefetch();
     } catch (e) {
-      setError(e instanceof Error ? e.message : '처리 실패');
+      setError(e instanceof Error ? e.message : t(lang, 'session.actionFailed'));
       await refetch();
     } finally {
       setBusy(false);
@@ -98,13 +101,13 @@ export default function SessionPage() {
 
   if (notFound) {
     return (
-      <Shell sessionId={sessionId} judeState="failed">
+      <Shell lang={lang} sessionId={sessionId} judeState="failed">
         <Alert variant="destructive">
-          <AlertTitle>요청을 찾을 수 없어요</AlertTitle>
+          <AlertTitle>{t(lang, 'session.notFoundTitle')}</AlertTitle>
           <AlertDescription>
-            링크가 잘못됐거나 서버 저장소가 바뀌었어요.{' '}
+            {t(lang, 'session.notFoundBody')}{' '}
             <Link className="underline" href="/">
-              홈으로
+              {t(lang, 'nav.home')}
             </Link>
           </AlertDescription>
         </Alert>
@@ -113,7 +116,7 @@ export default function SessionPage() {
   }
   if (!detail) {
     return (
-      <Shell sessionId={sessionId} judeState="thinking">
+      <Shell lang={lang} sessionId={sessionId} judeState="thinking">
         <Skeleton className="h-10 w-full" />
         <Skeleton className="h-64 w-full" />
       </Shell>
@@ -136,10 +139,15 @@ export default function SessionPage() {
   });
 
   return (
-    <Shell sessionId={sessionId} judeState={face} judeRef={judeRef}>
-      <JourneyStepper current={journeyStep(session.status)} note={onHold ? '보류' : undefined} />
+    <Shell lang={lang} sessionId={sessionId} judeState={face} judeRef={judeRef}>
+      <JourneyStepper
+        lang={lang}
+        current={journeyStep(session.status)}
+        note={onHold ? t(lang, 'journey.onHold') : undefined}
+      />
 
       <Transcript
+        lang={lang}
         entries={utterances.map((u) => ({
           who: u.authorType === 'requester' ? 'requester' : 'agent',
           text: u.originalText,
@@ -148,20 +156,24 @@ export default function SessionPage() {
 
       {session.status === 'intake' ? (
         <AckCard
+          lang={lang}
           sessionId={sessionId}
           failed={roundFailed}
           onRetry={() => {
             void retryRound(sessionId)
               .then(() => watchThenRefetch())
-              .catch((e) => setError(e instanceof Error ? e.message : '재시도 실패'));
+              .catch((e) =>
+                setError(e instanceof Error ? e.message : t(lang, 'session.retryFailed')),
+              );
           }}
         />
       ) : busy || processing ? (
-        <WaitingCard phase="reply" />
+        <WaitingCard lang={lang} phase="reply" />
       ) : session.status === 'clarifying' ? (
         <div className="grid gap-4">
-          {session.roundCount > 1 && <RoundContext slots={slotStates} />}
+          {session.roundCount > 1 && <RoundContext lang={lang} slots={slotStates} />}
           <QuestionWizard
+            lang={lang}
             key={`${session.roundCount}-${latestQuestions?.[0]?.question ?? ''}`}
             questions={latestQuestions ?? []}
             round={Math.max(session.roundCount, 1)}
@@ -173,23 +185,24 @@ export default function SessionPage() {
       ) : session.status === 'documented' ? (
         <div className="grid gap-4">
           <SlotReview
+            lang={lang}
             slots={slotStates}
             submitting={busy}
             onConfirm={(slotKey) =>
               void confirmSlotOk(sessionId, slotKey)
                 .then(() => refetch())
-                .catch((e) => setError(e instanceof Error ? e.message : '확인 실패'))
+                .catch((e) =>
+                  setError(e instanceof Error ? e.message : t(lang, 'session.confirmFailed')),
+                )
             }
             onCorrect={(slotKey, text) => void act(() => correctSlot(sessionId, slotKey, text))}
           />
-          <DocumentView text={documentText} />
-          <p className="text-center text-sm text-muted-foreground">
-            다음은 개발팀 검토예요 — 이 단계는 준비 중이라, 지금은 완성된 문서가 개발팀에 그대로
-            전달됩니다.
-          </p>
+          <DocumentView lang={lang} text={documentText} />
+          <p className="text-center text-sm text-muted-foreground">{t(lang, 'doc.nextStep')}</p>
         </div>
       ) : onHold ? (
         <HoldCard
+          lang={lang}
           slots={slotStates}
           submitting={busy}
           onType={onType}
@@ -197,19 +210,19 @@ export default function SessionPage() {
         />
       ) : (
         <Alert>
-          <AlertTitle>세션이 종결됐어요</AlertTitle>
-          <AlertDescription>새 요청은 홈에서 시작할 수 있어요.</AlertDescription>
+          <AlertTitle>{t(lang, 'session.closedTitle')}</AlertTitle>
+          <AlertDescription>{t(lang, 'session.closedBody')}</AlertDescription>
         </Alert>
       )}
 
       {error && (
         <Alert variant="destructive">
-          <AlertTitle>진행에 문제가 생겼어요</AlertTitle>
+          <AlertTitle>{t(lang, 'session.errorTitle')}</AlertTitle>
           <AlertDescription className="grid gap-2">
             <span>{error}</span>
             <span>
               <Button size="sm" variant="outline" onClick={() => void refetch()}>
-                이어서 진행
+                {t(lang, 'common.continue')}
               </Button>
             </span>
           </AlertDescription>
@@ -220,11 +233,13 @@ export default function SessionPage() {
 }
 
 function Shell({
+  lang,
   sessionId,
   judeState: face,
   judeRef,
   children,
 }: {
+  lang: Lang;
   sessionId: string;
   judeState: JudeState;
   judeRef?: React.RefObject<JudeHandle | null>;
@@ -235,17 +250,17 @@ function Shell({
       <header className="flex items-center gap-3">
         <Jude ref={judeRef} state={face} size={56} className="-my-1" />
         <Link href="/" className="text-lg font-semibold tracking-tight">
-          Jude <span className="font-normal text-muted-foreground">· 요청 인테이크</span>
+          Jude <span className="font-normal text-muted-foreground">· {t(lang, 'brand.sub')}</span>
         </Link>
         <div className="ml-auto flex items-center gap-2">
           <Badge variant="outline" className="font-mono text-[11px]">
-            요청 {sessionId.slice(0, 8)}
+            {t(lang, 'common.request')} {sessionId.slice(0, 8)}
           </Badge>
           <Link
             href="/"
             className="rounded-md px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
-            내 요청
+            {t(lang, 'nav.myRequests')}
           </Link>
         </div>
       </header>
