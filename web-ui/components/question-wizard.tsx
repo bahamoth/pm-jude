@@ -30,6 +30,8 @@ interface Props {
   round: number;
   /** 왕복 예산 소진 직전 — 예고 없는 강제 종결을 막는다 (P-U5, G-2) */
   lastRound?: boolean;
+  /** 키 입력 한 번 = Jude에게 소리 한 번 (docs/persona/jude.md) */
+  onType?: () => void;
   onSubmit: (text: string) => void;
 }
 
@@ -38,7 +40,7 @@ interface Props {
  * 「모르겠다 / 개발팀이 정할 문제」와 직접 입력은 모든 문항의 상시 경로다 (US-10).
  * 질문 구조가 없으면(구버전 세션 재개) 자유 입력으로 강등한다.
  */
-export function QuestionWizard({ questions, round, lastRound, onSubmit }: Props) {
+export function QuestionWizard({ questions, round, lastRound, onType, onSubmit }: Props) {
   const [step, setStep] = useState(0); // questions.length == 확인 단계
   const [answers, setAnswers] = useState<ReadonlyMap<number, WizardAnswer>>(new Map());
   const [freeText, setFreeText] = useState('');
@@ -54,7 +56,10 @@ export function QuestionWizard({ questions, round, lastRound, onSubmit }: Props)
           <Textarea
             rows={4}
             value={freeText}
-            onChange={(event) => setFreeText(event.target.value)}
+            onChange={(event) => {
+              setFreeText(event.target.value);
+              onType?.();
+            }}
             placeholder="추가로 알려줄 내용"
           />
         </CardContent>

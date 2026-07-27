@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { IntakeForm, type IntakeInput } from '@/components/intake-form';
+import { Jude, type JudeHandle } from '@/components/jude';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -30,6 +31,17 @@ export default function Home() {
   const [summaries, setSummaries] = useState<SessionSummary[] | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [typing, setTyping] = useState(false);
+  const judeRef = useRef<JudeHandle>(null);
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** 키 입력 한 번 = 소리 한 번. 요청을 적는 동안 Jude가 그쪽으로 고개를 돌린다. */
+  const onType = useCallback(() => {
+    judeRef.current?.hear();
+    setTyping(true);
+    if (typingTimer.current) clearTimeout(typingTimer.current);
+    typingTimer.current = setTimeout(() => setTyping(false), 700);
+  }, []);
 
   useEffect(() => {
     const ids = listSessionIds();
@@ -59,8 +71,9 @@ export default function Home() {
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-5 py-8">
       <header className="flex items-center gap-3">
+        <Jude ref={judeRef} state={typing ? 'listening' : 'idle'} size={56} className="-my-1" />
         <h1 className="text-lg font-semibold tracking-tight">
-          pm-jude <span className="font-normal text-muted-foreground">· 요청 인테이크</span>
+          Jude <span className="font-normal text-muted-foreground">· 요청 인테이크</span>
         </h1>
         {hasSessions && !showForm && (
           <Button className="ml-auto" size="sm" onClick={() => setShowForm(true)}>
@@ -73,7 +86,7 @@ export default function Home() {
 
       {summaries !== null && (!hasSessions || showForm) && (
         <>
-          <IntakeForm onSubmit={(input) => void handleIntake(input)} />
+          <IntakeForm onType={onType} onSubmit={(input) => void handleIntake(input)} />
           {error && <p className="text-sm text-destructive">{error}</p>}
         </>
       )}
