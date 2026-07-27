@@ -22,13 +22,7 @@ import { confirmSlotOk, correctSlot, getSession, retryRound, sendReply } from '@
 import { rememberSession } from '@/lib/local-sessions';
 import { t, sessionLang, useLang, type Lang } from '@/lib/i18n';
 import { judeState, type JudeState } from '@/lib/jude-geometry';
-import {
-  allSlotsConfirmed,
-  fullyPromoted,
-  isLastRound,
-  journeyStep,
-  roundFailed,
-} from '@/lib/stage';
+import { fullyPromoted, isLastRound, journeyStep, roundFailed } from '@/lib/stage';
 import { ApiError, type SessionDetail } from '@/lib/types';
 import { watchProcessing } from '@/lib/watch-processing';
 
@@ -142,7 +136,9 @@ export default function SessionPage() {
     session,
     latestQuestions,
     roundId,
+    pendingRound,
     documentVersion,
+    completed,
     roundBudget,
     slotStates,
     utterances,
@@ -150,10 +146,9 @@ export default function SessionPage() {
   } = detail;
   const onHold =
     session.status === 'closed' && session.terminalState === 'on_hold_insufficient_info';
-  // 미완 라운드 판정은 상태와 전사로 유도한다 — 답변만 남고 응답이 없으면 라운드가 죽은 것 (G-10)
-  const failed = roundFailed(session.status, utterances, processing || busy);
+  // 죽은 라운드 판정은 서버가 한다 (G-10) — 화면은 처리 중이 아닐 때만 재시도를 드러낸다
+  const failed = roundFailed(pendingRound, processing || busy);
   const documentText = utterances.findLast((u) => u.authorType === 'agent')?.originalText ?? '';
-  const completed = allSlotsConfirmed(slotStates); // Phase 0 종착 (G-11)
 
   const face = judeState({
     status: session.status,

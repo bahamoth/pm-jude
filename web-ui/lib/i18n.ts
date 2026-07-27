@@ -122,7 +122,7 @@ const ko = {
     '다음은 개발팀 검토예요 — 이 단계는 준비 중이라, 지금은 완성된 문서가 개발팀에 그대로 전달됩니다.',
   'doc.fullyPromotedTitle': '대부분을 개발팀 확인으로 넘겼어요',
   'doc.fullyPromotedNote':
-    '요청자가 답할 수 없는 항목이 많아 이 문서는 개발팀이 확정할 항목으로 채워졌어요. 요청은 그대로 진행됩니다.',
+    '이번엔 여쭤본 것 대부분이 개발팀이 정할 몫이라, 제가 그대로 개발팀 확인 항목으로 옮겨 뒀어요. 요청은 그대로 진행됩니다.',
   'doc.completedTitle': '확인이 끝났어요',
   'doc.completedBody':
     '정리한 내용을 전부 확인해 주셨어요. 지금은 여기가 여정의 끝이고, 이 문서가 개발팀에 전달됩니다.',
@@ -261,7 +261,7 @@ const en: Record<Key, string> = {
     "Next is team review — that stage isn't built yet, so for now the finished document goes to the team as it is.",
   'doc.fullyPromotedTitle': "Most of this went to the team's list",
   'doc.fullyPromotedNote':
-    'Too much of this was outside what you could answer, so the document is built from items the team will settle. Your request keeps moving.',
+    "Most of what I asked turned out to be the team's call, so I moved it straight onto their list. Your request keeps moving.",
   'doc.completedTitle': "That's everything confirmed",
   'doc.completedBody':
     'You checked every item I pinned down. This is the end of the journey for now, and the document goes to the team.',

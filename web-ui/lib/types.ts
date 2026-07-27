@@ -15,6 +15,9 @@ export interface Reply {
 /** 코어 러너가 세션에 부여하는 상태 집합 (src/runner/core-runner.ts). */
 export type SessionStatus = 'intake' | 'clarifying' | 'documented' | 'closed';
 
+/** 재시도할 미완 라운드의 종류 — 질문 생성이 죽었는지, 판정이 죽었는지 (G-10). */
+export type PendingRound = 'clarification' | 'judgement' | null;
+
 /** 접수 응답 — 즉시 반환(F1). 질문은 SSE·세션 조회로 온다. */
 export interface IntakeResult {
   sessionId: string;
@@ -56,8 +59,12 @@ export interface SessionDetail {
   latestQuestions: ReplyQuestion[] | null;
   /** 최신 명확화 라운드의 식별자 — 답변 제출이 동반해야 한다 (G-10 라운드 정합). */
   roundId: string | null;
+  /** 죽은 채 남은 라운드 — 재시도 CTA의 근거. 판정은 서버가 한다 (G-10). */
+  pendingRound: PendingRound;
   /** 지금까지 게시된 requirements 문서 수 = 현재 문서의 vN. 문서 전이면 0 (G-11). */
   documentVersion: number;
+  /** 현재 문서 버전에서 전 슬롯 확인이 끝났는가 — Phase 0 종착 (G-11). */
+  completed: boolean;
   roundBudget: number;
   /** 서버가 이 세션의 LLM 라운드를 돌리는 중인지 — 대기 화면과 SSE 수명의 근거 */
   processing: boolean;

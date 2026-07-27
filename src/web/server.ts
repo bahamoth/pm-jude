@@ -159,6 +159,19 @@ export function createWebServer(deps: WebServerDeps): Server {
       .at(-1);
   }
 
+  /**
+   * 이 라운드가 이미 답을 받았는가 (G-10) — 라운드 신호에 남은 질문 발화 순번 뒤로 요청자 발화가
+   * 있으면 그렇다. 최신 라운드 id를 들고 오더라도 그 라운드가 소비됐으면 스테일 제출이다:
+   * 다른 탭이 답해 라운드가 종결(보류)됐거나 판정이 도는 중인 경우가 여기 걸린다.
+   */
+  function isAnswered(sessionId: string, payload: unknown): boolean {
+    const seq = (payload as { utteranceSeq?: unknown } | null)?.utteranceSeq;
+    if (typeof seq !== 'number') return false; // 순번이 없는 과거 라운드는 판별하지 않는다
+    return store
+      .listUtterances(sessionId)
+      .some((utterance) => utterance.authorType === 'requester' && utterance.seq > seq);
+  }
+
   function statusOf(sessionId: string): Record<string, unknown> | null {
     const session = store.getSession(sessionId);
     if (!session) return null;
@@ -275,19 +288,21 @@ export function createWebServer(deps: WebServerDeps): Server {
       return;
     }
     const body = await readJsonBody(req);
-    // 라운드 정합 계약 (§6, G-4/G-10): 진행 중인 라운드의 답변은 그 라운드를 명시해야 한다.
-    // 보류 재개 입력에는 답할 라운드가 없으므로 요구하지 않는다.
+    // 라운드 정합 계약 (§6, G-10): 질문에 답하는 제출은 응답 대상 라운드를 명시해야 하고,
+    // 명시된 라운드가 최신이 아니면 상태와 무관하게 거부한다 — 다른 탭이 이미 라운드를
+    // 넘겼거나(다음 라운드) 그 라운드로 세션이 종결된 경우 모두 스테일이다.
+    // 보류 화면의 재개 입력에는 답할 라운드가 없으므로 roundId를 요구하지 않는다.
     const latestRound = latestRoundSignal(sessionId);
-    if (session.status === 'clarifying' && latestRound) {
-      const roundId = typeof body.roundId === 'string' ? body.roundId : '';
-      if (!roundId) throw new BadRequest('roundId는 응답 대상 라운드 식별자여야 한다');
-      if (roundId !== latestRound.id) {
-        sendJson(res, 409, {
-          code: 'stale_round',
-          error: '이 질문은 이미 지난 라운드예요 — 최신 질문을 불러올게요.',
-        });
-        return;
-      }
+    const roundId = typeof body.roundId === 'string' ? body.roundId : '';
+    if (!roundId && session.status === 'clarifying' && latestRound) {
+      throw new BadRequest('roundId는 응답 대상 라운드 식별자여야 한다');
+    }
+    if (roundId && (roundId !== latestRound?.id || isAnswered(sessionId, latestRound.payload))) {
+      sendJson(res, 409, {
+        code: 'stale_round',
+        error: '이 질문은 이미 지난 라운드예요 — 최신 질문을 불러올게요.',
+      });
+      return;
     }
     const { text, name, language } = parseIntakeBody(body);
     const accepted = runInBackground(sessionId, () =>
@@ -437,8 +452,12 @@ export function createWebServer(deps: WebServerDeps): Server {
       latestQuestions: open && lastRound ? parseStoredQuestions(lastRound.payload) : null,
       /** 답변 제출이 동반해야 하는 라운드 식별자 (G-10 라운드 정합). */
       roundId: lastRound?.id ?? null,
+      /** 죽은 채 남은 라운드 — 화면의 재시도 CTA 근거. 판정은 코어가 한다 (G-10). */
+      pendingRound: session.channelThreadKey ? runner.pendingRound(session.channelThreadKey) : null,
       /** 지금까지 게시된 문서 수 = 현재 문서의 vN (G-11). 문서 전이라면 0. */
       documentVersion: runner.documentVersionOf(sessionId),
+      /** 현재 문서 버전에서 전 슬롯 확인이 끝났는가 — Phase 0 종착 (G-11). */
+      completed: runner.isCompleted(sessionId),
       roundBudget: runner.roundBudgetOf(sessionId),
       processing: inFlight.has(sessionId),
       session: {
