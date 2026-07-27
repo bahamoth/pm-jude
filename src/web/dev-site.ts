@@ -16,6 +16,8 @@ const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 // 서빙 화이트리스트 — 저장소 전체가 아니라 문서·보드만 연다
 const ALLOWED_DIRS = new Set(['docs', 'issues']);
 const ALLOWED_ROOT_FILES = new Set([
+  'README.md',
+  'README.ko.md',
   'PRD.md',
   'ARCHITECTURE.md',
   'CONTEXT.md',
@@ -97,6 +99,7 @@ function hubPage(): string {
 </ul>
 <h3>정본 문서</h3>
 <ul>
+  <li><a href="/repo/README.md">README</a> · <a href="/repo/README.ko.md">한국어</a></li>
   <li><a href="/repo/PRD.md">PRD</a> · <a href="/repo/docs/prd/">섹션</a></li>
   <li><a href="/repo/ARCHITECTURE.md">ARCHITECTURE</a> · <a href="/repo/docs/architecture.html">브라우저 조감</a></li>
   <li><a href="/repo/CONTEXT.md">CONTEXT (용어집)</a> · <a href="/repo/AGENTS.md">AGENTS</a></li>
