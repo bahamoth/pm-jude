@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.0](https://github.com/bahamoth/pm-jude/compare/v0.9.0...v0.10.0) (2026-07-27)
+
+
+### Features
+
+* 요청자 여정 갭 G-9~G-11 — 승격 판정·멱등 재시도·문서 vN ([#44](https://github.com/bahamoth/pm-jude/issues/44)) ([b7864e2](https://github.com/bahamoth/pm-jude/commit/b7864e21951f291b7ab3a2dc9f98060b5e6d34fe))
+
+
+### Bug Fixes
+
+* 코드 리뷰 반영 — 라운드 정합·상한 판정·완주 기록 ([#44](https://github.com/bahamoth/pm-jude/issues/44)) ([4c88257](https://github.com/bahamoth/pm-jude/commit/4c88257f3fe0796ce011f7d15c791d42e5d2a2aa))
+
 ## [0.9.0](https://github.com/bahamoth/pm-jude/compare/v0.8.0...v0.9.0) (2026-07-27)
 
 
