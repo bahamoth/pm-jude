@@ -1,6 +1,11 @@
 import type { LlmBackend } from '../gateway/backend';
 import { LlmGateway, type UsageLogger } from '../gateway/gateway';
-import { CLARIFICATION_V1, COMPLETENESS_V0, REQUIREMENTS_V0 } from '../prompts/catalog';
+import {
+  CLARIFICATION_V1,
+  COMPLETENESS_V0,
+  PROMOTION_V0,
+  REQUIREMENTS_V0,
+} from '../prompts/catalog';
 import type { ClarificationOutput } from '../prompts/clarification-v0';
 import {
   COMPLETENESS_RUBRIC_V0,
@@ -8,6 +13,7 @@ import {
   runRuleLayer,
   type CompletenessOutput,
 } from '../prompts/completeness-v0';
+import type { PromotionOutput } from '../prompts/promotion-v0';
 import {
   assembleRequirementsDocument,
   type RequirementsDocument,
@@ -95,6 +101,18 @@ export interface ReplyOutcome {
   terminalState: string | null;
 }
 
+/** 신호에 함께 실리는 버전 축 (모델 버전은 러너가 들고 있다) — 세션 생성 시점 고정, F11. */
+interface SignalVersionAxes {
+  promptVersionId: string;
+  thresholdVersionId: string;
+  slotSchemaVersionId: string;
+}
+
+/** JSON 컬럼에서 읽은 값을 표시용 문자열로만 받아들인다 — 그 외 형태는 근거로 쓰지 않는다. */
+function asText(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
 /**
  * 요청자 언어 감지 초안 — 프로필 선호 언어(F1-Core)는 Phase 1 몫이라 PoC에서는
  * 발화 문자로 추정한다. 팀이 한국어·영어권 혼성이라는 전제(F2d)의 최소 구현.
@@ -146,10 +164,11 @@ function formatQuestions(output: ClarificationOutput, language: 'ko' | 'en'): st
   return lines.join('\n');
 }
 
-function formatDocument(doc: RequirementsDocument): string {
+function formatDocument(doc: RequirementsDocument, version: number): string {
   const { content } = doc;
   const lines = [
-    '*requirements v0*',
+    // 문서 버전은 정정 재생성마다 올라간다 — 정본 ERD requirements_doc vN·역주입(F4)의 전제 (G-11)
+    `*requirements 문서 v${String(version)}*`,
     `*문제* — ${content.problem}`,
     `*사용자* — ${content.users.join(', ')}`,
     `*스코프* — 포함: ${content.scope.inScope.join(', ')}` +
@@ -234,12 +253,7 @@ export class IntakeRunner<A> {
   async startClarification(event: IntakeEvent<A>): Promise<void> {
     const session = this.deps.store.findSessionByThreadKey(event.threadKey);
     if (!session || (session.status !== 'intake' && session.status !== 'clarifying')) return;
-    const stored = this.deps.store
-      .listUtterances(session.id)
-      .find((u) => u.authorType === 'requester')?.originalLanguage;
-    const language =
-      event.language ?? (stored === 'ko' || stored === 'en' ? stored : this.languageOf(event));
-    await this.runClarificationRound(session.id, event, language);
+    await this.runClarificationRound(session.id, event, this.sessionLanguageOf(session.id, event));
   }
 
   /** 새 threadKey면 세션을 만들고 첫 라운드까지 원자적으로, 이미 있으면 답변으로 라우팅한다. */
@@ -259,12 +273,47 @@ export class IntakeRunner<A> {
    * 슬롯 확인 정정의 재판정 경로로 허용된다(docgen 상태 내부 루프).
    */
   async handleReply(event: IntakeEvent<A>): Promise<ReplyOutcome | null> {
-    return this.processReply(event, { correction: false });
+    return this.processReply(event, { correction: false, appendUtterance: true });
+  }
+
+  /**
+   * 실패한 라운드에 재시도할 것이 있는가 (G-10, #28 S-4) — 어댑터가 재시도 CTA를 띄우거나
+   * 재시도 요청을 거부할 때 쓴다. 판정이 죽으면 요청자 발화만 남고 응답이 없으므로,
+   * 마지막 발화가 요청자면 미완 라운드다.
+   */
+  pendingRound(threadKey: string): 'clarification' | 'judgement' | null {
+    const session = this.deps.store.findSessionByThreadKey(threadKey);
+    if (!session) return null;
+    if (session.status === 'intake') return 'clarification';
+    if (session.status === 'closed') return null; // 종결 세션의 재개는 입력이 하는 일 (#30)
+    const last = this.deps.store.listUtterances(session.id).at(-1);
+    return last?.authorType === 'requester' ? 'judgement' : null;
+  }
+
+  /**
+   * 미완 라운드의 멱등 재시도 (G-10) — 이미 저장된 발화를 다시 적지 않고 죽은 단계만 다시 돌린다.
+   * 질문 생성이 죽었으면 질문 생성을, 판정이 죽었으면 판정부터. 재시도할 것이 없으면 null이라
+   * 재시도가 예산을 먹거나 판정을 건너뛰고 질문만 만들어 내는 일이 없다.
+   */
+  async retryRound(event: IntakeEvent<A>): Promise<ReplyOutcome | null> {
+    const pending = this.pendingRound(event.threadKey);
+    if (pending === null) return null;
+    const session = this.deps.store.findSessionByThreadKey(event.threadKey);
+    if (!session) return null;
+    if (pending === 'clarification') {
+      await this.startClarification(event);
+      return this.outcomeOf(session.id);
+    }
+    return this.processReply(event, {
+      // documented 세션의 미완 라운드는 슬롯 정정의 재판정이다 — 상한 미산입 규칙을 유지한다
+      correction: session.status === 'documented',
+      appendUtterance: false,
+    });
   }
 
   private async processReply(
     event: IntakeEvent<A>,
-    options: { correction: boolean },
+    options: { correction: boolean; appendUtterance: boolean },
   ): Promise<ReplyOutcome | null> {
     const { store } = this.deps;
     let session = store.findSessionByThreadKey(event.threadKey);
@@ -283,15 +332,20 @@ export class IntakeRunner<A> {
       if (!session) return null;
     }
 
-    const language = this.languageOf(event);
-    store.appendUtterance({
-      sessionId: session.id,
-      authorType: 'requester',
-      ...(event.authorId !== undefined ? { authorId: event.authorId } : {}),
-      channel: event.channel,
-      originalText: event.text,
-      originalLanguage: language,
-    });
+    // 재시도는 발화를 다시 적지 않으므로, 언어도 이 이벤트가 아니라 세션 기록을 근거로 삼는다 (G-10)
+    const language = options.appendUtterance
+      ? this.languageOf(event)
+      : this.sessionLanguageOf(session.id, event);
+    if (options.appendUtterance) {
+      store.appendUtterance({
+        sessionId: session.id,
+        authorType: 'requester',
+        ...(event.authorId !== undefined ? { authorId: event.authorId } : {}),
+        channel: event.channel,
+        originalText: event.text,
+        originalLanguage: language,
+      });
+    }
 
     const versionAxes = this.versionAxesOf(session);
     const { request, conversation } = this.buildConversation(session.id);
@@ -344,7 +398,15 @@ export class IntakeRunner<A> {
       await this.runClarificationRound(session.id, event, language);
       return this.outcomeOf(session.id);
     }
-    // 상한 도달 + 승격조차 불가 — 사유 회신 후 보류(정보 부족) 종결 (원칙 5: 회신이 종결을 앞선다)
+    // 상한 도달 — 남은 미충족 슬롯의 승격 가능 판정이 먼저다 (F2c ①②, G-9).
+    // 승격 가능하면 오픈이슈를 실은 조건부 문서로, 불가하면 아래 보류로 흐른다.
+    if (await this.promoteRemainingSlots(session.id, request, conversation, versionAxes)) {
+      await this.deliverDocument(session.id, event, completeness.output, request, conversation, {
+        conditional: true,
+      });
+      return this.outcomeOf(session.id);
+    }
+    // 승격조차 불가 — 사유 회신 후 보류(정보 부족) 종결 (원칙 5: 회신이 종결을 앞선다)
     await this.deps.port.post(event.address, MESSAGES[language].onHold);
     store.appendUtterance({
       sessionId: session.id,
@@ -399,6 +461,7 @@ export class IntakeRunner<A> {
         modelVersion: this.deps.modelVersion,
         ...this.versionAxesOf(session),
       });
+      this.recordCompletion(session.id, this.versionAxesOf(session));
       return this.outcomeOf(session.id);
     }
 
@@ -410,7 +473,98 @@ export class IntakeRunner<A> {
       modelVersion: this.deps.modelVersion,
       ...this.versionAxesOf(session),
     });
-    return this.processReply(event, { correction: true });
+    return this.processReply(event, { correction: true, appendUtterance: true });
+  }
+
+  /**
+   * 상한 도달 시점의 승격 판정 (F2c ①②, G-9, #28 S-1) — 남은 미충족 슬롯 각각이 담당자 몫으로
+   * 넘어갈 수 있는지 LLM 층에 묻고, **전부 가능할 때만** 승격시킨다. 하나라도 불가하면 슬롯 상태를
+   * 건드리지 않는다: 핵심이 빈 부분 승격 문서는 구현 착수의 근거가 되지 못하므로 보류가 정직하다.
+   * 반환값은 「조건부 문서로 갈 수 있는가」뿐 — 전이 결정은 호출자 코드의 몫이다 (ADR-0001).
+   */
+  private async promoteRemainingSlots(
+    sessionId: string,
+    request: string,
+    conversation: Array<{ question: string; answer: string }>,
+    versionAxes: SignalVersionAxes,
+  ): Promise<boolean> {
+    const { store } = this.deps;
+    const rowBySlot = new Map(store.listSlotStates(sessionId).map((slot) => [slot.slotKey, slot]));
+    const unfilled = TEMP_REQUIRED_SLOTS.filter(
+      (slot) => (rowBySlot.get(slot.key)?.state ?? 'unfilled') === 'unfilled',
+    );
+    // 미충족 슬롯이 없는데 미정제라면 원인이 슬롯이 아니다 — 승격이 고칠 수 있는 상태가 아니다
+    if (unfilled.length === 0) return false;
+
+    const result = await this.gateway.complete<PromotionOutput>(PROMOTION_V0, {
+      request,
+      teamLanguage: this.teamLanguage,
+      conversation,
+      unfilledSlots: unfilled.map((slot) => ({
+        key: slot.key,
+        label: slot.label,
+        rationale: asText(rowBySlot.get(slot.key)?.value) ?? '',
+      })),
+    });
+    const decisionBySlot = new Map(
+      result.output.decisions.map((decision) => [decision.slotKey, decision]),
+    );
+    // 판정이 없는 슬롯은 승격 불가로 취급한다 — 누락이 통과가 되지 않게
+    const promotable = unfilled.filter((slot) => decisionBySlot.get(slot.key)?.promotable === true);
+    const blocking = unfilled.filter((slot) => !promotable.includes(slot));
+    store.recordSignal({
+      sessionId,
+      type: 'promotion_judged',
+      payload: {
+        promotable: promotable.map((slot) => slot.key),
+        blocking: blocking.map((slot) => slot.key),
+        decisions: result.output.decisions,
+      },
+      modelVersion: this.deps.modelVersion,
+      ...versionAxes,
+    });
+    if (blocking.length > 0) return false;
+
+    for (const slot of promotable) {
+      const decision = decisionBySlot.get(slot.key);
+      store.setSlotState({
+        sessionId,
+        slotKey: slot.key,
+        state: 'promoted',
+        // 담당자가 읽는 오픈이슈 질문을 값으로 남긴다 — 문서 조립이 이 값을 쓴다
+        value: decision?.openIssueQuestion ?? decision?.rationale,
+      });
+    }
+    // 승격 후에도 판정은 룰 층이 한다 (원칙 2 — 결정론적 백스톱을 우회하지 않는다)
+    return runRuleLayer({
+      requiredSlots: TEMP_REQUIRED_SLOTS,
+      slotStates: store.listSlotStates(sessionId),
+    }).passed;
+  }
+
+  /**
+   * Phase 0 종착 기록 (G-11, #28 S-6) — 문서가 나온 뒤 요청자가 확인할 수 있는 슬롯(충족)이
+   * 모두 「맞아요」로 확인되면 완주다. 승격 슬롯은 담당자 몫이라 분모에 넣지 않는다.
+   * #11 완주율의 분자가 이 신호이므로, 재확인이 완주를 두 번 세지 않게 한 번만 기록한다.
+   */
+  private recordCompletion(sessionId: string, versionAxes: SignalVersionAxes): void {
+    const { store } = this.deps;
+    const slots = store.listSlotStates(sessionId);
+    const confirmable = slots.filter((slot) => slot.state === 'filled');
+    if (confirmable.length === 0) return;
+    if (!confirmable.every((slot) => slot.confirmedByRequester)) return;
+    if (store.listSignals(sessionId).some((signal) => signal.type === 'session_completed')) return;
+    store.recordSignal({
+      sessionId,
+      type: 'session_completed',
+      payload: {
+        reason: 'all_slots_confirmed',
+        confirmedSlotCount: confirmable.length,
+        promotedSlotCount: slots.filter((slot) => slot.state === 'promoted').length,
+      },
+      modelVersion: this.deps.modelVersion,
+      ...versionAxes,
+    });
   }
 
   /** 왕복 예산 — 재개(#30)마다 상한이 한 번 더 주어진다. */
@@ -423,6 +577,19 @@ export class IntakeRunner<A> {
 
   private languageOf(event: IntakeEvent<A>): 'ko' | 'en' {
     return event.language ?? detectRequesterLanguage(event.text);
+  }
+
+  /**
+   * 세션에 기록된 요청자 언어 — 원문이 없는 이벤트(백그라운드 라운드·재시도)의 근거다.
+   * 발화를 새로 적을 때는 그 발화의 문자로 감지한다 (요청자가 언어를 바꿀 수 있다).
+   */
+  private sessionLanguageOf(sessionId: string, event: IntakeEvent<A>): 'ko' | 'en' {
+    if (event.language) return event.language;
+    const stored = this.deps.store
+      .listUtterances(sessionId)
+      .find((utterance) => utterance.authorType === 'requester')?.originalLanguage;
+    if (stored === 'ko' || stored === 'en') return stored;
+    return detectRequesterLanguage(event.text);
   }
 
   private outcomeOf(sessionId: string): ReplyOutcome {
@@ -503,6 +670,7 @@ export class IntakeRunner<A> {
     completeness: CompletenessOutput,
     request: string,
     conversation: Array<{ question: string; answer: string }>,
+    options: { conditional: boolean } = { conditional: false },
   ): Promise<void> {
     const { store } = this.deps;
     const session = store.getSession(sessionId);
@@ -518,7 +686,9 @@ export class IntakeRunner<A> {
       .map((slot) => ({
         slotKey: slot.slotKey,
         openIssueAssignee: slot.openIssueAssignee,
-        question: rationaleBySlot.get(slot.slotKey) ?? `${slot.slotKey} 확정 필요`,
+        // 슬롯에 남은 값이 1순위 — 상한 승격(G-9)은 담당자용 오픈이슈 질문을 여기 적어 둔다
+        question:
+          asText(slot.value) ?? rationaleBySlot.get(slot.slotKey) ?? `${slot.slotKey} 확정 필요`,
       }));
 
     const result = await this.gateway.complete<RequirementsOutput>(REQUIREMENTS_V0, {
@@ -538,7 +708,9 @@ export class IntakeRunner<A> {
       })),
     });
 
-    const text = formatDocument(doc);
+    // 문서 버전은 게시 이력으로 센다 — 정정 재생성이 무버전 덮어쓰기로 보이지 않게 (G-11)
+    const version = this.documentVersionOf(sessionId) + 1;
+    const text = formatDocument(doc, version);
     await this.deps.port.post(event.address, text);
     store.appendUtterance({
       sessionId,
@@ -551,10 +723,22 @@ export class IntakeRunner<A> {
     store.recordSignal({
       sessionId,
       type: 'document_delivered',
-      payload: { openIssueCount: doc.content.openIssues.length },
+      payload: {
+        version,
+        openIssueCount: doc.content.openIssues.length,
+        // 상한 도달 후 승격으로 통과한 문서 — 게이트 도입 시 조건부 상정의 근거 (F2c ②)
+        conditional: options.conditional,
+      },
       modelVersion: this.deps.modelVersion,
       ...versionAxes,
     });
+  }
+
+  /** 지금까지 게시된 requirements 문서 수 — 다음 문서의 vN 근거 (G-11). */
+  documentVersionOf(sessionId: string): number {
+    return this.deps.store
+      .listSignals(sessionId)
+      .filter((signal) => signal.type === 'document_delivered').length;
   }
 
   /** 세션 행에 고정된 버전 축을 신호 기록용으로 되돌린다 (F11 — 세션 생성 시점 버전 귀속). */

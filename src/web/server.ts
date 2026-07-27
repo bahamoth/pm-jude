@@ -147,6 +147,18 @@ export function createWebServer(deps: WebServerDeps): Server {
     for (const res of subscribers.get(sessionId) ?? []) sseSend(res, event, data);
   }
 
+  /**
+   * 마지막 명확화 라운드 신호 — 그 id가 라운드 식별자다 (G-10). 답변 제출이 이 값을 동반해야
+   * 스테일 제출(다른 탭이 이미 넘긴 이전 라운드 질문의 답)을 최신 질문의 답으로 오결합하지 않는다.
+   */
+  function latestRoundSignal(sessionId: string) {
+    return store
+      .listSignals(sessionId)
+      .filter((signal) => signal.type === 'clarification_round')
+      .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt))
+      .at(-1);
+  }
+
   function statusOf(sessionId: string): Record<string, unknown> | null {
     const session = store.getSession(sessionId);
     if (!session) return null;
@@ -262,7 +274,22 @@ export function createWebServer(deps: WebServerDeps): Server {
       sendJson(res, 409, { error: '이미 종결된 세션이다 — 새 요청으로 시작해 달라' });
       return;
     }
-    const { text, name, language } = parseIntakeBody(await readJsonBody(req));
+    const body = await readJsonBody(req);
+    // 라운드 정합 계약 (§6, G-4/G-10): 진행 중인 라운드의 답변은 그 라운드를 명시해야 한다.
+    // 보류 재개 입력에는 답할 라운드가 없으므로 요구하지 않는다.
+    const latestRound = latestRoundSignal(sessionId);
+    if (session.status === 'clarifying' && latestRound) {
+      const roundId = typeof body.roundId === 'string' ? body.roundId : '';
+      if (!roundId) throw new BadRequest('roundId는 응답 대상 라운드 식별자여야 한다');
+      if (roundId !== latestRound.id) {
+        sendJson(res, 409, {
+          code: 'stale_round',
+          error: '이 질문은 이미 지난 라운드예요 — 최신 질문을 불러올게요.',
+        });
+        return;
+      }
+    }
+    const { text, name, language } = parseIntakeBody(body);
     const accepted = runInBackground(sessionId, () =>
       runner.handleReply({
         address: { sessionId },
@@ -401,19 +428,17 @@ export function createWebServer(deps: WebServerDeps): Server {
     }
     // 진행 중 세션이면 마지막 명확화 라운드의 질문 구조를 되돌린다 — 마법사 UI 복원 (US-8)
     const open = session.status === 'intake' || session.status === 'clarifying';
-    const lastRound = open
-      ? store
-          .listSignals(sessionId)
-          .filter((signal) => signal.type === 'clarification_round')
-          .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt))
-          .at(-1)
-      : undefined;
+    const lastRound = latestRoundSignal(sessionId);
     const labelBySlot = new Map<string, string>(
       TEMP_REQUIRED_SLOTS.map((slot) => [slot.key, slot.label]),
     );
     // 원문 전사는 상시 조회 대상 (US-11, 원칙 7). 요청자 식별자(authorId)는 내보내지 않는다.
     sendJson(res, 200, {
-      latestQuestions: lastRound ? parseStoredQuestions(lastRound.payload) : null,
+      latestQuestions: open && lastRound ? parseStoredQuestions(lastRound.payload) : null,
+      /** 답변 제출이 동반해야 하는 라운드 식별자 (G-10 라운드 정합). */
+      roundId: lastRound?.id ?? null,
+      /** 지금까지 게시된 문서 수 = 현재 문서의 vN (G-11). 문서 전이라면 0. */
+      documentVersion: runner.documentVersionOf(sessionId),
       roundBudget: runner.roundBudgetOf(sessionId),
       processing: inFlight.has(sessionId),
       session: {
@@ -476,13 +501,28 @@ export function createWebServer(deps: WebServerDeps): Server {
           return;
         }
         if (req.method === 'POST' && segments.length === 4 && segments[3] === 'rounds') {
-          // 백그라운드 라운드 실패 시 재시도 경로 — intake 상태에서만 의미가 있다
+          // 실패한 라운드의 멱등 재시도 (G-10) — 죽은 단계만 다시 돌린다. 재시도할 미완 라운드가
+          // 없으면 거부한다: 재시도가 새 라운드를 만들어 예산을 먹는 일이 없어야 한다.
           const session = store.getSession(sessionId);
-          if (!session || !session.channelThreadKey) {
+          if (!session?.channelThreadKey) {
             sendJson(res, 404, { error: '세션 없음' });
             return;
           }
-          kickClarification(sessionId, session.channelThreadKey);
+          const threadKey = session.channelThreadKey;
+          if (runner.pendingRound(threadKey) === null) {
+            sendJson(res, 409, {
+              code: 'nothing_to_retry',
+              error: '다시 시도할 처리가 없어요 — 최신 상태를 불러올게요.',
+            });
+            return;
+          }
+          const retrying = runInBackground(sessionId, () =>
+            runner.retryRound({ address: { sessionId }, threadKey, channel: 'web', text: '' }),
+          );
+          if (!retrying) {
+            sendJson(res, 409, { error: '이미 처리 중이에요 — 잠시 뒤 다시 시도해 주세요.' });
+            return;
+          }
           sendJson(res, 202, { accepted: true });
           return;
         }

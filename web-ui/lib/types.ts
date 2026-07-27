@@ -54,6 +54,10 @@ export interface SlotView {
 
 export interface SessionDetail {
   latestQuestions: ReplyQuestion[] | null;
+  /** 최신 명확화 라운드의 식별자 — 답변 제출이 동반해야 한다 (G-10 라운드 정합). */
+  roundId: string | null;
+  /** 지금까지 게시된 requirements 문서 수 = 현재 문서의 vN. 문서 전이면 0 (G-11). */
+  documentVersion: number;
   roundBudget: number;
   /** 서버가 이 세션의 LLM 라운드를 돌리는 중인지 — 대기 화면과 SSE 수명의 근거 */
   processing: boolean;
@@ -95,6 +99,8 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** 서버가 붙인 사유 코드 — `stale_round` 등 화면이 분기하는 계약 위반 (G-10). */
+    readonly code?: string,
   ) {
     super(message);
     this.name = 'ApiError';

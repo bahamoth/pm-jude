@@ -118,13 +118,32 @@ describe('trace-data — 저장소 export의 조형', () => {
       payload: { slotKey: 'target-user' },
       ...axes,
     });
+    // 상한 승격 판정과 Phase 0 종착 (#44 — G-9·G-11)
+    store.recordSignal({
+      sessionId: session.id,
+      type: 'promotion_judged',
+      payload: { promotable: ['data-source'], blocking: [] },
+      ...axes,
+    });
+    store.recordSignal({
+      sessionId: session.id,
+      type: 'session_completed',
+      payload: { reason: 'all_slots_confirmed', confirmedSlotCount: 2, promotedSlotCount: 1 },
+      ...axes,
+    });
 
     const data = buildTraceData(store.exportSessions(), store.listVersionRegistry(), GENERATED_AT);
     expect(data.summary.signalTypeCounts).toMatchObject({
       clarification_round: 1,
       session_resumed: 1,
       slot_confirmed: 1,
+      promotion_judged: 1,
+      session_completed: 1,
     });
+    // 판정 근거는 세션 신호에 그대로 남아야 한다 — 트레이스가 payload를 깎지 않는다
+    expect(
+      data.sessions[0]?.signals.find((signal) => signal.type === 'promotion_judged')?.payload,
+    ).toMatchObject({ promotable: ['data-source'] });
   });
 
   it('빈 저장소 — 세션 0건, 평균 왕복 null', () => {

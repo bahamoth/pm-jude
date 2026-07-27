@@ -9,6 +9,7 @@ import { HoldCard } from '@/components/hold-card';
 import { Jude, type JudeHandle } from '@/components/jude';
 import { JourneyStepper } from '@/components/journey-stepper';
 import { QuestionWizard } from '@/components/question-wizard';
+import { RetryCard } from '@/components/retry-card';
 import { RoundContext } from '@/components/round-context';
 import { SlotReview } from '@/components/slot-review';
 import { Transcript } from '@/components/transcript';
@@ -21,8 +22,14 @@ import { confirmSlotOk, correctSlot, getSession, retryRound, sendReply } from '@
 import { rememberSession } from '@/lib/local-sessions';
 import { t, sessionLang, useLang, type Lang } from '@/lib/i18n';
 import { judeState, type JudeState } from '@/lib/jude-geometry';
-import { isLastRound, journeyStep } from '@/lib/stage';
-import type { SessionDetail } from '@/lib/types';
+import {
+  allSlotsConfirmed,
+  fullyPromoted,
+  isLastRound,
+  journeyStep,
+  roundFailed,
+} from '@/lib/stage';
+import { ApiError, type SessionDetail } from '@/lib/types';
 import { watchProcessing } from '@/lib/watch-processing';
 
 /**
@@ -92,7 +99,15 @@ export default function SessionPage() {
       await kick();
       await watchThenRefetch();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t(lang, 'session.actionFailed'));
+      // 스테일 라운드(G-10)는 오류가 아니라 다른 탭이 앞서간 것 — 최신 질문을 가져온다
+      const stale = e instanceof ApiError && e.code === 'stale_round';
+      setError(
+        stale
+          ? t(lang, 'retry.staleRound')
+          : e instanceof Error
+            ? e.message
+            : t(lang, 'session.actionFailed'),
+      );
       await refetch();
     } finally {
       setBusy(false);
@@ -123,27 +138,53 @@ export default function SessionPage() {
     );
   }
 
-  const { session, latestQuestions, roundBudget, slotStates, utterances, processing } = detail;
+  const {
+    session,
+    latestQuestions,
+    roundId,
+    documentVersion,
+    roundBudget,
+    slotStates,
+    utterances,
+    processing,
+  } = detail;
   const onHold =
     session.status === 'closed' && session.terminalState === 'on_hold_insufficient_info';
-  // 실패 판정은 상태로 유도한다: intake인데 처리 중이 아니면 첫 라운드가 죽은 것
-  const roundFailed = session.status === 'intake' && !processing && !busy;
+  // 미완 라운드 판정은 상태와 전사로 유도한다 — 답변만 남고 응답이 없으면 라운드가 죽은 것 (G-10)
+  const failed = roundFailed(session.status, utterances, processing || busy);
   const documentText = utterances.findLast((u) => u.authorType === 'agent')?.originalText ?? '';
+  const completed = allSlotsConfirmed(slotStates); // Phase 0 종착 (G-11)
 
   const face = judeState({
     status: session.status,
     terminalState: session.terminalState,
     processing: processing || busy,
     typing,
-    failed: roundFailed,
+    failed,
   });
+
+  function retry() {
+    setError(null);
+    void retryRound(sessionId)
+      .then(() => watchThenRefetch())
+      .catch((e: unknown) => {
+        setError(e instanceof Error ? e.message : t(lang, 'session.retryFailed'));
+        return refetch();
+      });
+  }
 
   return (
     <Shell lang={lang} sessionId={sessionId} judeState={face} judeRef={judeRef}>
       <JourneyStepper
         lang={lang}
         current={journeyStep(session.status)}
-        note={onHold ? t(lang, 'journey.onHold') : undefined}
+        note={
+          onHold
+            ? t(lang, 'journey.onHold')
+            : completed
+              ? t(lang, 'journey.done') // 확인 완료가 ③ 위에 표시된다 (G-11)
+              : undefined
+        }
       />
 
       <Transcript
@@ -154,40 +195,37 @@ export default function SessionPage() {
         }))}
       />
 
+      {/* 미완 라운드는 재제출이 아니라 멱등 재시도로 복구한다 (G-10) */}
+      {failed && session.status !== 'intake' && (
+        <RetryCard lang={lang} submitting={busy} onRetry={retry} />
+      )}
+
       {session.status === 'intake' ? (
-        <AckCard
-          lang={lang}
-          sessionId={sessionId}
-          failed={roundFailed}
-          onRetry={() => {
-            void retryRound(sessionId)
-              .then(() => watchThenRefetch())
-              .catch((e) =>
-                setError(e instanceof Error ? e.message : t(lang, 'session.retryFailed')),
-              );
-          }}
-        />
+        <AckCard lang={lang} sessionId={sessionId} failed={failed} onRetry={retry} />
       ) : busy || processing ? (
         <WaitingCard lang={lang} phase="reply" />
       ) : session.status === 'clarifying' ? (
-        <div className="grid gap-4">
-          {session.roundCount > 1 && <RoundContext lang={lang} slots={slotStates} />}
-          <QuestionWizard
-            lang={lang}
-            key={`${session.roundCount}-${latestQuestions?.[0]?.question ?? ''}`}
-            questions={latestQuestions ?? []}
-            round={Math.max(session.roundCount, 1)}
-            lastRound={isLastRound(session.roundCount, roundBudget)}
-            onType={onType}
-            onSubmit={(text) => void act(() => sendReply(sessionId, text))}
-          />
-        </div>
+        // 라운드가 죽은 동안 마법사를 감춘다 — 같은 답을 다시 적으면 발화가 중복 기록된다
+        failed ? null : (
+          <div className="grid gap-4">
+            {session.roundCount > 1 && <RoundContext lang={lang} slots={slotStates} />}
+            <QuestionWizard
+              lang={lang}
+              key={`${session.roundCount}-${latestQuestions?.[0]?.question ?? ''}`}
+              questions={latestQuestions ?? []}
+              round={Math.max(session.roundCount, 1)}
+              lastRound={isLastRound(session.roundCount, roundBudget)}
+              onType={onType}
+              onSubmit={(text) => void act(() => sendReply(sessionId, text, roundId))}
+            />
+          </div>
+        )
       ) : session.status === 'documented' ? (
         <div className="grid gap-4">
           <SlotReview
             lang={lang}
             slots={slotStates}
-            submitting={busy}
+            submitting={busy || failed}
             onConfirm={(slotKey) =>
               void confirmSlotOk(sessionId, slotKey)
                 .then(() => refetch())
@@ -197,8 +235,20 @@ export default function SessionPage() {
             }
             onCorrect={(slotKey, text) => void act(() => correctSlot(sessionId, slotKey, text))}
           />
-          <DocumentView lang={lang} text={documentText} />
-          <p className="text-center text-sm text-muted-foreground">{t(lang, 'doc.nextStep')}</p>
+          <DocumentView
+            lang={lang}
+            text={documentText}
+            version={documentVersion}
+            fullyPromoted={fullyPromoted(slotStates)}
+          />
+          {completed ? (
+            <Alert>
+              <AlertTitle>{t(lang, 'doc.completedTitle')}</AlertTitle>
+              <AlertDescription>{t(lang, 'doc.completedBody')}</AlertDescription>
+            </Alert>
+          ) : (
+            <p className="text-center text-sm text-muted-foreground">{t(lang, 'doc.nextStep')}</p>
+          )}
         </div>
       ) : onHold ? (
         <HoldCard

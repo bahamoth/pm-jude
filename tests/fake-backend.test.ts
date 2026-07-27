@@ -52,6 +52,6 @@ describe('가짜 백엔드 시나리오', () => {
       text: '수작업 집계를 없애고 싶어요. 데이터는 모르겠어요 — 개발팀이 정해 주세요.',
     });
     expect(second?.status).toBe('documented');
-    expect(port.texts.at(-1)).toContain('requirements v0');
+    expect(port.texts.at(-1)).toContain('requirements 문서 v1');
   });
 });

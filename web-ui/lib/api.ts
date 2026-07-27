@@ -24,11 +24,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   const body: unknown = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const message =
-      typeof body === 'object' && body !== null && 'error' in body
-        ? String((body as { error: unknown }).error)
-        : `요청 실패 (${res.status})`;
-    throw new ApiError(res.status, message);
+    const fields =
+      typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
+    const message = 'error' in fields ? String(fields.error) : `요청 실패 (${res.status})`;
+    const code = typeof fields.code === 'string' ? fields.code : undefined;
+    throw new ApiError(res.status, message, code);
   }
   return body as T;
 }
@@ -45,12 +45,20 @@ export function startSession(input: {
   });
 }
 
-/** 202 접수 — 판정·다음 라운드·문서는 백그라운드에서 돌고 SSE·조회로 온다. */
-export function sendReply(sessionId: string, text: string): Promise<Accepted> {
+/**
+ * 202 접수 — 판정·다음 라운드·문서는 백그라운드에서 돌고 SSE·조회로 온다.
+ * roundId는 답이 응답하는 라운드다(G-10) — 다른 탭이 이미 라운드를 넘겼으면 서버가 409로 막는다.
+ * 보류 재개 입력에는 답할 라운드가 없어 생략한다.
+ */
+export function sendReply(
+  sessionId: string,
+  text: string,
+  roundId?: string | null,
+): Promise<Accepted> {
   return request(`/api/sessions/${encodeURIComponent(sessionId)}/replies`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, ...(roundId ? { roundId } : {}) }),
   });
 }
 
