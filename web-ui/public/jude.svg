@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" class="jude-asset" fill="none" stroke="currentColor" role="img" aria-label="Jude">
+  <!--
+    Jude — the face of the intake agent.
+    The speech bubble IS the face: eyes, no mouth. Jude listens before speaking.
+    The moustache is a closing curly brace `}` rotated 90 degrees clockwise.
+    Resting pose, head tilted -4deg. Below ~28px use jude-mark.svg instead.
+
+    Colour contract: every stroke and fill is `currentColor`.
+      - inlined into HTML  -> inherits the surrounding text colour
+      - <img> / favicon    -> the .jude-asset rule below supplies light/dark defaults,
+                              because a standalone SVG document has no colour to inherit
+    Do NOT put class="jude-asset" on an inlined copy; it would pin the colour.
+    Geometry is mirrored in web-ui/lib/jude-geometry.ts and asserted by tests.
+  -->
+  <style>
+    .jude-asset { color: #111214 }
+    @media (prefers-color-scheme: dark) { .jude-asset { color: #F2F1EE } }
+  </style>
+  <g transform="rotate(-4 16 15)">
+    <path d="M12.5 4.5H19.5A8.5 8.5 0 0 1 28 13V14A8.5 8.5 0 0 1 19.5 22.5H15.5L9.3 28L12.5 22.5A8.5 8.5 0 0 1 4 14V13A8.5 8.5 0 0 1 12.5 4.5Z" stroke-width="2.3" stroke-linejoin="round"/>
+    <ellipse cx="13" cy="12.4" rx="1.9" ry="1.9" fill="currentColor" stroke="none"/>
+    <ellipse cx="20" cy="12.4" rx="1.9" ry="1.9" fill="currentColor" stroke="none"/>
+    <!-- moustache: width 1.20, offset 0.00, philtrum gap 0.20, stroke 1.80 -->
+    <g transform="translate(-3.3 0) scale(1.2 1)" stroke-width="1.8" stroke-linecap="round">
+      <path transform="translate(-0.2 0)" d="M15.3 16.8C14.3 16.8 13.8 17.3 13.1 17.9 12.4 18.5 11.7 18.9 10.9 18.7 10.5 18.6 10.35 18.25 10.45 17.85"/>
+      <path transform="translate(0.2 0)" d="M17.7 16.8C18.7 16.8 19.2 17.3 19.9 17.9 20.6 18.5 21.3 18.9 22.1 18.7 22.5 18.6 22.65 18.25 22.55 17.85"/>
+    </g>
+  </g>
+</svg>

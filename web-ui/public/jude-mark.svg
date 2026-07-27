@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" class="jude-asset" fill="none" stroke="currentColor" role="img" aria-label="Jude">
+  <!--
+    Jude, reduced. Favicon and anything under ~28px.
+    Moustache and brows collapse into a smudge at small sizes, so they are dropped
+    here — the bubble silhouette and two eyes still read at 16px. Strokes and eyes
+    are slightly heavier than jude.svg to survive the downscale.
+
+    Same colour contract as jude.svg. Keep the bubble path, eye positions and tilt
+    in sync with jude.svg and web-ui/lib/jude-geometry.ts.
+  -->
+  <style>
+    .jude-asset { color: #111214 }
+    @media (prefers-color-scheme: dark) { .jude-asset { color: #F2F1EE } }
+  </style>
+  <g transform="rotate(-4 16 15)">
+    <path d="M12.5 4.5H19.5A8.5 8.5 0 0 1 28 13V14A8.5 8.5 0 0 1 19.5 22.5H15.5L9.3 28L12.5 22.5A8.5 8.5 0 0 1 4 14V13A8.5 8.5 0 0 1 12.5 4.5Z" stroke-width="2.5" stroke-linejoin="round"/>
+    <ellipse cx="13" cy="12.4" rx="2" ry="2" fill="currentColor" stroke="none"/>
+    <ellipse cx="20" cy="12.4" rx="2" ry="2" fill="currentColor" stroke="none"/>
+  </g>
+</svg>
