@@ -131,6 +131,13 @@ describe('trace-data — 저장소 export의 조형', () => {
       payload: { reason: 'all_slots_confirmed', confirmedSlotCount: 2, promotedSlotCount: 1 },
       ...axes,
     });
+    // documented 가드의 마찰 신호 (#52)
+    store.recordSignal({
+      sessionId: session.id,
+      type: 'reply_after_documented',
+      payload: { channel: 'slack' },
+      ...axes,
+    });
 
     const data = buildTraceData(store.exportSessions(), store.listVersionRegistry(), GENERATED_AT);
     expect(data.summary.signalTypeCounts).toMatchObject({
@@ -139,6 +146,7 @@ describe('trace-data — 저장소 export의 조형', () => {
       slot_confirmed: 1,
       promotion_judged: 1,
       session_completed: 1,
+      reply_after_documented: 1,
     });
     // 판정 근거는 세션 신호에 그대로 남아야 한다 — 트레이스가 payload를 깎지 않는다
     expect(

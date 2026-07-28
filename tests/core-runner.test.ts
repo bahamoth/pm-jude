@@ -701,6 +701,37 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
     expect(store.findSessionByThreadKey('web:thread-1')?.roundCount).toBe(roundBefore); // 미산입
   });
 
+  it('documented 세션의 일반 답변은 재판정 없이 정정 경로 안내만 회신한다 (#52 — 채널 무관 가드)', async () => {
+    const { runner, port, store } = makeRunner([
+      clarificationResponse,
+      refinedCompletenessResponse,
+      requirementsResponse,
+      // 이후 스크립트 없음 — 가드가 뚫려 LLM이 호출되면 ScriptedBackend가 던진다
+    ]);
+    await runner.handleIntake(intake);
+    await runner.handleReply({ ...intake, text: '영업팀 매니저요. 수작업 집계 제거요.' });
+    const before = store.findSessionByThreadKey('web:thread-1');
+    expect(before?.status).toBe('documented');
+
+    const outcome = await runner.handleReply({ ...intake, text: '아 참, 로고 색도 바꿔 주세요' });
+
+    // 침묵 대신 안내 — 문서는 다시 만들어지지 않고 왕복 예산도 그대로다
+    expect(outcome?.status).toBe('documented');
+    expect(port.posted.at(-1)?.text).toContain('항목별 확인·정정');
+    const after = store.findSessionByThreadKey('web:thread-1');
+    expect(after?.roundCount).toBe(before?.roundCount);
+    const signals = store.exportSessions()[0]?.signals ?? [];
+    expect(signals.filter((signal) => signal.type === 'document_delivered')).toHaveLength(1);
+    // 발화는 보존되고 (원칙 7), 마찰이 신호로 남는다 (F11)
+    const texts = store.listUtterances(before!.id).map((u) => u.originalText);
+    expect(texts).toContain('아 참, 로고 색도 바꿔 주세요');
+    expect(signals).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'reply_after_documented' })]),
+    );
+    // 안내는 최종 발화로 남아 미완 라운드로 오인되지 않는다 (G-10 pendingRound)
+    expect(runner.pendingRound('web:thread-1')).toBeNull();
+  });
+
   it('openSession/startClarification 분리 — 접수 확인이 먼저, 라운드는 나중에 (G-1)', async () => {
     const { runner, port, store } = makeRunner([clarificationResponse]);
 

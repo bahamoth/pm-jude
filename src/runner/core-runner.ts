@@ -175,6 +175,8 @@ const MESSAGES = {
     dontKnowHint: '답하기 어려운 게 있으면 그대로 알려주세요 — 제가 개발팀 몫으로 남겨둘게요',
     onHold:
       '지금은 정리하기에 정보가 부족해서 보류로 두었어요. 내용을 보태 주시면 이 자리에서 그대로 다시 진행할게요 — 지금까지 답하신 건 남아 있어요.',
+    documentedGuide:
+      '문서가 완성된 요청이에요 — 항목별 확인·정정으로 고칠 수 있어요. 정정해 주시면 문서를 새 버전으로 다시 정리할게요.',
   },
   en: {
     ack: "Got it. I'll ask a few questions to pin the request down.",
@@ -182,6 +184,8 @@ const MESSAGES = {
     dontKnowHint: "If you can't answer one, just say so — I'll flag it for the team",
     onHold:
       "There wasn't enough to work with yet, so I've parked this as on-hold. Add a little and I'll pick it up right here — everything you answered is still there.",
+    documentedGuide:
+      "This request already has its document — you can change it through the item-by-item confirm and correct flow. Send a correction there and I'll rewrite the document as a new version.",
   },
 } as const;
 
@@ -479,8 +483,9 @@ export class IntakeRunner<A> {
 
   /**
    * 요청자 발화 처리. 세션이 없거나 재개 불가한 종결이면 null.
-   * 보류(정보 부족)는 입력=자동 재개(#30 — 정본 전이 보류→명확화), documented는
-   * 슬롯 확인 정정의 재판정 경로로 허용된다(docgen 상태 내부 루프).
+   * 보류(정보 부족)는 입력=자동 재개(#30 — 정본 전이 보류→명확화). documented의 일반
+   * 답변은 재판정 없이 정정 경로 안내로 멈춘다(#52) — 재판정은 슬롯 확인 정정
+   * (confirmSlot → correction:true)만 연다(docgen 상태 내부 루프).
    */
   async handleReply(event: IntakeEvent<A>): Promise<ReplyOutcome | null> {
     return this.processReply(event, { correction: false, appendUtterance: true });
@@ -540,6 +545,43 @@ export class IntakeRunner<A> {
       });
       session = store.getSession(session.id);
       if (!session) return null;
+    }
+
+    // 문서가 게시된 세션의 일반 답변은 재판정 경로가 아니다 (#52) — 수정은 슬롯 확인·정정
+    // (confirmSlot)만 연다. 웹은 서버가 409로 막지만 채널 무관 최종 가드는 코어 몫이다:
+    // 스레드 답글 하나가 문서를 조용히 다시 만들거나 왕복 예산을 먹는 경로를 차단하고,
+    // 발화는 보존하되(원칙 7) 침묵 대신 정정 경로를 안내한다(원칙 5).
+    if (session.status === 'documented' && !options.correction) {
+      const guardLanguage = options.appendUtterance
+        ? this.languageOf(event)
+        : this.sessionLanguageOf(session.id, event);
+      if (options.appendUtterance) {
+        const utterance = store.appendUtterance({
+          sessionId: session.id,
+          authorType: 'requester',
+          ...(event.authorId !== undefined ? { authorId: event.authorId } : {}),
+          channel: event.channel,
+          originalText: event.text,
+          originalLanguage: guardLanguage,
+        });
+        this.attachUploads(session.id, utterance.id, event);
+      }
+      await this.deps.port.post(event.address, MESSAGES[guardLanguage].documentedGuide);
+      store.appendUtterance({
+        sessionId: session.id,
+        authorType: 'agent',
+        channel: event.channel,
+        originalText: MESSAGES[guardLanguage].documentedGuide,
+        originalLanguage: guardLanguage,
+      });
+      store.recordSignal({
+        sessionId: session.id,
+        type: 'reply_after_documented',
+        payload: { channel: event.channel },
+        modelVersion: this.deps.modelVersion,
+        ...this.versionAxesOf(session),
+      });
+      return this.outcomeOf(session.id);
     }
 
     // 재시도는 발화를 다시 적지 않으므로, 언어도 이 이벤트가 아니라 세션 기록을 근거로 삼는다 (G-10)
