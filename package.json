@@ -39,6 +39,8 @@
     "@slack/bolt": "^5.0.0",
     "better-sqlite3": "^13.0.1",
     "drizzle-orm": "^0.45.2",
+    "fflate": "^0.8.3",
+    "unpdf": "^1.8.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

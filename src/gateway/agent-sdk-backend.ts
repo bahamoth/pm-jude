@@ -1,8 +1,37 @@
-import { query } from '@anthropic-ai/claude-agent-sdk';
-import type { BackendRequest, BackendResponse, LlmBackend } from './backend';
+import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { BackendImage, BackendRequest, BackendResponse, LlmBackend } from './backend';
 
 export interface AgentSdkBackendOptions {
   model?: string;
+}
+
+/**
+ * 이미지가 실린 요청의 프롬프트 — 스트리밍 입력으로 content 블록을 구성한다 (ADR-0011).
+ * 이미지 없는 호출은 문자열 경로를 그대로 쓴다: 첨부 추출 하나 때문에 파이프라인 4종의
+ * 전달 방식이 바뀌면 Exit 시 교체 범위가 늘어난다.
+ */
+async function* imagePrompt(
+  input: unknown,
+  images: readonly BackendImage[],
+): AsyncGenerator<SDKUserMessage> {
+  yield {
+    type: 'user',
+    parent_tool_use_id: null,
+    message: {
+      role: 'user',
+      content: [
+        ...images.map((image) => ({
+          type: 'image' as const,
+          source: {
+            type: 'base64' as const,
+            media_type: image.mime as 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp',
+            data: image.base64,
+          },
+        })),
+        { type: 'text' as const, text: JSON.stringify(input) },
+      ],
+    },
+  };
 }
 
 /**
@@ -27,7 +56,10 @@ export class AgentSdkBackend implements LlmBackend {
 
     try {
       const stream = query({
-        prompt: JSON.stringify(request.input),
+        prompt:
+          request.images && request.images.length > 0
+            ? imagePrompt(request.input, request.images)
+            : JSON.stringify(request.input),
         options: {
           systemPrompt: request.promptBody,
           tools: [],
