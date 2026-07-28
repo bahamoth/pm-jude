@@ -1243,7 +1243,7 @@
   {
     "id": 45,
     "title": "인테이크 자료 첨부 — ADR + 정본 개정",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
@@ -1259,13 +1259,18 @@
         "author": "claude",
         "date": "2026-07-28",
         "body": "정본 개정 완료 — 브랜치 docs/attachment-canon (머지 대기).\n\n**ADR-0011** 신설. 결정 6개를 고정했다: 첨부는 명확화 입력이다 / 요청자 발화에 붙는다 / 모델에 닿는 경로는 텍스트 하나다 / 원본 불변·추출 파생 / 버전 귀속은 5축 유지 / 문서에서의 지위는 원문 전사와 같다. 배제한 선택지와 그 이유를 함께 적었다 — 참조물 취급(문서에 없는 진실이 첨부에 사는 구조), 멀티모달 직접 전달(무상태 재조립에서 라운드마다 재전송), 추출 텍스트의 utterance 흡수(불변 트리거가 재추출을 영구 차단), 추출기 버전의 6번째 축 승격(5축 NOT NULL 불변식 파괴), 요약 압축·무음 절단(검증 불가 구간 생성 / 뒷부분에 답이 있는 자료의 보류).\n\n**PRD v1.5** — F1-Attach 신설. 그 귀결로 F2c에 슬롯 근거의 출처(첨부 유래 값은 기록·표시하고 F13이 추출 결함을 프롬프트 결함과 구분), F3에 첨부 유래 확정 사항의 흡수(첨부를 지워도 문서만으로 구현 가능 — F4 역주입과 같은 규율), F11에 추출 실패·첨부 유래 슬롯 정정 신호, F13 실패 유형에 추출 결함, §12-19(첨부 상한 3종)·§12-20(보존 기간) 등재.\n\n**CONTEXT.md** 용어 2건(첨부 자료·추출), **data-model.md** attachment 엔티티와 slot_state.evidence_attachment_id, **ARCHITECTURE.md** 구성도·ERD·컴포넌트 표, **requester-journey.md** 화면 4곳(인테이크·마법사·대기·문서)과 §6 계약 3행·G-12·O-1/O-2 갱신.\n\n상태 머신은 변경 없음 — 첨부가 발화에 붙으므로 라운드 정합·왕복 상한·동시성 규칙이 그대로다. 검증: 118 테스트·포맷·arch-sync·bilingual-sync 통과."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-28",
+        "body": "PR #35 머지 완료 (rebase-merge, 6개 이슈 단위 커밋). 종결."
       }
     ]
   },
   {
     "id": 46,
     "title": "첨부 저장 계층 — 스키마·불변 원본·스토어 API",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
@@ -1283,13 +1288,18 @@
         "author": "claude",
         "date": "2026-07-28",
         "body": "코드 완료 — 브랜치 docs/attachment-canon (머지 대기).\n\nattachment.utterance_id가 NOT NULL이라 첨부만 단독으로 존재하는 행이 없고, 첨부 시점이 전사 순서에 남는다. 트리거는 원본 메타(session_id·utterance_id·filename·mime·bytes·sha256·storage_ref)의 삭제·수정을 막고 추출 필드만 열어 둔다 — 원문 전사(0001)와 같은 규율이되 재추출이 가능해야 하므로 범위가 다르다.\n\n인테이크 시점에는 세션이 없으므로 staged_upload가 그 구간을 맡고, 발화 제출이 참조하면 attachment로 승격한다. 알 수 없는 uploadId가 하나라도 섞이면 전부 거부 — 올린 자료 중 일부만 조용히 빠지지 않는다.\n\nAttachmentStore는 내용 주소(sha256) 기반이라 재업로드가 저장 1회다. 삭제 API는 두지 않았다: 여러 세션이 같은 내용을 가리킬 수 있어 참조 카운트 없이는 안전하지 않고, 일괄 정리는 보존 기간이 정해진 뒤의 일이다(PRD §12-20). DB 값이라도 경로로 쓰기 전에 루트 안인지 확인한다."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-28",
+        "body": "PR #35 머지 완료 (rebase-merge, 6개 이슈 단위 커밋). 종결."
       }
     ]
   },
   {
     "id": 47,
     "title": "추출기 레지스트리 — 4군 추출기 + attachment-extraction 프롬프트",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
@@ -1312,13 +1322,18 @@
         "author": "claude",
         "date": "2026-07-28",
         "body": "이미지 추출 경로 실호출 검증 완료.\n\n**Agent SDK는 Claude Code CLI의 래퍼다** — `sdk.mjs`에 `pathToClaudeCodeExecutable`·`--input-format`·`stream-json`이 그대로 들어 있고, SDK가 CLI를 서브프로세스로 띄워 같은 프로토콜로 통신한다. `claude -p`와 SDK는 대안 관계가 아니라 같은 경로의 두 층이다(F14가 둘을 병기한 것은 인터페이스 선택이지 전송 방식의 차이가 아니다). CLI 직접 호출은 `--input-format stream-json` + `--output-format stream-json` + `--verbose` 세 플래그가 함께 필요하다.\n\n우리 코드(gateway + AgentSdkBackend + createImageExtractor)를 그대로 돌린 결과:\n- 단색 PNG → `status: failed`, 「옮길 문자나 도표 내용이 없음」 — readable=false가 실패로 옮겨지는 경로 확인\n- 막대그래프 PNG → `status: ok`, 세 막대의 색과 상대 높이를 정확히 서술\n\n`attachment-extraction@0.1.0` 사용량 로그가 함께 찍혀 버전 참조·스키마 검증·비용 로깅도 확인됐다. 검증 스크립트는 실 API 호출이라 tests/에 넣지 않는다 — 재현은 `createImageExtractor`에 AgentSdkBackend를 물려 PNG 하나를 넣으면 된다."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-28",
+        "body": "PR #35 머지 완료 (rebase-merge, 6개 이슈 단위 커밋). 종결."
       }
     ]
   },
   {
     "id": 48,
     "title": "코어 융합 — 첨부 컨텍스트·근거 추적·상한 + 프롬프트 3종 개정",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
@@ -1337,13 +1352,18 @@
         "author": "claude",
         "date": "2026-07-28",
         "body": "코드 완료 — 브랜치 docs/attachment-canon (머지 대기).\n\n상태 머신 무변경으로 얹혔다 — 첨부가 발화에 붙으므로 라운드 정합·왕복 상한·동시성 규칙이 그대로고, 추출은 상태가 아니라 라운드 백그라운드의 첫 단계다. 자료를 더 붙여도 라운드를 소비하지 않는다.\n\n추출 텍스트는 발화와 **구분되어** 실린다. 요청 원문에 이어 붙이면 판정이 요청자가 한 말로 오귀속해 출처 추적이 성립하지 않는다. 첨부는 UUID가 아니라 짧은 참조(A1)로 오가고 되돌리는 것은 코어 몫이다.\n\n상한 셋 중 둘은 거부하고 하나는 실패로 남긴다: 추출 텍스트 총량은 추출 전에 알 수 없으므로 초과분을 사유와 함께 실패로 기록한다. 조용히 잘리면 요청자는 자료가 반영됐다고 믿은 채 「정보 부족」을 받는다.\n\n프롬프트 3종 개정(clarification@0.3.0 · completeness@0.2.0 · requirements@0.2.0), promotion은 컨텍스트만 늘어 본문 무변경. 신호 3종 신설."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-28",
+        "body": "PR #35 머지 완료 (rebase-merge, 6개 이슈 단위 커밋). 종결."
       }
     ]
   },
   {
     "id": 49,
     "title": "웹 어댑터 — 업로드 스테이징·참조·다운로드",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
@@ -1361,13 +1381,18 @@
         "author": "claude",
         "date": "2026-07-28",
         "body": "코드 완료 — 브랜치 docs/attachment-canon (머지 대기).\n\nPOST /api/uploads가 raw body 단건을 받는다 — multipart 파서를 들이지 않는 대신 파일 하나가 요청 하나이고, 그래서 거부도 건별로 나뉜다. 상한 초과는 Content-Length에서 먼저 끊고 헤더가 거짓이면 읽되 버퍼에 쌓지 않는다. **소켓을 죽이지는 않는다**: 연결을 끊으면 거부 사유가 요청자에게 닿지 못해 알 수 없는 실패가 된다.\n\n다운로드는 octet-stream + Content-Disposition: attachment + nosniff, 세션 스코프다. 첨부는 요청자가 올린 임의의 파일이므로 표시 대상이 아니라 내려받기 대상이다.\n\n추출기를 팩토리로 받도록 고쳤다 — 이미지 추출은 게이트웨이 호출이므로 러너와 같은 게이트웨이를 써야 타임아웃·동시성·비용 로깅이 한 곳에서 걸린다(F14). 별도 인스턴스면 폭주 상한이 둘로 갈린다."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-28",
+        "body": "PR #35 머지 완료 (rebase-merge, 6개 이슈 단위 커밋). 종결."
       }
     ]
   },
   {
     "id": 50,
     "title": "첨부 UI + trace 뷰어 확장",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
@@ -1385,6 +1410,11 @@
         "author": "claude",
         "date": "2026-07-28",
         "body": "코드 완료 — 브랜치 docs/attachment-canon (머지 대기).\n\n요청자가 입력을 넣는 지점이면 어디서든 같은 컴포넌트를 쓴다. 자료는 답변을 보조하는 수단이지 「모르겠다」와 나란한 제3의 경로가 아니라, 마법사 아래에 놓고 제출과 함께 보낸다. 세션 없는 인테이크 폼도 정책을 물을 수 있도록 GET /api/uploads를 열었다.\n\n슬롯 확인 카드가 첨부 유래 값의 출처를 적는다 — 요청자가 말한 적 없는 값이므로 어디서 왔는지 보여야 확인이 판단 가능한 물음이 된다. 문서 화면의 첨부 목록은 원문 전사와 같은 지위이고, 읽지 못한 자료도 사유와 함께 남는다.\n\ntrace 뷰어에 attachmentCounts 요약·세션별 첨부 표·슬롯 근거 열을 더했다(AGENTS.md 상시 지시). 추출 실패가 쌓이는 것이 F13에서 추출기를 고칠 신호이므로 사유를 깎지 않는다.\n\n검증: 백엔드 175 + web-ui 26 테스트, 타입·린트·포맷 통과."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-28",
+        "body": "PR #35 머지 완료 (rebase-merge, 6개 이슈 단위 커밋). 종결."
       }
     ]
   }
