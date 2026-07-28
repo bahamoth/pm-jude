@@ -56,6 +56,40 @@ const clarificationResponse = JSON.stringify({
   ],
 });
 
+/** 전 슬롯 해소 — 정제 완료로 이끄는 판정 (#52 documented 가드 시나리오용). */
+const refinedCompletenessResponse = JSON.stringify({
+  slots: [
+    slot('target-user', 'filled', '「영업팀 매니저」라고 확답'),
+    slot('purpose', 'filled', '수작업 집계 제거라고 답함'),
+    slot('data-source', 'promoted', '요청자가 「모르겠어요」를 택함'),
+  ],
+  remainingAmbiguities: [],
+  rubric: { score: 90, rationale: '핵심 슬롯 모두 해소' },
+});
+
+const requirementsResponse = JSON.stringify({
+  problem: '영업 실적을 정리해 볼 수단이 없어 매니저가 수작업으로 집계한다',
+  users: ['영업팀 매니저'],
+  scope: { inScope: ['월별 매출 추이 조회'], outOfScope: [] },
+  stories: [
+    {
+      story: '영업팀 매니저로서, 월별 매출 추이를 확인하고 싶다',
+      acceptanceCriteria: [
+        {
+          ears: 'When 매니저가 기간을 선택하면, the system shall 월별 매출 합계를 표시한다',
+          gwt: {
+            given: '매출 데이터가 존재할 때',
+            when: '기간을 선택하면',
+            then: '월별 합계가 표시된다',
+          },
+        },
+      ],
+    },
+  ],
+  dataSources: [],
+  openIssues: [],
+});
+
 /** purpose가 여전히 미충족 — 미정제로 이끄는 판정. */
 const unrefinedCompletenessResponse = JSON.stringify({
   slots: [
@@ -149,5 +183,41 @@ describe('Slack 어댑터 배선', () => {
       status: 'clarifying',
       roundCount: 2,
     });
+  });
+
+  it('문서 게시 후 스레드 답글은 재판정 없이 안내만 같은 스레드로 게시된다 (#52)', async () => {
+    const { runner, slack, store } = makeRunner([
+      clarificationResponse,
+      refinedCompletenessResponse,
+      requirementsResponse,
+      // 이후 스크립트 없음 — 답글이 재판정을 돌리면 ScriptedBackend가 던진다
+    ]);
+    await runner.handleMention(mention);
+    await runner.handleThreadReply({
+      channel: 'C0123',
+      threadTs: '1719999999.000100',
+      userId: 'U777',
+      text: '영업팀 매니저요. 수작업 집계 제거요.',
+    });
+    const threadKey = 'slack:C0123:1719999999.000100';
+    expect(store.findSessionByThreadKey(threadKey)?.status).toBe('documented');
+    const roundBefore = store.findSessionByThreadKey(threadKey)?.roundCount;
+
+    await runner.handleThreadReply({
+      channel: 'C0123',
+      threadTs: '1719999999.000100',
+      userId: 'U777',
+      text: '고마워요! 아 근데 색상도 바꿀 수 있나요?',
+    });
+
+    expect(slack.posted.at(-1)).toMatchObject({ channel: 'C0123', threadTs: '1719999999.000100' });
+    expect(slack.posted.at(-1)?.text).toContain('항목별 확인·정정');
+    expect(store.findSessionByThreadKey(threadKey)).toMatchObject({
+      status: 'documented',
+      roundCount: roundBefore,
+    });
+    expect(
+      store.exportSessions()[0]?.signals.filter((s) => s.type === 'document_delivered'),
+    ).toHaveLength(1);
   });
 });
