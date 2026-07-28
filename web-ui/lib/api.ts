@@ -2,6 +2,7 @@ import {
   ApiError,
   type Accepted,
   type IntakeResult,
+  type MockupState,
   type ReplyOutcome,
   type SessionDetail,
   type SessionSummary,
@@ -141,4 +142,51 @@ export function getSummaries(ids: string[]): Promise<{ sessions: SessionSummary[
 /** 백그라운드 질문 생성 실패 시 재시도 (SSE error 이벤트의 복구 경로). */
 export function retryRound(sessionId: string): Promise<{ accepted: boolean }> {
   return request(`/api/sessions/${encodeURIComponent(sessionId)}/rounds`, { method: 'POST' });
+}
+
+// ── 목업 반복·디자인 시스템 선정 (F4, #54) ──────────────────────────────
+
+/** 목업 반복 상태 — 버전·예산·테마 후보·어노테이션 (화면 복원의 근거). */
+export function getMockupState(sessionId: string): Promise<MockupState> {
+  return request(`/api/sessions/${encodeURIComponent(sessionId)}/mockup`);
+}
+
+/** 목업 서빙 주소 — 샌드박스 iframe의 src. theme은 선정 전 미리보기용. */
+export function mockupUrl(sessionId: string, version: number, theme?: string | null): string {
+  const base = `/api/sessions/${encodeURIComponent(sessionId)}/mockups/${String(version)}`;
+  return theme ? `${base}?theme=${encodeURIComponent(theme)}` : base;
+}
+
+/** 코멘트 202 접수 — 재생성은 백그라운드. mockupVersion이 최신이 아니면 서버가 409로 막는다. */
+export function sendMockupComments(
+  sessionId: string,
+  mockupVersion: number,
+  comments: Array<{ text: string; elementRef?: string }>,
+): Promise<Accepted> {
+  return request(`/api/sessions/${encodeURIComponent(sessionId)}/mockup/annotations`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ mockupVersion, comments }),
+  });
+}
+
+/** 디자인 시스템 선정(동기 200) — LLM 호출이 없다. 다시 고르면 덮어쓴다. */
+export function selectMockupTheme(
+  sessionId: string,
+  selection: { themeId: string } | { delegated: true },
+): Promise<ReplyOutcome> {
+  return request(`/api/sessions/${encodeURIComponent(sessionId)}/mockup/theme`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(selection),
+  });
+}
+
+/** 최종 승인 202 — 역주입(문서 vN+1)이 백그라운드로 돈다. 테마 미결정이면 409. */
+export function approveMockup(sessionId: string): Promise<Accepted> {
+  return request(`/api/sessions/${encodeURIComponent(sessionId)}/mockup/approval`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  });
 }

@@ -21,6 +21,11 @@ describe('상태 → 여정·칩 매핑', () => {
     expect(journeyStep('closed')).toBe(2);
   });
 
+  it('목업 반복은 ③ 문서 확정 위에서 돈다 (F4 #54 — 정본 스테퍼 대응)', () => {
+    expect(journeyStep('mockup')).toBe(3);
+    expect(statusChip('mockup', null)).toMatchObject({ labelKey: 'chip.mockup', tone: 'action' });
+  });
+
   it('칩 라벨은 사전 키로만 내보낸다 — 문자열을 직접 담지 않는다', () => {
     expect(statusChip('clarifying', null).labelKey).toBe('chip.clarifying');
     expect(statusChip('closed', 'on_hold_insufficient_info').labelKey).toBe('chip.onHold');

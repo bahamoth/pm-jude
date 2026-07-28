@@ -90,6 +90,8 @@ export function judeState(input: JudeStateInput): JudeState {
       return 'asking';
     case 'documented':
       return 'resolved';
+    case 'mockup':
+      return 'asking'; // 목업 확인은 요청자 차례다 — 코멘트·선정·확정을 기다린다 (F4)
     case 'closed':
       return input.terminalState === 'on_hold_insufficient_info' ? 'onhold' : 'resolved';
   }
