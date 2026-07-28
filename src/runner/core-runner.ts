@@ -547,14 +547,16 @@ export class IntakeRunner<A> {
       if (!session) return null;
     }
 
+    // 재시도는 발화를 다시 적지 않으므로, 언어도 이 이벤트가 아니라 세션 기록을 근거로 삼는다 (G-10)
+    const language = options.appendUtterance
+      ? this.languageOf(event)
+      : this.sessionLanguageOf(session.id, event);
+
     // 문서가 게시된 세션의 일반 답변은 재판정 경로가 아니다 (#52) — 수정은 슬롯 확인·정정
     // (confirmSlot)만 연다. 웹은 서버가 409로 막지만 채널 무관 최종 가드는 코어 몫이다:
     // 스레드 답글 하나가 문서를 조용히 다시 만들거나 왕복 예산을 먹는 경로를 차단하고,
     // 발화는 보존하되(원칙 7) 침묵 대신 정정 경로를 안내한다(원칙 5).
     if (session.status === 'documented' && !options.correction) {
-      const guardLanguage = options.appendUtterance
-        ? this.languageOf(event)
-        : this.sessionLanguageOf(session.id, event);
       if (options.appendUtterance) {
         const utterance = store.appendUtterance({
           sessionId: session.id,
@@ -562,17 +564,17 @@ export class IntakeRunner<A> {
           ...(event.authorId !== undefined ? { authorId: event.authorId } : {}),
           channel: event.channel,
           originalText: event.text,
-          originalLanguage: guardLanguage,
+          originalLanguage: language,
         });
         this.attachUploads(session.id, utterance.id, event);
       }
-      await this.deps.port.post(event.address, MESSAGES[guardLanguage].documentedGuide);
+      await this.deps.port.post(event.address, MESSAGES[language].documentedGuide);
       store.appendUtterance({
         sessionId: session.id,
         authorType: 'agent',
         channel: event.channel,
-        originalText: MESSAGES[guardLanguage].documentedGuide,
-        originalLanguage: guardLanguage,
+        originalText: MESSAGES[language].documentedGuide,
+        originalLanguage: language,
       });
       store.recordSignal({
         sessionId: session.id,
@@ -584,10 +586,6 @@ export class IntakeRunner<A> {
       return this.outcomeOf(session.id);
     }
 
-    // 재시도는 발화를 다시 적지 않으므로, 언어도 이 이벤트가 아니라 세션 기록을 근거로 삼는다 (G-10)
-    const language = options.appendUtterance
-      ? this.languageOf(event)
-      : this.sessionLanguageOf(session.id, event);
     if (options.appendUtterance) {
       const utterance = store.appendUtterance({
         sessionId: session.id,
@@ -1035,16 +1033,16 @@ export class IntakeRunner<A> {
   }
 
   /**
-   * 현재 문서의 버전. 문서 전이면 0 (G-11). 정본은 requirements_doc 저장 행이고,
-   * 저장 행이 없는 레거시 세션(#53 이전)은 게시 신호 수로 파생한다 — 정정 재생성이
-   * 버전을 이어 세도록 둘 중 큰 쪽을 취한다.
+   * 현재 문서의 버전. 문서 전이면 0 (G-11). 정본은 requirements_doc 저장 행의 버전이고,
+   * 저장 행이 없는 세션 — 문서 전이거나 #53 이전 레거시 — 만 게시 신호 수로 파생한다.
+   * 레거시 세션의 정정 재생성도 이 파생값에서 이어 세고, 그 순간부터 저장 행이 정본이 된다.
    */
   documentVersionOf(sessionId: string): number {
-    const stored = this.deps.store.listRequirementsDocs(sessionId).at(-1)?.version ?? 0;
-    const derived = this.deps.store
+    const stored = this.deps.store.latestRequirementsDoc(sessionId)?.version;
+    if (stored !== undefined) return stored;
+    return this.deps.store
       .listSignals(sessionId)
       .filter((signal) => signal.type === 'document_delivered').length;
-    return Math.max(stored, derived);
   }
 
   /** 세션 행에 고정된 버전 축을 신호 기록용으로 되돌린다 (F11 — 세션 생성 시점 버전 귀속). */

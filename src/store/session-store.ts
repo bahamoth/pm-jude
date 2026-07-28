@@ -528,6 +528,17 @@ export class SessionStore {
       .all();
   }
 
+  /** 최신 문서 버전 행 — 없으면 undefined (문서 전 세션 또는 #53 이전 레거시). */
+  latestRequirementsDoc(sessionId: string): typeof schema.requirementsDoc.$inferSelect | undefined {
+    return this.db
+      .select()
+      .from(schema.requirementsDoc)
+      .where(eq(schema.requirementsDoc.sessionId, sessionId))
+      .orderBy(desc(schema.requirementsDoc.version))
+      .limit(1)
+      .get();
+  }
+
   /** 신호 기록 (F11). 버전 5축은 스키마 NOT NULL + FK로 강제된다. */
   recordSignal(input: {
     sessionId: string;
