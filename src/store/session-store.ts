@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, lt } from 'drizzle-orm';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import * as schema from './schema';
@@ -174,6 +174,133 @@ export class SessionStore {
       .all();
   }
 
+  /**
+   * 참조 전 업로드를 보관한다 (F1-Attach) — 인테이크 시점에는 세션이 없으므로 파일이 먼저 온다.
+   * 검증(형식·크기·총량)은 호출자가 이미 끝낸 상태로 들어온다.
+   */
+  stageUpload(input: {
+    filename: string;
+    mime: string;
+    bytes: number;
+    sha256: string;
+    storageRef: string;
+  }): string {
+    const id = randomUUID();
+    this.db
+      .insert(schema.stagedUpload)
+      .values({ ...input, id, createdAt: now() })
+      .run();
+    return id;
+  }
+
+  getStagedUpload(id: string): typeof schema.stagedUpload.$inferSelect | null {
+    return (
+      this.db.select().from(schema.stagedUpload).where(eq(schema.stagedUpload.id, id)).get() ?? null
+    );
+  }
+
+  /**
+   * 업로드를 발화의 첨부로 승격한다 (ADR-0011 — 첨부는 요청자 발화에 붙는다).
+   * 스테이징 행은 사라지고 원본 파일은 그대로 남는다. 알 수 없는 uploadId가 하나라도
+   * 섞이면 전부 거부한다 — 요청자가 올린 자료 중 일부만 조용히 빠지는 경로를 만들지 않는다.
+   */
+  promoteUploads(input: {
+    sessionId: string;
+    utteranceId: string;
+    uploadIds: string[];
+  }): Array<typeof schema.attachment.$inferSelect> {
+    if (input.uploadIds.length === 0) return [];
+    return this.db.transaction((tx) => {
+      const created: Array<typeof schema.attachment.$inferSelect> = [];
+      for (const uploadId of input.uploadIds) {
+        const staged = tx
+          .select()
+          .from(schema.stagedUpload)
+          .where(eq(schema.stagedUpload.id, uploadId))
+          .get();
+        if (!staged) throw new Error(`알 수 없는 업로드 참조: ${uploadId}`);
+        const id = randomUUID();
+        tx.insert(schema.attachment)
+          .values({
+            id,
+            sessionId: input.sessionId,
+            utteranceId: input.utteranceId,
+            filename: staged.filename,
+            mime: staged.mime,
+            bytes: staged.bytes,
+            sha256: staged.sha256,
+            storageRef: staged.storageRef,
+            extractionStatus: 'pending',
+            createdAt: now(),
+          })
+          .run();
+        tx.delete(schema.stagedUpload).where(eq(schema.stagedUpload.id, uploadId)).run();
+        const row = tx.select().from(schema.attachment).where(eq(schema.attachment.id, id)).get();
+        if (!row) throw new Error(`첨부 기록 직후 조회 실패: ${id}`);
+        created.push(row);
+      }
+      return created;
+    });
+  }
+
+  listAttachments(sessionId: string): Array<typeof schema.attachment.$inferSelect> {
+    return this.db
+      .select()
+      .from(schema.attachment)
+      .where(eq(schema.attachment.sessionId, sessionId))
+      .orderBy(schema.attachment.createdAt)
+      .all();
+  }
+
+  getAttachment(id: string): typeof schema.attachment.$inferSelect | null {
+    return (
+      this.db.select().from(schema.attachment).where(eq(schema.attachment.id, id)).get() ?? null
+    );
+  }
+
+  /**
+   * 추출 결과 기록 (ADR-0011) — 첨부에서 유일하게 갱신 가능한 부분이다.
+   * 재추출은 같은 행을 다시 쓴다: 추출기가 좋아지면 과거 세션에도 소급된다.
+   */
+  setExtraction(input: {
+    id: string;
+    status: 'pending' | 'ok' | 'failed';
+    extractedText?: string | null;
+    extractionError?: string | null;
+    extractorVersion?: string;
+  }): void {
+    this.db
+      .update(schema.attachment)
+      .set({
+        extractionStatus: input.status,
+        extractedText: input.extractedText ?? null,
+        extractionError: input.extractionError ?? null,
+        ...(input.extractorVersion !== undefined
+          ? { extractorVersion: input.extractorVersion }
+          : {}),
+        extractedAt: input.status === 'pending' ? null : now(),
+      })
+      .where(eq(schema.attachment.id, input.id))
+      .run();
+  }
+
+  /**
+   * 참조되지 않은 채 남은 업로드의 메타를 정리한다. 원본 파일은 지우지 않는다 —
+   * 여러 세션이 같은 내용을 가리킬 수 있어 참조 카운트 없이는 안전하지 않고,
+   * 일괄 정리는 보존 기간이 정해진 뒤의 일이다(PRD §12-20).
+   */
+  purgeStagedUploads(olderThanIso: string): number {
+    const stale = this.db
+      .select({ id: schema.stagedUpload.id })
+      .from(schema.stagedUpload)
+      .where(lt(schema.stagedUpload.createdAt, olderThanIso))
+      .all();
+    for (const row of stale) {
+      this.db.delete(schema.stagedUpload).where(eq(schema.stagedUpload.id, row.id)).run();
+    }
+    return stale.length;
+  }
+
   /** 버전 레지스트리 3종 전체 — 트레이스 뷰어 등에서 id → name@semver 표기로 해석할 때 쓴다. */
   listVersionRegistry(): Record<
     'prompt' | 'threshold' | 'slotSchema',
@@ -249,6 +376,9 @@ export class SessionStore {
    * PoC 세션 export — 골든셋 시드용 익명화 뷰 (F12, §6 평가 데이터 프라이버시).
    * 요청자 식별 정보(id·이름·채널 식별자)와 발화 작성자 id를 제거하고
    * 전사·슬롯·신호·버전 귀속을 그대로 담는다.
+   *
+   * 첨부는 추출 결과만 담는다 — 파일명은 요청자 이름을 담고 있는 일이 잦아 빼고,
+   * 원본 주소(sha256·storage_ref)는 골든셋에서 쓸모가 없다. 붙은 발화는 seq로 가리킨다.
    */
   exportSessions(): Array<{
     session: Omit<typeof schema.session.$inferSelect, never>;
@@ -259,6 +389,16 @@ export class SessionStore {
       timezone: string;
     }>;
     utterances: Array<Omit<typeof schema.utterance.$inferSelect, 'id' | 'authorId'>>;
+    attachments: Array<{
+      utteranceSeq: number | null;
+      mime: string;
+      bytes: number;
+      extractedText: string | null;
+      extractionStatus: string;
+      extractionError: string | null;
+      extractorVersion: string | null;
+      createdAt: string;
+    }>;
     slotStates: Array<typeof schema.slotState.$inferSelect>;
     signals: Array<Omit<typeof schema.signal.$inferSelect, 'id'>>;
   }> {
@@ -266,25 +406,43 @@ export class SessionStore {
       .select()
       .from(schema.session)
       .all()
-      .map((session) => ({
-        session,
-        requesters: this.db
-          .select({
-            role: schema.sessionRequester.role,
-            subscribed: schema.sessionRequester.subscribed,
-            preferredLanguage: schema.requester.preferredLanguage,
-            timezone: schema.requester.timezone,
-          })
-          .from(schema.sessionRequester)
-          .innerJoin(schema.requester, eq(schema.sessionRequester.requesterId, schema.requester.id))
-          .where(eq(schema.sessionRequester.sessionId, session.id))
-          .all(),
-        utterances: this.listUtterances(session.id).map(
-          ({ id: _id, authorId: _authorId, ...rest }) => rest,
-        ),
-        slotStates: this.listSlotStates(session.id),
-        signals: this.listSignals(session.id).map(({ id: _id, ...rest }) => rest),
-      }));
+      .map((session) => {
+        const seqByUtterance = new Map(
+          this.listUtterances(session.id).map((utterance) => [utterance.id, utterance.seq]),
+        );
+        return {
+          session,
+          attachments: this.listAttachments(session.id).map((row) => ({
+            utteranceSeq: seqByUtterance.get(row.utteranceId) ?? null,
+            mime: row.mime,
+            bytes: row.bytes,
+            extractedText: row.extractedText,
+            extractionStatus: row.extractionStatus,
+            extractionError: row.extractionError,
+            extractorVersion: row.extractorVersion,
+            createdAt: row.createdAt,
+          })),
+          requesters: this.db
+            .select({
+              role: schema.sessionRequester.role,
+              subscribed: schema.sessionRequester.subscribed,
+              preferredLanguage: schema.requester.preferredLanguage,
+              timezone: schema.requester.timezone,
+            })
+            .from(schema.sessionRequester)
+            .innerJoin(
+              schema.requester,
+              eq(schema.sessionRequester.requesterId, schema.requester.id),
+            )
+            .where(eq(schema.sessionRequester.sessionId, session.id))
+            .all(),
+          utterances: this.listUtterances(session.id).map(
+            ({ id: _id, authorId: _authorId, ...rest }) => rest,
+          ),
+          slotStates: this.listSlotStates(session.id),
+          signals: this.listSignals(session.id).map(({ id: _id, ...rest }) => rest),
+        };
+      });
   }
 
   /** 슬롯 상태 기록 (upsert). 3상태 밖의 값은 거부한다 (F2c). */
@@ -295,6 +453,8 @@ export class SessionStore {
     value?: unknown;
     confirmedByRequester?: boolean;
     evidenceUtteranceId?: string;
+    /** 값이 첨부에서 나왔다면 그 첨부 — 출처 표시와 추출 결함 판독의 근거 (F2c). */
+    evidenceAttachmentId?: string;
     openIssueAssignee?: string;
   }): void {
     if (!['filled', 'unfilled', 'promoted'].includes(input.state)) {
@@ -304,6 +464,7 @@ export class SessionStore {
       value: null,
       confirmedByRequester: false,
       evidenceUtteranceId: null,
+      evidenceAttachmentId: null,
       openIssueAssignee: null,
       ...input,
     };
@@ -317,6 +478,7 @@ export class SessionStore {
           value: row.value,
           confirmedByRequester: row.confirmedByRequester,
           evidenceUtteranceId: row.evidenceUtteranceId,
+          evidenceAttachmentId: row.evidenceAttachmentId,
           openIssueAssignee: row.openIssueAssignee,
         },
       })
