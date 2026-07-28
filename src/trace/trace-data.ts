@@ -18,6 +18,8 @@ export interface TraceSummary {
   attachmentCounts: Record<'total' | 'ok' | 'failed' | 'pending', number>;
   /** 영속된 requirements 문서 버전 수 (#53) — 정정 재생성이 쌓이면 버전이 는다 (G-11). */
   documentCount: number;
+  /** 목업 반복 현황 (F4 #54) — 반복·어노테이션 밀도는 명확화 수렴 품질의 신호다 (F11). */
+  mockupCounts: Record<'versions' | 'annotations', number>;
 }
 
 export interface TraceData {
@@ -87,6 +89,23 @@ export interface TraceData {
       backInjectedFrom: string | null;
       createdAt: string;
     }>;
+    /** 목업 버전 궤적 (F4 #54) — HTML 원문 없이 크기만 (개발팀 전달 금지 하드 제약과 정합). */
+    mockups: Array<{
+      version: number;
+      docVersion: number;
+      summary: string | null;
+      convergence: string;
+      selectedTheme: string | null;
+      themeDelegated: boolean;
+      htmlBytes: number;
+      createdAt: string;
+    }>;
+    mockupAnnotations: Array<{
+      mockupVersion: number | null;
+      text: string;
+      elementRef: string | null;
+      createdAt: string;
+    }>;
   }>;
 }
 
@@ -114,10 +133,21 @@ export function buildTraceData(
     signalTypeCounts: {},
     attachmentCounts: { total: 0, ok: 0, failed: 0, pending: 0 },
     documentCount: 0,
+    mockupCounts: { versions: 0, annotations: 0 },
   };
 
   const sessions = exported.map(
-    ({ session, requesters, utterances, attachments, slotStates, signals, documents }) => {
+    ({
+      session,
+      requesters,
+      utterances,
+      attachments,
+      slotStates,
+      signals,
+      documents,
+      mockups,
+      mockupAnnotations,
+    }) => {
       count(summary.statusCounts, session.status);
       if (session.terminalState) count(summary.terminalCounts, session.terminalState);
       count(summary.channelCounts, session.originChannel);
@@ -130,6 +160,8 @@ export function buildTraceData(
         count(summary.attachmentCounts, attachment.extractionStatus);
       }
       summary.documentCount += documents.length;
+      summary.mockupCounts.versions += mockups.length;
+      summary.mockupCounts.annotations += mockupAnnotations.length;
 
       return {
         id: session.id,
@@ -172,6 +204,8 @@ export function buildTraceData(
           occurredAt: signal.occurredAt,
         })),
         documents,
+        mockups,
+        mockupAnnotations,
       };
     },
   );

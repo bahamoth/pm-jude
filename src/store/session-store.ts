@@ -408,6 +408,26 @@ export class SessionStore {
     slotStates: Array<typeof schema.slotState.$inferSelect>;
     signals: Array<Omit<typeof schema.signal.$inferSelect, 'id'>>;
     documents: Array<Omit<typeof schema.requirementsDoc.$inferSelect, 'id' | 'sessionId'>>;
+    /**
+     * 목업 버전 (F4, #54) — 구조 층 HTML 원문은 싣지 않고 크기만 남긴다.
+     * 목업 코드는 개발팀 전달 금지(하드 제약)이고, 골든셋·trace가 볼 것은 반복의 궤적이다.
+     */
+    mockups: Array<{
+      version: number;
+      docVersion: number;
+      summary: string | null;
+      convergence: string;
+      selectedTheme: string | null;
+      themeDelegated: boolean;
+      htmlBytes: number;
+      createdAt: string;
+    }>;
+    mockupAnnotations: Array<{
+      mockupVersion: number | null;
+      text: string;
+      elementRef: string | null;
+      createdAt: string;
+    }>;
   }> {
     return this.db
       .select()
@@ -417,8 +437,20 @@ export class SessionStore {
         const seqByUtterance = new Map(
           this.listUtterances(session.id).map((utterance) => [utterance.id, utterance.seq]),
         );
+        const mockups = this.listMockups(session.id);
+        const versionByMockupId = new Map(mockups.map((mockup) => [mockup.id, mockup.version]));
         return {
           session,
+          mockups: mockups.map(({ id: _id, sessionId: _sessionId, html, ...rest }) => ({
+            ...rest,
+            htmlBytes: Buffer.byteLength(html, 'utf8'),
+          })),
+          mockupAnnotations: this.listMockupAnnotations(session.id).map((annotation) => ({
+            mockupVersion: versionByMockupId.get(annotation.mockupId) ?? null,
+            text: annotation.text,
+            elementRef: annotation.elementRef,
+            createdAt: annotation.createdAt,
+          })),
           attachments: this.listAttachments(session.id).map((row) => ({
             utteranceSeq: seqByUtterance.get(row.utteranceId) ?? null,
             mime: row.mime,

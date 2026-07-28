@@ -1312,6 +1312,11 @@ export class IntakeRunner<A> {
     return Math.max(0, this.deps.store.listMockups(sessionId).length - 1);
   }
 
+  /** 반복 예산 — 어댑터가 남은 횟수를 미리 고지할 근거 (P-U1). */
+  get mockupIterationBudget(): number {
+    return this.maxMockupIterations;
+  }
+
   /** 디자인 시스템 선정 후보 — 어댑터 표시용 (테마 상세는 서빙 렌더러가 안다). */
   themeCandidates(): Array<{ id: string; name: string; description: string }> {
     return this.themes

@@ -745,3 +745,238 @@ describe('웹 어댑터 — 자료 첨부 (F1-Attach, ADR-0011)', () => {
     expect(detail.uploads.maxPerSession).toBe(DEFAULT_ATTACHMENT_LIMITS.maxPerSession);
   });
 });
+
+describe('웹 어댑터 — 목업 반복·디자인 시스템 선정 (F4, #54)', () => {
+  const uiYesResponse = JSON.stringify({
+    isUiRequest: true,
+    rationale: '대시보드 화면 신설 — UI 변화를 수반한다',
+  });
+
+  const mockupResponse = (marker: string) =>
+    JSON.stringify({
+      html: `<html><body><h1>영업 실적 대시보드</h1><p>${marker}</p></body></html>`,
+      summary: marker,
+    });
+
+  const backInjectedResponse = JSON.stringify({
+    problem: '영업 실적을 정리해 볼 수단이 없어 매니저가 수작업으로 집계한다',
+    users: ['영업팀 매니저'],
+    scope: { inScope: ['월별 매출 추이 조회'], outOfScope: [] },
+    stories: [
+      {
+        story: '영업팀 매니저로서, 월별 매출 추이를 확인하고 싶다',
+        acceptanceCriteria: [
+          {
+            ears: 'When 매니저가 기간을 선택하면, the system shall 월별 매출 합계를 표시한다',
+            gwt: {
+              given: '매출 데이터가 존재할 때',
+              when: '기간을 선택하면',
+              then: '월별 합계가 표시된다',
+            },
+          },
+        ],
+      },
+    ],
+    dataSources: [],
+    openIssues: [],
+  });
+
+  /** 인테이크 → 답변 → 목업 v1 게시(mockup 상태)까지 — 목업 계약 테스트의 공통 준비. */
+  async function openMockupSession(baseUrl: string): Promise<string> {
+    const sessionId = await openClarifyingSession(baseUrl);
+    const roundId = await roundIdOf(baseUrl, sessionId);
+    await postReply(baseUrl, sessionId, '영업팀 매니저요. 수작업 집계를 없애고 싶어요.', roundId);
+    await waitFor(async () => {
+      const d = await json<{ session: { status: string }; processing: boolean }>(
+        await fetch(`${baseUrl}/api/sessions/${sessionId}`),
+      );
+      return !d.processing && d.session.status === 'mockup' ? d : null;
+    });
+    return sessionId;
+  }
+
+  it('목업 서빙 → 어노테이션 → 테마 선정 → 승인·역주입이 HTTP로 관통된다', async () => {
+    const { baseUrl, store } = await startServer(
+      new ScriptedBackend([
+        clarificationResponse,
+        refinedCompletenessResponse,
+        requirementsResponse,
+        uiYesResponse,
+        mockupResponse('v1'),
+        mockupResponse('v2 — 필터 반영'),
+        backInjectedResponse,
+      ]),
+    );
+    const sessionId = await openMockupSession(baseUrl);
+
+    // 세션 조회에 목업 요약이 실린다 — 화면이 목업 패널을 열 근거
+    const detail = await json<{
+      mockup: { latestVersion: number; convergence: string } | null;
+    }>(await fetch(`${baseUrl}/api/sessions/${sessionId}`));
+    expect(detail.mockup?.latestVersion).toBe(1);
+
+    // 목업 상태 조회 — 버전·예산·테마 후보·어노테이션
+    const state = await json<{
+      latestVersion: number;
+      iterationBudget: number;
+      themes: Array<{ id: string; name: string }>;
+      convergence: string;
+    }>(await fetch(`${baseUrl}/api/sessions/${sessionId}/mockup`));
+    expect(state.latestVersion).toBe(1);
+    expect(state.themes.length).toBeGreaterThanOrEqual(2);
+    expect(state.convergence).toBe('iterating');
+
+    // 목업 HTML 서빙 — 샌드박스 CSP + 워터마크 상시 + 그레이스케일 토큰 (하드 제약)
+    const served = await fetch(`${baseUrl}/api/sessions/${sessionId}/mockups/1`);
+    expect(served.status).toBe(200);
+    expect(served.headers.get('content-security-policy')).toContain("default-src 'none'");
+    expect(served.headers.get('content-security-policy')).toContain('sandbox allow-scripts');
+    const html = await served.text();
+    expect(html).toContain('요구사항 확인용 목업');
+    expect(html).toContain('--pj-bg: #f5f5f5'); // 테마 선정 전 — 그레이스케일 기본값
+
+    // 어노테이션 → 202 → 백그라운드 재생성으로 v2
+    const annotated = await fetch(`${baseUrl}/api/sessions/${sessionId}/mockup/annotations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mockupVersion: 1,
+        comments: [{ text: '필터는 기간·팀·상태 3종이면 좋겠어요', elementRef: '#filters' }],
+      }),
+    });
+    expect(annotated.status).toBe(202);
+    await waitFor(async () => {
+      const s = await json<{ latestVersion: number; processing: boolean }>(
+        await fetch(`${baseUrl}/api/sessions/${sessionId}/mockup`),
+      );
+      return !s.processing && s.latestVersion === 2 ? s : null;
+    });
+
+    // 테마 선정(동기) → 테마 미리보기 서빙에 토큰이 입혀진다
+    const themed = await fetch(`${baseUrl}/api/sessions/${sessionId}/mockup/theme`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ themeId: 'daylight' }),
+    });
+    expect(themed.status).toBe(200);
+    const preview = await (
+      await fetch(`${baseUrl}/api/sessions/${sessionId}/mockups/2`)
+    ).text();
+    expect(preview).toContain('--pj-accent: #2f6fed'); // daylight 토큰 — 선정 결과가 기본 서빙에 반영
+
+    // 승인 → 202 → 역주입 문서 v2 + 목업 approved + 세션 documented
+    const approved = await fetch(`${baseUrl}/api/sessions/${sessionId}/mockup/approval`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+    expect(approved.status).toBe(202);
+    await waitFor(async () => {
+      const d = await json<{ session: { status: string }; processing: boolean }>(
+        await fetch(`${baseUrl}/api/sessions/${sessionId}`),
+      );
+      return !d.processing && d.session.status === 'documented' ? d : null;
+    });
+    const docs = store.listRequirementsDocs(sessionId);
+    expect(docs.length).toBe(2);
+    expect(docs[1]!.backInjectedFrom).toBe(store.latestMockup(sessionId)!.id);
+    expect(store.latestMockup(sessionId)?.convergence).toBe('approved');
+  });
+
+  it('스테일 목업 버전의 어노테이션은 409 — 다른 탭이 이미 다음 판으로 넘긴 경우', async () => {
+    const { baseUrl } = await startServer(
+      new ScriptedBackend([
+        clarificationResponse,
+        refinedCompletenessResponse,
+        requirementsResponse,
+        uiYesResponse,
+        mockupResponse('v1'),
+        mockupResponse('v2'),
+      ]),
+    );
+    const sessionId = await openMockupSession(baseUrl);
+    await fetch(`${baseUrl}/api/sessions/${sessionId}/mockup/annotations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ mockupVersion: 1, comments: [{ text: '표를 카드로' }] }),
+    });
+    await waitFor(async () => {
+      const s = await json<{ latestVersion: number; processing: boolean }>(
+        await fetch(`${baseUrl}/api/sessions/${sessionId}/mockup`),
+      );
+      return !s.processing && s.latestVersion === 2 ? s : null;
+    });
+
+    const stale = await fetch(`${baseUrl}/api/sessions/${sessionId}/mockup/annotations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ mockupVersion: 1, comments: [{ text: '이전 판에 남긴 코멘트' }] }),
+    });
+    expect(stale.status).toBe(409);
+    expect((await json<{ code: string }>(stale)).code).toBe('stale_mockup');
+  });
+
+  it('목업이 없는 세션의 목업 경로는 404 — 비 UI 요청', async () => {
+    const { baseUrl } = await startServer(
+      new ScriptedBackend([
+        clarificationResponse,
+        refinedCompletenessResponse,
+        requirementsResponse,
+        nonUiClassificationResponse,
+      ]),
+    );
+    const sessionId = await openClarifyingSession(baseUrl);
+    const roundId = await roundIdOf(baseUrl, sessionId);
+    await postReply(baseUrl, sessionId, '영업팀 매니저요. 수작업 집계 제거요.', roundId);
+    await waitFor(async () => {
+      const d = await json<{ session: { status: string }; processing: boolean }>(
+        await fetch(`${baseUrl}/api/sessions/${sessionId}`),
+      );
+      return !d.processing && d.session.status === 'documented' ? d : null;
+    });
+
+    expect((await fetch(`${baseUrl}/api/sessions/${sessionId}/mockup`)).status).toBe(404);
+    expect((await fetch(`${baseUrl}/api/sessions/${sessionId}/mockups/1`)).status).toBe(404);
+  });
+
+  it('후보 밖 테마 id는 400 — 기록 없이 거부된다', async () => {
+    const { baseUrl } = await startServer(
+      new ScriptedBackend([
+        clarificationResponse,
+        refinedCompletenessResponse,
+        requirementsResponse,
+        uiYesResponse,
+        mockupResponse('v1'),
+      ]),
+    );
+    const sessionId = await openMockupSession(baseUrl);
+
+    const rejected = await fetch(`${baseUrl}/api/sessions/${sessionId}/mockup/theme`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ themeId: 'no-such-theme' }),
+    });
+    expect(rejected.status).toBe(400);
+  });
+
+  it('테마 결정 전의 승인은 409 — 시각 방향 없이 역주입하지 않는다', async () => {
+    const { baseUrl } = await startServer(
+      new ScriptedBackend([
+        clarificationResponse,
+        refinedCompletenessResponse,
+        requirementsResponse,
+        uiYesResponse,
+        mockupResponse('v1'),
+      ]),
+    );
+    const sessionId = await openMockupSession(baseUrl);
+
+    const rejected = await fetch(`${baseUrl}/api/sessions/${sessionId}/mockup/approval`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+    expect(rejected.status).toBe(409);
+    expect((await json<{ code: string }>(rejected)).code).toBe('theme_required');
+  });
+});
