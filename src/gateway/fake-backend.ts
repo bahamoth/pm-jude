@@ -1,10 +1,13 @@
 import type { PromptRegistry } from '../prompts/registry';
 import {
   ATTACHMENT_EXTRACTION_V0,
+  BACK_INJECTION_V0,
   CLARIFICATION_V2,
   COMPLETENESS_V1,
+  MOCKUP_V0,
   PROMOTION_V0,
   REQUIREMENTS_V1,
+  UI_CLASSIFICATION_V0,
 } from '../prompts/catalog';
 import type { BackendRequest, BackendResponse, LlmBackend } from './backend';
 
@@ -21,6 +24,9 @@ export function createFakeBackend(registry: PromptRegistry): LlmBackend {
   const promotionBody = registry.get(PROMOTION_V0).body;
   const requirementsBody = registry.get(REQUIREMENTS_V1).body;
   const extractionBody = registry.get(ATTACHMENT_EXTRACTION_V0).body;
+  const uiClassificationBody = registry.get(UI_CLASSIFICATION_V0).body;
+  const mockupBody = registry.get(MOCKUP_V0).body;
+  const backInjectionBody = registry.get(BACK_INJECTION_V0).body;
 
   const clarification = JSON.stringify({
     interpretations: ['관리자용 실적 대시보드', '영업사원 개인 실적 화면'],
@@ -171,6 +177,68 @@ export function createFakeBackend(registry: PromptRegistry): LlmBackend {
     textContent: ['기간', '팀명', '매출액', '영업1팀', '12,400,000'],
   });
 
+  /** 대시보드 데모는 UI 요청이다 — 목업 반복(F4, #54)까지 시연이 관통된다. */
+  const uiClassification = JSON.stringify({
+    isUiRequest: true,
+    rationale: '월별 매출 추이를 조회하는 대시보드 화면이 신설된다',
+  });
+
+  /** 구조 층 목업 — --pj-* 토큰만 소비한다. 재생성 호출이면 반영 표식을 남긴다. */
+  const mockupHtml = (revised: boolean) =>
+    JSON.stringify({
+      html: `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>영업 실적 대시보드</title>
+<style>body{margin:0;font-family:var(--pj-font);background:var(--pj-bg);color:var(--pj-fg)}
+main{max-width:720px;margin:24px auto;padding:0 16px}
+.card{background:var(--pj-surface);border:1px solid var(--pj-border);border-radius:var(--pj-radius);padding:16px;margin-bottom:12px}
+button{background:var(--pj-accent);color:var(--pj-accent-fg);border:0;border-radius:var(--pj-radius);padding:8px 14px}
+.muted{color:var(--pj-muted)}table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid var(--pj-border);padding:8px;text-align:left}</style></head>
+<body><main><h1>영업 실적 대시보드${revised ? ' <small class="muted">(코멘트 반영판)</small>' : ''}</h1>
+<div class="card"><button id="p30">최근 30일</button> <button id="p90">최근 90일</button>
+<table><thead><tr><th>월</th><th>매출</th></tr></thead><tbody id="rows"></tbody></table>
+<p id="empty" class="muted" hidden>선택한 기간에 데이터가 없어요.</p></div>
+<script>const d={p30:[['6월','1,240만']],p90:[['4월','980만'],['5월','1,100만'],['6월','1,240만']]};
+function render(k){const r=document.getElementById('rows');r.innerHTML='';
+(d[k]||[]).forEach(([m,v])=>{const tr=document.createElement('tr');tr.innerHTML='<td>'+m+'</td><td>'+v+'</td>';r.appendChild(tr)});
+document.getElementById('empty').hidden=(d[k]||[]).length>0}
+document.getElementById('p30').onclick=()=>render('p30');document.getElementById('p90').onclick=()=>render('p90');render('p30')</script>
+</main></body></html>`,
+      summary: revised
+        ? '남겨주신 코멘트를 반영해 화면을 고친 판이에요.'
+        : '월별 매출 추이와 기간 필터를 담은 첫 화면이에요.',
+    });
+
+  /** 역주입 — 목업에서 확정된 사항이 문장으로 흡수된 다음 버전 문서. */
+  const backInjected = JSON.stringify({
+    problem: '영업 실적을 정리해 볼 수단이 없어 매니저가 수작업으로 집계한다',
+    users: ['영업팀 매니저'],
+    scope: { inScope: ['월별 매출 추이 조회', '팀별 실적 비교'], outOfScope: ['실시간 알림'] },
+    stories: [
+      {
+        story: '영업팀 매니저로서, 월별 매출 추이를 확인하고 싶다',
+        acceptanceCriteria: [
+          {
+            ears: 'When 매니저가 기간을 선택하면, the system shall 월별 매출 합계를 표시한다',
+            gwt: {
+              given: '매출 데이터가 존재할 때',
+              when: '기간을 선택하면',
+              then: '월별 합계가 표시된다',
+            },
+          },
+          {
+            ears: 'When 선택한 기간에 데이터가 없으면, the system shall 빈 상태 안내 문구를 표시한다',
+            gwt: {
+              given: '목업 반복에서 확정 — 빈 상태 문구 표시',
+              when: '데이터 없는 기간을 선택하면',
+              then: '안내 문구가 표시된다',
+            },
+          },
+        ],
+      },
+    ],
+    dataSources: [],
+    openIssues: [],
+  });
+
   return {
     run(request: BackendRequest): Promise<BackendResponse> {
       const usage = { inputTokens: 0, outputTokens: 0 };
@@ -191,6 +259,19 @@ export function createFakeBackend(registry: PromptRegistry): LlmBackend {
       }
       if (request.promptBody === requirementsBody) {
         return Promise.resolve({ outputText: requirements, usage });
+      }
+      if (request.promptBody === uiClassificationBody) {
+        return Promise.resolve({ outputText: uiClassification, usage });
+      }
+      if (request.promptBody === mockupBody) {
+        const input = request.input as { previousHtml?: string };
+        return Promise.resolve({
+          outputText: mockupHtml(input.previousHtml !== undefined),
+          usage,
+        });
+      }
+      if (request.promptBody === backInjectionBody) {
+        return Promise.resolve({ outputText: backInjected, usage });
       }
       if (request.promptBody === extractionBody) {
         // 이미지가 실려 오지 않았다면 배선이 끊긴 것이다 — 조용히 그럴듯한 서술을 지어내면

@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 describe('가짜 백엔드 시나리오', () => {
-  it('인테이크 → 1차 답변(미정제) → 2차 답변(정제)으로 documented까지 관통된다', async () => {
+  it('인테이크 → 답변 2회 → 문서 → 목업 반복 → 승인·역주입까지 관통된다 (#54)', async () => {
     store = SessionStore.open(':memory:');
     const registry = createDefaultRegistry();
     const port = new CollectingPort();
@@ -51,7 +51,21 @@ describe('가짜 백엔드 시나리오', () => {
       ...event,
       text: '수작업 집계를 없애고 싶어요. 데이터는 모르겠어요 — 개발팀이 정해 주세요.',
     });
-    expect(second?.status).toBe('documented');
-    expect(port.texts.at(-1)).toContain('requirements 문서 v1');
+    // 대시보드 데모는 UI 요청 — 문서 게시 뒤 목업 반복이 열린다 (F4)
+    expect(second?.status).toBe('mockup');
+    expect(port.texts.some((text) => text.includes('requirements 문서 v1'))).toBe(true);
+
+    const annotated = await runner.annotateMockup(event, [
+      { text: '빈 기간에는 안내 문구를 보여 주세요' },
+    ]);
+    expect(annotated?.status).toBe('mockup');
+    expect(store.listMockups(second!.sessionId).length).toBe(2);
+
+    const selected = await runner.selectMockupTheme(event, { themeId: 'daylight' });
+    expect(selected?.status).toBe('mockup');
+
+    const approved = await runner.approveMockup(event);
+    expect(approved?.status).toBe('documented');
+    expect(port.texts.at(-1)).toContain('requirements 문서 v2');
   });
 });

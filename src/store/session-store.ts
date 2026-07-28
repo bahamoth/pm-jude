@@ -116,7 +116,13 @@ export class SessionStore {
    */
   updateSessionState(
     id: string,
-    patch: { status?: string; roundCount?: number; terminalState?: string | null },
+    patch: {
+      status?: string;
+      roundCount?: number;
+      terminalState?: string | null;
+      /** UI 분류 결과 (F4 전제) — 문서 첫 게시 시점에 1회 기록된다. */
+      isUiRequest?: boolean;
+    },
   ): void {
     this.db
       .update(schema.session)
@@ -506,16 +512,19 @@ export class SessionStore {
     sessionId: string;
     version: number;
     content: unknown;
+    /** 역주입 원본 목업 id (F4) — 이 버전이 목업 승인에서 나왔다는 표식. */
+    backInjectedFrom?: string;
   }): typeof schema.requirementsDoc.$inferSelect {
     const row = {
       id: randomUUID(),
       sessionId: input.sessionId,
       version: input.version,
       content: input.content,
+      backInjectedFrom: input.backInjectedFrom ?? null,
       createdAt: now(),
     };
     this.db.insert(schema.requirementsDoc).values(row).run();
-    return { ...row, backInjectedFrom: null };
+    return row;
   }
 
   /** 세션의 문서 버전 전부 — 버전 오름차순. 화면·역주입(F4)·골든셋의 정본 구조체. */
@@ -537,6 +546,105 @@ export class SessionStore {
       .orderBy(desc(schema.requirementsDoc.version))
       .limit(1)
       .get();
+  }
+
+  /**
+   * 목업 버전 영속 (F4, #54) — 생성·재생성마다 구조 층 HTML을 vN과 함께 남긴다.
+   * append-only: 같은 (세션, 버전) 재기록은 unique 제약이 거부한다. 정정은 새 버전이다.
+   */
+  appendMockup(input: {
+    sessionId: string;
+    version: number;
+    docVersion: number;
+    html: string;
+    summary?: string;
+  }): typeof schema.mockup.$inferSelect {
+    const row = {
+      id: randomUUID(),
+      sessionId: input.sessionId,
+      version: input.version,
+      docVersion: input.docVersion,
+      html: input.html,
+      summary: input.summary ?? null,
+      convergence: 'iterating' as const,
+      selectedTheme: null,
+      themeDelegated: false,
+      createdAt: now(),
+    };
+    this.db.insert(schema.mockup).values(row).run();
+    return row;
+  }
+
+  /** 세션의 목업 버전 전부 — 버전 오름차순. 반복 횟수의 근거 (F4 반복 상한). */
+  listMockups(sessionId: string): Array<typeof schema.mockup.$inferSelect> {
+    return this.db
+      .select()
+      .from(schema.mockup)
+      .where(eq(schema.mockup.sessionId, sessionId))
+      .orderBy(schema.mockup.version)
+      .all();
+  }
+
+  /** 최신 목업 행 — 반복 루프의 현재 판. 없으면 undefined (비 UI 또는 목업 전). */
+  latestMockup(sessionId: string): typeof schema.mockup.$inferSelect | undefined {
+    return this.db
+      .select()
+      .from(schema.mockup)
+      .where(eq(schema.mockup.sessionId, sessionId))
+      .orderBy(desc(schema.mockup.version))
+      .limit(1)
+      .get();
+  }
+
+  /** 특정 목업 버전 행 — 서빙 경로의 조회 (버전별 URL, F4). */
+  getMockup(sessionId: string, version: number): typeof schema.mockup.$inferSelect | undefined {
+    return this.db
+      .select()
+      .from(schema.mockup)
+      .where(and(eq(schema.mockup.sessionId, sessionId), eq(schema.mockup.version, version)))
+      .get();
+  }
+
+  /** 반복 루프 상태 갱신 — 수렴(승인/에스컬레이션)과 테마 선정만 바뀐다. HTML은 불변. */
+  updateMockup(
+    id: string,
+    patch: {
+      convergence?: 'iterating' | 'approved' | 'escalated';
+      selectedTheme?: string | null;
+      themeDelegated?: boolean;
+    },
+  ): void {
+    this.db.update(schema.mockup).set(patch).where(eq(schema.mockup.id, id)).run();
+  }
+
+  /** 목업 어노테이션 일괄 기록 (F4) — 역주입의 원료. 원문 발화 보존은 호출자(러너) 몫. */
+  addMockupAnnotations(input: {
+    sessionId: string;
+    mockupId: string;
+    comments: Array<{ text: string; elementRef?: string }>;
+  }): Array<typeof schema.mockupAnnotation.$inferSelect> {
+    return input.comments.map((comment) => {
+      const row = {
+        id: randomUUID(),
+        mockupId: input.mockupId,
+        sessionId: input.sessionId,
+        text: comment.text,
+        elementRef: comment.elementRef ?? null,
+        createdAt: now(),
+      };
+      this.db.insert(schema.mockupAnnotation).values(row).run();
+      return row;
+    });
+  }
+
+  /** 세션의 어노테이션 전부 — 시간순. 역주입 입력과 판독(F13) 표시의 근거. */
+  listMockupAnnotations(sessionId: string): Array<typeof schema.mockupAnnotation.$inferSelect> {
+    return this.db
+      .select()
+      .from(schema.mockupAnnotation)
+      .where(eq(schema.mockupAnnotation.sessionId, sessionId))
+      .orderBy(schema.mockupAnnotation.createdAt)
+      .all();
   }
 
   /** 신호 기록 (F11). 버전 5축은 스키마 NOT NULL + FK로 강제된다. */

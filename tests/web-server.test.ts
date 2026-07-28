@@ -8,7 +8,7 @@ import { textExtractor } from '../src/extract/text';
 import type { BackendRequest, BackendResponse, LlmBackend } from '../src/gateway/backend';
 import { createDefaultRegistry } from '../src/prompts/catalog';
 import { DEFAULT_ATTACHMENT_LIMITS } from '../src/runner/core-runner';
-import { slot } from './slot-fixture';
+import { nonUiClassificationResponse, slot } from './slot-fixture';
 import { AttachmentStore } from '../src/store/attachment-store';
 import { SessionStore } from '../src/store/session-store';
 import { createWebServer } from '../src/web/server';
@@ -229,6 +229,7 @@ describe('웹 어댑터 HTTP 계약 smoke', () => {
         clarificationResponse,
         refinedCompletenessResponse,
         requirementsResponse,
+        nonUiClassificationResponse, // 문서 뒤 UI 분류 — 비 UI라 목업 생략 (#54)
         refinedCompletenessResponse, // 슬롯 정정 재판정
         requirementsResponse, // 문서 v2
       ]),
@@ -589,6 +590,7 @@ describe('웹 어댑터 — 자료 첨부 (F1-Attach, ADR-0011)', () => {
         clarificationResponse,
         refinedCompletenessResponse,
         requirementsResponse,
+        nonUiClassificationResponse, // 문서 뒤 UI 분류 — 비 UI라 목업 생략 (#54)
       ]),
       { attachments: true },
     );
