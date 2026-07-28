@@ -1239,6 +1239,113 @@
         "body": "코드 완료 — 브랜치 feat/g9-g11-journey-gaps (머지 대기).\n\n**G-9** promotion@0.1.0 신설(내부 판정이라 Jude의 목소리 없음 — ADR-0010). 상한 도달 시 남은 미충족 슬롯의 승격 가능 여부를 판정하고, **전부 가능할 때만** 승격시켜 오픈이슈를 실은 조건부 문서로 간다. 하나라도 불가하면 슬롯 상태를 건드리지 않고 보류 — 핵심이 빈 부분 승격 문서는 착수 근거가 되지 못한다. 미충족 슬롯이 없는데 미정제인 경우(루브릭 미달)는 「정보 부족」이 아니므로 보류가 아니라 조건부 문서로 간다. 판정 근거는 promotion_judged 신호에 per-slot으로 남는다.\n\n**G-10** 코어에 pendingRound/retryRound — 죽은 단계만 재실행하고 발화를 다시 적지 않으며 예산을 추가로 먹지 않는다. POST /rounds는 미완 라운드가 없으면 409. 라운드 정합은 clarification_round에 남긴 질문 발화 순번(utteranceSeq)이 기준: 진행 중 라운드의 답변은 roundId 필수이고, 동반된 roundId는 상태와 무관하게 검증하며 이미 답을 받은 라운드의 재제출도 409 stale_round다(보류로 끝난 라운드의 답이 재개 입력으로 오인돼 예산을 다시 받는 경로 차단). 보류 화면의 재개 입력에는 답할 라운드가 없어 요구하지 않는다.\n\n**G-11** 문서 vN을 게시 이력으로 세어 문서 머리와 세션 조회에 노출(document_delivered payload에 version·conditional). 완주는 session_completed 신호이며 기록 단위는 **문서 버전** — 정정은 확인을 되돌리므로 새 문서에서 다시 성립한다. 전면 승격 문서는 확인할 슬롯이 없어 게시 시점이 종착(P-U3). 화면은 v뱃지·전면 승격 구분·완주 카드·스테퍼 「확인 완료」.\n\n검증: 백엔드 118 + web-ui 26 테스트, 타입·린트·포맷 통과. trace 뷰어가 신규 신호 2종을 렌더하는지 테스트로 고정(AGENTS.md 동반 지침). Chrome 실검증(PMJUDE_FAKE_BACKEND=1 PMJUDE_MAX_ROUNDS=1): 상한 → 승격 판정 → 조건부 문서(오픈이슈 2건, 담당자용 질문) → 확인 → 완주 표시. /code-review 2축 리뷰 후 스펙 3건·표준 2건을 반영해 fix 커밋.\n\n설계 문서 §7 갭 표를 구현 상태로 갱신했다. 남은 미구현은 G-8(chrome 다국어 — 이연)뿐이며, §6 폭주 상한은 수치 미정(O-2)이라 계약만 서 있다. 판단 보류 2건: 정정 되물음의 **답변**은 종전대로 왕복에 산입한다(§6는 되물음 자체만 미산입), promotion 프롬프트는 세션 버전 축(promptVersionId)에 별도 등록하지 않는다(requirements와 동일 취급 — 축 재설계는 F12 몫)."
       }
     ]
+  },
+  {
+    "id": 45,
+    "title": "인테이크 자료 첨부 — ADR + 정본 개정",
+    "state": "open",
+    "labels": [
+      "ready-for-agent"
+    ],
+    "type": "task",
+    "assignee": "claude",
+    "parent": null,
+    "blockedBy": [],
+    "created": "2026-07-28",
+    "updated": "2026-07-28",
+    "body": "## 배경\n\n운영자 지시 (2026-07-28): 인테이크에 요청자가 정제하거나 컨텍스트를 담은 자료를 올릴 수단이 없다. 다양한 타입의 자료 업로드를 처리하는 기능을 계획하고, 현재 워크플로우·상태 관리와의 융합을 검토한다. 그릴링으로 결정 14건 확정.\n\n## 확정된 설계 (그릴링 2026-07-28)\n\n| # | 결정 | 내용 |\n|---|---|---|\n| 1 | 역할 | 명확화 입력 — 추출 텍스트가 질문 생성·완결성 판정에 실리고 슬롯을 채운다 |\n| 2 | 시점 | 「첨부는 요청자 발화에 붙는다」 — 인테이크·답변·재개·슬롯 정정 전부 |\n| 3 | 보존 | 원본은 sha256 주소로 불변, 추출 텍스트는 재생성 가능한 캐시 |\n| 4 | 버전 귀속 | 5축 유지. 추출기 버전은 attachment 행 + 신호 payload |\n| 5 | 추출 경로 | 텍스트 단일 경로. 이미지는 attachment-extraction 프롬프트로 서술 텍스트화 |\n| 6 | 타입 | MIME→추출기 레지스트리. Phase 0 등록은 텍스트류·이미지·OOXML·PDF, 미지원은 명시적 거부 |\n| 7 | 폭주 방지 | 세션당 추출 텍스트 총량 상한, 초과분은 업로드 시점 거부 |\n| 8 | 근거 추적 | slot_state.evidence_attachment_id 신설 + 확인 카드에 출처 표시 |\n| 9 | 타이밍 | 검증은 동기(즉시 거부), 추출은 라운드 백그라운드의 첫 단계. 실패는 고지 후 진행 |\n| 10 | 전송 | POST /api/uploads 스테이징 → uploadIds 참조. 미참조분 TTL 정리 |\n| 11 | 문서 지위 | 원문 전사와 동형 — 확정 사항은 문서 문장으로 흡수, 첨부는 참고용 목록 |\n| 12 | 프롬프트 | clarification·completeness·requirements 개정 + attachment-extraction 신설 |\n| 13 | 서빙 | Content-Disposition: attachment + nosniff 강제, 세션 스코프. SVG 제외 |\n| 14 | 산출 | ADR-0011 + 정본 개정 + 구현 티켓 (별도 설계 문서·wayfinder 맵 없음) |\n\n## 상태 관리 융합 (검토 결과)\n\n새 세션 상태·새 전이가 없다. 추출은 상태가 아니라 라운드 백그라운드 작업의 한 단계이므로 inFlight(세션당 1개)·SSE 수명 규칙·G-10 재시도 CTA를 그대로 쓴다. 첨부는 발화에 붙으므로 라운드 정합(roundId) 계약과 왕복 상한 산입 규칙이 변하지 않는다. 슬롯 3상태·완주 판정(recordCompletion)·버전 귀속 5축 무변경. 확장이 필요한 곳은 IntakeEvent(채널 무관 첨부 참조)와 buildConversation(발화별 첨부 조립) 둘뿐이다.\n\n## 이 티켓의 범위\n\n정본 개정만. 코드 변경 없음.\n\n- **ADR-0011** 신설 — 첨부의 아키텍처 결정 고정: 명확화 입력으로서의 지위, 텍스트 단일 경로(게이트웨이 계약·Exit 기준 보존), 원본 불변/추출 파생, 버전 귀속 5축 유지\n- **PRD** — F1(인테이크에 자료 첨부와 수용기준), F2c(첨부 근거 슬롯 판정), F3(첨부 유래 확정 사항의 문서 흡수, 출처 표시)\n- **CONTEXT.md** — 용어 2건 신설: 첨부 자료(Attachment), 추출(Extraction). 양 언어 정의 + _Avoid_ 목록\n- **docs/data-model.md** — attachment 엔티티, slot_state.evidence_attachment_id, 결정 대기 항목 3건(파일당 크기·세션 총량·개수 상한)\n- **ARCHITECTURE.md** — ERD에 attachment 추가. mermaid 수정 후 `node scripts/check-arch-sync.mjs --write`\n- **docs/ux/requester-journey.md** — 인테이크 폼·마법사·문서 화면의 첨부 표시, §6 상호작용 계약에 첨부 행 추가, 오픈 질문 O-1에 첨부의 시급성 명시\n\n## 범위 밖\n\n구현 전부(#46~#50). 상한 수치 확정 — 운영자 결정 대기 항목으로 등재만 한다.",
+    "comments": []
+  },
+  {
+    "id": 46,
+    "title": "첨부 저장 계층 — 스키마·불변 원본·스토어 API",
+    "state": "open",
+    "labels": [
+      "ready-for-agent"
+    ],
+    "type": "task",
+    "assignee": null,
+    "parent": null,
+    "blockedBy": [
+      45
+    ],
+    "created": "2026-07-28",
+    "updated": "2026-07-28",
+    "body": "설계 근거는 #45. 코드 변경의 첫 단계 — 저장만, 추출·배선 없음.\n\n## 범위\n\n- `attachment` 테이블 — session_id, utterance_id(발화에 붙는다), filename, mime, bytes, sha256, storage_ref, extracted_text(nullable), extraction_status, extractor_version(nullable), created_at\n- `slot_state.evidence_attachment_id` 추가\n- 마이그레이션 — 원본 불변 트리거(삭제·sha256/storage_ref 수정 차단). utterance 불변 트리거(0001)와 동형이되 **extracted_text는 수정 가능**해야 한다 (재추출 전제, #45 결정 3)\n- 파일 스토어 — sha256 주소 저장, 중복 제거. data/ 아래(gitignore 대상)\n- SessionStore API — appendAttachment / listAttachments / setExtraction / findByHash\n- 스테이징 보관과 TTL 정리 (#45 결정 10)\n\n## 수용기준\n\n- 추출 텍스트는 갱신되고 원본 메타는 트리거가 막는다\n- 같은 파일 두 번 업로드 시 저장은 1회\n- exportSessions에 첨부가 포함되되 요청자 식별자는 나가지 않는다 (기존 규약)",
+    "comments": []
+  },
+  {
+    "id": 47,
+    "title": "추출기 레지스트리 — 4군 추출기 + attachment-extraction 프롬프트",
+    "state": "open",
+    "labels": [
+      "ready-for-agent"
+    ],
+    "type": "task",
+    "assignee": null,
+    "parent": null,
+    "blockedBy": [
+      46
+    ],
+    "created": "2026-07-28",
+    "updated": "2026-07-28",
+    "body": "설계 근거는 #45 결정 5·6·9.\n\n## 범위\n\n- MIME → 추출기 매핑 레지스트리. 미등록 MIME은 명시적 거부(무엇을 지원하는지 알리는 메시지)\n- 추출기 4군\n  - 텍스트류(txt·md·csv·json·log) — 무의존\n  - OOXML(docx·xlsx·pptx) — zip 해제 1개 의존성으로 3종 공통\n  - PDF — 텍스트 레이어. 텍스트가 없는 스캔본은 추출 실패로 분류한다(무음 통과 금지)\n  - 이미지(png·jpg·webp) — `attachment-extraction@0.1.0` 게이트웨이 호출로 서술 텍스트. SVG는 허용 타입 제외(#45 결정 13)\n- 추출기마다 버전 문자열을 갖고 attachment 행에 기록 (#45 결정 4)\n- 실패는 예외가 아니라 결과 — status와 사유를 남기고 호출자가 진행 여부를 정한다 (#45 결정 9)\n\n## 수용기준\n\n- 추출기 추가가 레지스트리 등록 한 줄\n- 각 군의 실패 모드(암호화·손상·빈 텍스트 레이어)가 사유와 함께 분류된다\n- attachment-extraction은 내부 판정이므로 Jude의 목소리를 쓰지 않는다 (ADR-0010)",
+    "comments": []
+  },
+  {
+    "id": 48,
+    "title": "코어 융합 — 첨부 컨텍스트·근거 추적·상한 + 프롬프트 3종 개정",
+    "state": "open",
+    "labels": [
+      "ready-for-agent"
+    ],
+    "type": "task",
+    "assignee": null,
+    "parent": null,
+    "blockedBy": [
+      46,
+      47
+    ],
+    "created": "2026-07-28",
+    "updated": "2026-07-28",
+    "body": "설계 근거는 #45 결정 1·2·7·8·11·12. 상태 머신은 건드리지 않는다.\n\n## 범위\n\n- `IntakeEvent`에 첨부 참조 — 채널 무관 계약. 웹은 #49에서, Slack 어댑터 배선은 #8 후순위 유지\n- `buildConversation()`이 발화별 첨부를 조립 — 첨부는 발화와 **구분되어** 실린다(요청자 발화로 오귀속 금지)\n- 라운드 백그라운드의 첫 단계로 추출 실행. 실패 시 고지 후 진행(P-U3)\n- 세션당 추출 텍스트 총량 상한 검사 — 초과는 업로드 시점 거부(#49가 호출)\n- 완결성 판정 결과의 슬롯 근거가 첨부면 evidence_attachment_id 기록\n- 신호 — attachment_uploaded / attachment_extracted / attachment_extraction_failed. payload에 extractor_version·mime·bytes (5축은 그대로)\n- 프롬프트 개정 3종\n  - `clarification@0.3.0` — 자료에 이미 답이 있는 항목은 묻지 않는다\n  - `completeness@0.2.0` — 첨부 근거 슬롯 판정과 출처 귀속\n  - `requirements@0.2.0` — 첨부 유래 확정 사항을 문서 문장으로 흡수, 첨부는 참고용 목록으로 동봉\n  - promotion은 컨텍스트만 늘어나므로 본문 무변경\n\n## 수용기준\n\n- 첨부 추가가 왕복 상한을 소비하지 않는다\n- 첨부 유래 슬롯 값이 발화 유래와 구분되어 조회에 실린다\n- 첨부를 지워도 문서만으로 구현 가능한 상태 — 흡수 누락이 없다 (ADR-0002, F4 역주입과 같은 규율)",
+    "comments": []
+  },
+  {
+    "id": 49,
+    "title": "웹 어댑터 — 업로드 스테이징·참조·다운로드",
+    "state": "open",
+    "labels": [
+      "ready-for-agent"
+    ],
+    "type": "task",
+    "assignee": null,
+    "parent": null,
+    "blockedBy": [
+      48
+    ],
+    "created": "2026-07-28",
+    "updated": "2026-07-28",
+    "body": "설계 근거는 #45 결정 9·10·13.\n\n## 범위\n\n- `POST /api/uploads` — raw body 단건(파일명·MIME은 헤더). multipart 파서를 들이지 않는다. 검증(타입·크기·세션 총량)은 여기서 동기 수행하고 즉시 거부\n- 인테이크·답변·슬롯 정정 본문에 `uploadIds` 참조. 참조 시점에 attachment로 승격, 미참조는 TTL 정리\n- `GET /api/sessions/:id/attachments/:aid` — Content-Disposition: attachment + X-Content-Type-Options: nosniff 강제, 세션 스코프\n- SSE 단계 메시지에 「자료를 읽고 있어요」 추가. inFlight·수명 규칙은 그대로\n- 기존 MAX_BODY_BYTES(1MB)는 JSON 경로용으로 유지하고 업로드 경로는 별도 상한\n\n## 수용기준\n\n- 접수 응답이 추출을 기다리지 않는다 (F1 3초)\n- 거부는 무엇이 왜 거부됐는지 요청자 언어로 말한다\n- 처리 중(inFlight) 세션에도 업로드 자체는 가능하다 — 업로드는 세션 상태를 건드리지 않는다",
+    "comments": []
+  },
+  {
+    "id": 50,
+    "title": "첨부 UI + trace 뷰어 확장",
+    "state": "open",
+    "labels": [
+      "ready-for-agent"
+    ],
+    "type": "task",
+    "assignee": null,
+    "parent": null,
+    "blockedBy": [
+      49
+    ],
+    "created": "2026-07-28",
+    "updated": "2026-07-28",
+    "body": "설계 근거는 #45 결정 8·11. trace 확장은 AGENTS.md 상시 지시(세션 저장소 쓰기를 늘리면 src/trace/가 렌더해야 한다).\n\n## 범위\n\n- 인테이크 폼 — 파일 첨부 영역, 지원 형식·상한 고지, 건별 진행·거부 표시\n- 명확화 마법사 — 답변에 자료 붙이기. 「모르겠다」와 나란한 경로가 아니라 답변 보조\n- 대기 카드 — 「자료를 읽고 있어요」 단계\n- 문서 화면 — 첨부 목록(참고용, 구현 근거는 문서), 슬롯 확인 카드에 「자료에서 읽은 값」 출처 배지\n- 추출 실패 고지 — 진행을 막지 않되 무엇을 못 읽었는지 알린다\n- trace 뷰어 — 첨부·추출 상태·신규 신호 3종 렌더 + tests/trace.test.ts\n\n## 수용기준\n\n- 요청자가 자기가 말하지 않은 슬롯 값의 출처를 화면에서 알 수 있다\n- 첨부 있는 세션이 trace에서 누락 없이 보인다\n- 화면 언어는 요청자 언어 (chrome 다국어 G-8은 이연 상태 유지)",
+    "comments": []
   }
 ]
 </script>
