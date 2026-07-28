@@ -7,11 +7,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { t, type Lang } from '@/lib/i18n';
-import type { SlotView } from '@/lib/types';
+import type { AttachmentView, SlotView } from '@/lib/types';
 
 interface Props {
   lang: Lang;
   slots: SlotView[];
+  /** 첨부 파일명 조회용 — 첨부 유래 값의 출처를 화면에 적는다 (ADR-0011 결정 8). */
+  attachments: AttachmentView[];
   submitting: boolean;
   onConfirm: (slotKey: string) => void;
   onCorrect: (slotKey: string, text: string) => void;
@@ -21,9 +23,10 @@ interface Props {
  * 슬롯 단위 요청자 확인 (G-3, F3 — 원칙 7 번역 무결성 장치).
  * 정리된 값을 슬롯 단위·요청자 언어로 확인한다. 「아니에요」는 해당 슬롯만 정정한다.
  */
-export function SlotReview({ lang, slots, submitting, onConfirm, onCorrect }: Props) {
+export function SlotReview({ lang, slots, attachments, submitting, onConfirm, onCorrect }: Props) {
   const [correcting, setCorrecting] = useState<string | null>(null);
   const [text, setText] = useState('');
+  const filenameById = new Map(attachments.map((file) => [file.id, file.filename]));
   const reviewable = slots.filter((slot) => slot.state === 'filled');
   const promoted = slots.filter((slot) => slot.state === 'promoted');
   if (reviewable.length === 0 && promoted.length === 0) return null;
@@ -42,6 +45,14 @@ export function SlotReview({ lang, slots, submitting, onConfirm, onCorrect }: Pr
               <div className="text-sm">
                 <p className="font-medium">{slot.label}</p>
                 <p className="text-muted-foreground">{slot.value ?? '—'}</p>
+                {/* 요청자가 말한 적 없는 값이므로 어디서 왔는지 보여준다 — 그래야 판단할 수 있다 */}
+                {slot.evidenceAttachmentId && (
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {t(lang, 'attach.fromFile', {
+                      filename: filenameById.get(slot.evidenceAttachmentId) ?? '',
+                    })}
+                  </p>
+                )}
               </div>
               {slot.confirmedByRequester ? (
                 <Badge variant="secondary">{t(lang, 'slots.confirmed')}</Badge>

@@ -7,6 +7,7 @@ function slot(partial: Partial<SlotView> & Pick<SlotView, 'slotKey' | 'state'>):
     label: partial.slotKey,
     value: null,
     confirmedByRequester: false,
+    evidenceAttachmentId: null,
     openIssueAssignee: null,
     ...partial,
   };

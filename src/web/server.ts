@@ -638,15 +638,20 @@ export function createWebServer(deps: WebServerDeps): Server {
         extractionError: row.extractionError,
       })),
       /** 업로드 표면을 열지 판단하는 근거 — 지원 형식과 상한을 미리 고지한다. */
-      uploads: runner.attachmentsEnabled
-        ? {
-            enabled: true,
-            supportedMimes: runner.supportedUploadMimes(),
-            maxBytesPerFile: limits.maxBytesPerFile,
-            maxPerSession: limits.maxPerSession,
-          }
-        : { enabled: false },
+      uploads: uploadPolicy(),
     });
+  }
+
+  /** 업로드 가능 여부와 상한 — 세션 조회와 정책 조회가 같은 답을 준다. */
+  function uploadPolicy(): Record<string, unknown> {
+    return runner.attachmentsEnabled
+      ? {
+          enabled: true,
+          supportedMimes: runner.supportedUploadMimes(),
+          maxBytesPerFile: limits.maxBytesPerFile,
+          maxPerSession: limits.maxPerSession,
+        }
+      : { enabled: false };
   }
 
   async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -659,6 +664,11 @@ export function createWebServer(deps: WebServerDeps): Server {
     if (segments[0] === 'api' && segments[1] === 'uploads' && segments.length === 2) {
       if (req.method === 'POST') {
         await handleUpload(req, res);
+        return;
+      }
+      // 세션 없는 화면(인테이크 폼)도 무엇을 올릴 수 있는지 미리 알아야 한다 (P-U1)
+      if (req.method === 'GET') {
+        sendJson(res, 200, uploadPolicy());
         return;
       }
     }

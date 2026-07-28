@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { AttachmentPicker } from '@/components/attachment-picker';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -14,12 +15,16 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
+import { getUploadPolicy } from '@/lib/api';
 import { rememberLang, t, type Lang } from '@/lib/i18n';
+import type { UploadedFile, UploadPolicy } from '@/lib/types';
 
 export interface IntakeInput {
   name?: string;
   language: 'ko' | 'en';
   text: string;
+  /** 함께 올린 자료 (F1-Attach) — 선택이며, 없다고 여정이 달라지지 않는다. */
+  uploadIds?: string[];
 }
 
 // 간이 식별(이름·언어) + 요청 원문 — SSO·매직 링크 대체 (ADR-0007).
@@ -40,6 +45,14 @@ export function IntakeForm({
   // 요청자가 고른 언어는 화면 언어이자 명확화 질문의 언어다 (F2b)
   const [language, setLanguage] = useState<Lang>(lang);
   const [text, setText] = useState('');
+  const [files, setFiles] = useState<UploadedFile[]>([]);
+  // 무엇을 올릴 수 있는지는 고르기 전에 알려야 한다 (P-U1). 조회 실패는 첨부 없는 폼으로 강등.
+  const [policy, setPolicy] = useState<UploadPolicy>({ enabled: false });
+  useEffect(() => {
+    getUploadPolicy()
+      .then(setPolicy)
+      .catch(() => setPolicy({ enabled: false }));
+  }, []);
 
   return (
     <Card>
@@ -99,6 +112,7 @@ export function IntakeForm({
           />
           <p className="text-xs text-muted-foreground">{t(lang, 'intake.hint')}</p>
         </div>
+        <AttachmentPicker lang={lang} policy={policy} files={files} onChange={setFiles} />
       </CardContent>
       <CardFooter>
         <Button
@@ -111,6 +125,7 @@ export function IntakeForm({
               ...(trimmedName ? { name: trimmedName } : {}),
               language,
               text: text.trim(),
+              ...(files.length > 0 ? { uploadIds: files.map((file) => file.uploadId) } : {}),
             });
           }}
         >

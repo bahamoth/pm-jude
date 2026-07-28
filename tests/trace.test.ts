@@ -146,6 +146,93 @@ describe('trace-data — 저장소 export의 조형', () => {
     ).toMatchObject({ promotable: ['data-source'] });
   });
 
+  it('첨부와 추출 결과가 요약·세션·HTML에 실린다 (F1-Attach, AGENTS.md 동반 지침)', async () => {
+    store = SessionStore.open(':memory:');
+    await seedSession(store, '대시보드 요청');
+    const exported = store.exportSessions()[0];
+    if (!exported) throw new Error('시드 세션 없음');
+    const sessionId = exported.session.id;
+    const utteranceId = store.listUtterances(sessionId)[0]?.id ?? '';
+    const axes = {
+      promptVersionId: exported.session.promptVersionId,
+      modelVersion: exported.session.modelVersion,
+      thresholdVersionId: exported.session.thresholdVersionId,
+      slotSchemaVersionId: exported.session.slotSchemaVersionId,
+    };
+
+    const okUpload = store.stageUpload({
+      filename: '기획서.txt',
+      mime: 'text/plain',
+      bytes: 42,
+      sha256: 'a'.repeat(64),
+      storageRef: `aa/${'a'.repeat(64)}`,
+    });
+    const failedUpload = store.stageUpload({
+      filename: '스캔본.pdf',
+      mime: 'application/pdf',
+      bytes: 99,
+      sha256: 'b'.repeat(64),
+      storageRef: `bb/${'b'.repeat(64)}`,
+    });
+    const [ok, failed] = store.promoteUploads({
+      sessionId,
+      utteranceId,
+      uploadIds: [okUpload, failedUpload],
+    });
+    if (!ok || !failed) throw new Error('첨부 승격 실패');
+    store.setExtraction({
+      id: ok.id,
+      status: 'ok',
+      extractedText: '대상 사용자: 영업팀 매니저',
+      extractorVersion: 'text@0.1.0',
+    });
+    store.setExtraction({
+      id: failed.id,
+      status: 'failed',
+      extractionError: '텍스트 레이어가 비어 있다 — 스캔본으로 보인다',
+      extractorVersion: 'pdf-text@0.1.0',
+    });
+    store.setSlotState({
+      sessionId,
+      slotKey: 'target-user',
+      state: 'filled',
+      value: '영업팀 매니저',
+      evidenceAttachmentId: ok.id,
+    });
+    store.recordSignal({
+      sessionId,
+      type: 'attachment_extraction_failed',
+      payload: { extractorVersion: 'pdf-text@0.1.0', error: '스캔본' },
+      ...axes,
+    });
+
+    const data = buildTraceData(store.exportSessions(), store.listVersionRegistry(), GENERATED_AT);
+
+    expect(data.summary.attachmentCounts).toMatchObject({ total: 2, ok: 1, failed: 1 });
+    expect(data.summary.signalTypeCounts).toMatchObject({ attachment_extraction_failed: 1 });
+    // 실패 사유가 깎이지 않는다 — 무엇을 못 읽었는지가 판독의 근거다 (F13)
+    expect(data.sessions[0]?.attachments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          extractionStatus: 'failed',
+          extractionError: '텍스트 레이어가 비어 있다 — 스캔본으로 보인다',
+          extractorVersion: 'pdf-text@0.1.0',
+        }),
+      ]),
+    );
+    // 첨부 유래 슬롯은 대화 유래와 구분된다
+    expect(
+      data.sessions[0]?.slotStates.find((slotState) => slotState.slotKey === 'target-user')
+        ?.evidenceAttachmentId,
+    ).toBe(ok.id);
+    // 파일명은 export 단계에서 이미 빠져 있다 (요청자 이름을 담는 일이 잦다)
+    expect(JSON.stringify(data)).not.toContain('기획서.txt');
+
+    const html = renderTraceHtml(data);
+    expect(html).toContain('첨부 자료');
+    expect(html).toContain('pdf-text@0.1.0');
+  });
+
   it('빈 저장소 — 세션 0건, 평균 왕복 null', () => {
     store = SessionStore.open(':memory:');
     const data = buildTraceData(store.exportSessions(), store.listVersionRegistry(), GENERATED_AT);

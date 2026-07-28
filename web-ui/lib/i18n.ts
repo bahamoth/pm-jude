@@ -43,6 +43,22 @@ const ko = {
   'intake.submit': '요청 보내기',
   'intake.failed': '요청을 보내지 못했어요',
 
+  // 자료 첨부 (F1-Attach) — 첨부는 선택이며, 없다고 여정이 달라지지 않는다
+  'attach.label': '참고 자료 (선택)',
+  'attach.hint': '이미 정리해 둔 기획서나 화면 캡처가 있으면 함께 올려 주세요. 질문이 줄어듭니다.',
+  'attach.pick': '자료 고르기',
+  'attach.uploading': '올리는 중…',
+  'attach.remove': '빼기',
+  'attach.limits': '파일당 {mb}MB까지, 최대 {count}개',
+  'attach.rejected': '올리지 못했어요',
+  'attach.reading': '자료를 읽고 있어요',
+  'attach.readFailed': '읽지 못한 자료',
+  'attach.answerHint': '말로 설명하기 어려우면 자료로 주셔도 돼요.',
+  'attach.docTitle': '함께 받은 자료',
+  'attach.docNote': '참고용이에요 — 구현의 근거는 위 문서입니다.',
+  'attach.download': '내려받기',
+  'attach.fromFile': '{filename}에서 읽은 값',
+
   'home.listNote':
     '이 목록은 이 브라우저에만 저장돼요 — 각 요청의 링크를 저장해 두면 어디서든 이어집니다.',
   'home.openIssues': '개발팀 확인 {count}건',
@@ -182,6 +198,23 @@ const en: Record<Key, string> = {
   'intake.hint': "It doesn't have to be complete — I'll ask about anything unclear.",
   'intake.submit': 'Send request',
   'intake.failed': "I couldn't send that",
+
+  // 자료 첨부 (F1-Attach)
+  'attach.label': 'Reference material (optional)',
+  'attach.hint':
+    'If you already have a brief or a screenshot, add it here — it means fewer questions.',
+  'attach.pick': 'Choose a file',
+  'attach.uploading': 'Uploading…',
+  'attach.remove': 'Remove',
+  'attach.limits': 'Up to {mb}MB each, {count} files',
+  'attach.rejected': "I couldn't accept this",
+  'attach.reading': "I'm reading your material",
+  'attach.readFailed': "Material I couldn't read",
+  'attach.answerHint': "If it's easier to show than tell, attach something instead.",
+  'attach.docTitle': 'Material you sent',
+  'attach.docNote': 'Reference only — the document above is what gets built.',
+  'attach.download': 'Download',
+  'attach.fromFile': 'read from {filename}',
 
   'home.listNote':
     "This list lives in this browser only — keep each request's link and you can pick it up anywhere.",

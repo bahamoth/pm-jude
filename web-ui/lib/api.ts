@@ -5,6 +5,8 @@ import {
   type ReplyOutcome,
   type SessionDetail,
   type SessionSummary,
+  type UploadedFile,
+  type UploadPolicy,
 } from './types';
 
 // /api는 next.config 프록시로 API 서버(pnpm web)에 닿는다 (ADR-0008).
@@ -33,10 +35,37 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+/**
+ * 자료 하나를 스테이징에 올린다 (F1-Attach, ADR-0011 결정 10) — 아직 발화에 붙지 않는다.
+ * 검증은 서버가 즉시 하고 거부 사유를 그대로 돌려준다: 제출 후에 실패를 알게 하지 않는다(P-U1).
+ * multipart 대신 raw body라 파일 하나가 요청 하나이고, 그래서 거부도 파일별로 나뉜다.
+ */
+export function uploadFile(file: File): Promise<UploadedFile> {
+  return request('/api/uploads', {
+    method: 'POST',
+    headers: {
+      'content-type': file.type || 'application/octet-stream',
+      'x-filename': encodeURIComponent(file.name),
+    },
+    body: file,
+  });
+}
+
+/** 세션이 아직 없는 화면(인테이크 폼)이 업로드 표면을 열지 판단하는 근거. */
+export function getUploadPolicy(): Promise<UploadPolicy> {
+  return request('/api/uploads');
+}
+
+/** 세션 스코프 다운로드 경로 — 서버가 인라인 렌더를 막고 내려주기만 한다 (결정 13). */
+export function attachmentUrl(sessionId: string, attachmentId: string): string {
+  return `/api/sessions/${encodeURIComponent(sessionId)}/attachments/${encodeURIComponent(attachmentId)}`;
+}
+
 export function startSession(input: {
   name?: string;
   language: 'ko' | 'en';
   text: string;
+  uploadIds?: string[];
 }): Promise<IntakeResult> {
   return request('/api/sessions', {
     method: 'POST',
@@ -54,11 +83,16 @@ export function sendReply(
   sessionId: string,
   text: string,
   roundId?: string | null,
+  uploadIds?: string[],
 ): Promise<Accepted> {
   return request(`/api/sessions/${encodeURIComponent(sessionId)}/replies`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ text, ...(roundId ? { roundId } : {}) }),
+    body: JSON.stringify({
+      text,
+      ...(roundId ? { roundId } : {}),
+      ...(uploadIds?.length ? { uploadIds } : {}),
+    }),
   });
 }
 
@@ -75,13 +109,22 @@ export function confirmSlotOk(sessionId: string, slotKey: string): Promise<Reply
 }
 
 /** 아니에요 + 정정(202) — 재판정이 백그라운드로 돈다. */
-export function correctSlot(sessionId: string, slotKey: string, text: string): Promise<Accepted> {
+export function correctSlot(
+  sessionId: string,
+  slotKey: string,
+  text: string,
+  uploadIds?: string[],
+): Promise<Accepted> {
   return request(
     `/api/sessions/${encodeURIComponent(sessionId)}/slots/${encodeURIComponent(slotKey)}`,
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ confirmed: false, text }),
+      body: JSON.stringify({
+        confirmed: false,
+        text,
+        ...(uploadIds?.length ? { uploadIds } : {}),
+      }),
     },
   );
 }
