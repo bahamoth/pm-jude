@@ -185,6 +185,27 @@ for (const sess of DATA.sessions) {
             '<td class="mono">' + esc(JSON.stringify(doc.content)).slice(0, 400) + '</td></tr>').join('') +
           '</table></div>'
         : '') +
+      (sess.mockups.length
+        ? '<div><div class="sect">목업 반복 (F4 #54 — HTML 원문은 trace 밖)</div><table><tr><th>vN</th><th>문서 vN</th><th>수렴</th><th>테마</th><th>크기</th><th>요약</th></tr>' +
+          sess.mockups.map((mk) =>
+            '<tr><td class="mono">v' + mk.version + '</td>' +
+            '<td class="mono">v' + mk.docVersion + '</td>' +
+            '<td><span class="badge ' + (mk.convergence === 'approved' ? 'filled' : mk.convergence === 'escalated' ? 'unfilled' : '') + '">' + esc(mk.convergence) + '</span></td>' +
+            '<td class="mono">' + esc(mk.themeDelegated ? '개발팀 위임' : (mk.selectedTheme ?? '—')) + '</td>' +
+            '<td class="mono">' + mk.htmlBytes + 'B</td>' +
+            '<td>' + esc(mk.summary ?? '—') + '</td></tr>').join('') +
+          '</table>' +
+          (sess.mockupAnnotations.length
+            ? '<table><tr><th>판</th><th>요소</th><th>어노테이션</th><th>시각</th></tr>' +
+              sess.mockupAnnotations.map((an) =>
+                '<tr><td class="mono">' + (an.mockupVersion == null ? '—' : 'v' + an.mockupVersion) + '</td>' +
+                '<td class="mono">' + esc(an.elementRef ?? '—') + '</td>' +
+                '<td>' + esc(an.text) + '</td>' +
+                '<td class="mono">' + esc(an.createdAt.slice(11, 19)) + '</td></tr>').join('') +
+              '</table>'
+            : '') +
+          '</div>'
+        : '') +
       '<div><div class="sect">신호 (F11)</div><table><tr><th>type</th><th>payload</th><th>occurred</th></tr>' +
         (sess.signals.map((sg) =>
           '<tr><td class="mono">' + esc(sg.type) + '</td>' +

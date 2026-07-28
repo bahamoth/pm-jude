@@ -272,6 +272,49 @@ describe('trace-data — 저장소 export의 조형', () => {
     expect(html).toContain('requirements 문서');
   });
 
+  it('목업 버전·어노테이션·선정이 요약·세션·HTML에 실린다 (F4 #54, AGENTS.md 동반 지침)', async () => {
+    store = SessionStore.open(':memory:');
+    await seedSession(store, '대시보드 요청');
+    const exported = store.exportSessions()[0];
+    if (!exported) throw new Error('시드 세션 없음');
+    const sessionId = exported.session.id;
+    const mockup = store.appendMockup({
+      sessionId,
+      version: 1,
+      docVersion: 1,
+      html: '<html><body>대시보드 목업</body></html>',
+      summary: '월별 매출 추이 첫 화면',
+    });
+    store.addMockupAnnotations({
+      sessionId,
+      mockupId: mockup.id,
+      comments: [{ text: '필터는 3종이면 좋겠어요', elementRef: '#filters' }],
+    });
+    store.updateMockup(mockup.id, { selectedTheme: 'daylight', convergence: 'approved' });
+
+    const data = buildTraceData(store.exportSessions(), store.listVersionRegistry(), GENERATED_AT);
+
+    expect(data.summary.mockupCounts).toMatchObject({ versions: 1, annotations: 1 });
+    const traced = data.sessions[0]?.mockups;
+    expect(traced).toHaveLength(1);
+    // 구조 층 HTML 원문은 trace에 싣지 않는다 — 크기만 남긴다 (개발팀 전달 금지 하드 제약과 정합)
+    expect(traced?.[0]).toMatchObject({
+      version: 1,
+      docVersion: 1,
+      convergence: 'approved',
+      selectedTheme: 'daylight',
+      summary: '월별 매출 추이 첫 화면',
+    });
+    expect(JSON.stringify(traced)).not.toContain('대시보드 목업');
+    expect(data.sessions[0]?.mockupAnnotations?.[0]).toMatchObject({
+      mockupVersion: 1,
+      text: '필터는 3종이면 좋겠어요',
+    });
+
+    const html = renderTraceHtml(data);
+    expect(html).toContain('목업');
+  });
+
   it('빈 저장소 — 세션 0건, 평균 왕복 null', () => {
     store = SessionStore.open(':memory:');
     const data = buildTraceData(store.exportSessions(), store.listVersionRegistry(), GENERATED_AT);

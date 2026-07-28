@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { createDefaultExtractorRegistry } from '../extract/registry';
 import { AgentSdkBackend } from '../gateway/agent-sdk-backend';
 import { createFakeBackend } from '../gateway/fake-backend';
+import { ThemeRegistry } from '../mockup/theme-registry';
 import { createDefaultRegistry } from '../prompts/catalog';
 import { AttachmentStore } from '../store/attachment-store';
 import { SessionStore } from '../store/session-store';
@@ -25,6 +26,14 @@ const store = SessionStore.open(dbPath);
 const attachmentsRoot = resolve(process.env.PMJUDE_ATTACHMENTS_PATH ?? './data/attachments');
 mkdirSync(attachmentsRoot, { recursive: true });
 
+// 디자인 시스템 선정 후보 (F4, #54) — 조직 표준 테마는 코드 수정 없이 디렉터리 등록으로 흡수한다
+// (*.theme.json 디자인 토큰 / *.theme.css). 미지정이면 내장 프리셋만.
+const themes = ThemeRegistry.withBuiltins();
+if (process.env.PMJUDE_THEME_DIR) {
+  const loaded = themes.loadDirectory(resolve(process.env.PMJUDE_THEME_DIR));
+  console.error(`[web] 외부 테마 ${String(loaded)}건 등록 — ${process.env.PMJUDE_THEME_DIR}`);
+}
+
 const registry = createDefaultRegistry();
 const model = process.env.PMJUDE_MODEL;
 if (fake) console.error('[web] 가짜 백엔드 모드 — 데모·UI 검증 전용, LLM 호출 없음');
@@ -45,6 +54,10 @@ const server = createWebServer({
   attachmentStore: new AttachmentStore(attachmentsRoot),
   // 추출기는 러너의 게이트웨이를 받는다 — 이미지 추출도 같은 폭주 상한 아래 놓인다
   createExtractors: createDefaultExtractorRegistry,
+  themes,
+  ...(process.env.PMJUDE_MAX_MOCKUP_ITERATIONS
+    ? { maxMockupIterations: Number(process.env.PMJUDE_MAX_MOCKUP_ITERATIONS) }
+    : {}),
 });
 
 const port = Number(process.env.PMJUDE_WEB_PORT ?? 8787);

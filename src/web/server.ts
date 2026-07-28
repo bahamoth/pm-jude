@@ -14,6 +14,8 @@ import {
   type ClarificationRoundPayload,
 } from '../runner/core-runner';
 import type { ExtractorRegistry } from '../extract/registry';
+import { renderMockupHtml } from '../mockup/render';
+import { ThemeRegistry } from '../mockup/theme-registry';
 import { BlobNotFoundError, type AttachmentStore } from '../store/attachment-store';
 import type { SessionStore } from '../store/session-store';
 import { handleDevSite } from './dev-site';
@@ -39,6 +41,9 @@ export interface WebServerDeps {
   attachmentStore?: AttachmentStore;
   createExtractors?: (gateway: LlmGateway) => ExtractorRegistry;
   limits?: AttachmentLimits;
+  /** 디자인 시스템 선정 후보 (F4, #54) — 없으면 내장 프리셋. */
+  themes?: ThemeRegistry;
+  maxMockupIterations?: number;
 }
 
 /** 질문별 「모르겠다」 1클릭 버튼(US-5) 렌더링에 필요한 최소 구조 — 내부 슬롯 매핑은 내보내지 않는다. */
@@ -169,6 +174,23 @@ function parseUploadIds(body: Record<string, unknown>): string[] {
   return body.uploadIds as string[];
 }
 
+/** 목업 어노테이션 본문 (F4) — 비어 있지 않은 코멘트 최소 1건. */
+function parseComments(body: Record<string, unknown>): Array<{ text: string; elementRef?: string }> {
+  if (!Array.isArray(body.comments) || body.comments.length === 0) {
+    throw new BadRequest('comments는 비어 있지 않은 배열이어야 한다');
+  }
+  return body.comments.map((entry) => {
+    const { text, elementRef } = (entry ?? {}) as Record<string, unknown>;
+    if (typeof text !== 'string' || !text.trim()) {
+      throw new BadRequest('코멘트 text는 비어 있지 않은 문자열이어야 한다');
+    }
+    return {
+      text: text.trim(),
+      ...(typeof elementRef === 'string' && elementRef ? { elementRef } : {}),
+    };
+  });
+}
+
 function parseIntakeBody(body: Record<string, unknown>): {
   text: string;
   name?: string;
@@ -262,7 +284,8 @@ export function createWebServer(deps: WebServerDeps): Server {
       return Promise.resolve();
     },
   };
-  const runner = new IntakeRunner<WebAddress>({ ...deps, port });
+  const themes = deps.themes ?? ThemeRegistry.withBuiltins();
+  const runner = new IntakeRunner<WebAddress>({ ...deps, themes, port });
   const limits = deps.limits ?? DEFAULT_ATTACHMENT_LIMITS;
 
   /**
@@ -605,6 +628,19 @@ export function createWebServer(deps: WebServerDeps): Server {
       })(),
       /** 현재 문서 버전에서 전 슬롯 확인이 끝났는가 — Phase 0 종착 (G-11). */
       completed: runner.isCompleted(sessionId),
+      /** 목업 요약 (F4, #54) — 화면이 목업 패널을 열 근거. 상세는 목업 상태 조회로. */
+      mockup: (() => {
+        const latest = store.latestMockup(sessionId);
+        return latest
+          ? {
+              latestVersion: latest.version,
+              docVersion: latest.docVersion,
+              convergence: latest.convergence,
+              selectedTheme: latest.selectedTheme,
+              themeDelegated: latest.themeDelegated,
+            }
+          : null;
+      })(),
       roundBudget: runner.roundBudgetOf(sessionId),
       processing: inFlight.has(sessionId),
       session: {
@@ -650,6 +686,177 @@ export function createWebServer(deps: WebServerDeps): Server {
       /** 업로드 표면을 열지 판단하는 근거 — 지원 형식과 상한을 미리 고지한다. */
       uploads: uploadPolicy(),
     });
+  }
+
+  /**
+   * 목업 HTML 서빙 (F4 호스팅·보안, #54) — 샌드박스 CSP로 외부 네트워크를 차단하고
+   * 워터마크·테마는 렌더러(코드)가 입힌다. ?theme=은 선정 화면의 미리보기, 기본값은
+   * 선정된 테마이고 선정 전에는 그레이스케일이다. 분리 usercontent 도메인은 결정 대기.
+   */
+  function handleMockupServe(
+    res: ServerResponse,
+    sessionId: string,
+    versionParam: string,
+    themeParam: string | null,
+  ): void {
+    const version = Number(versionParam);
+    const row = Number.isInteger(version) ? store.getMockup(sessionId, version) : undefined;
+    if (!row) {
+      sendJson(res, 404, { error: '목업 없음' });
+      return;
+    }
+    const themeId = themeParam ?? row.selectedTheme;
+    const theme = themeId ? themes.get(themeId) : undefined;
+    const requesterLanguage = store
+      .listUtterances(sessionId)
+      .find((utterance) => utterance.authorType === 'requester')?.originalLanguage;
+    const html = renderMockupHtml({
+      html: row.html,
+      ...(theme ? { theme } : {}),
+      language: requesterLanguage === 'en' ? 'en' : 'ko',
+    });
+    res.writeHead(200, {
+      'content-type': 'text/html; charset=utf-8',
+      // 외부 네트워크 차단 — self-contained 목업의 인라인 스타일·스크립트만 허용 (F4)
+      'content-security-policy':
+        "sandbox allow-scripts; default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:",
+      'x-content-type-options': 'nosniff',
+      'cache-control': 'no-store',
+    });
+    res.end(html);
+  }
+
+  /** 목업 반복 상태 조회 — 버전·예산·수렴·테마 후보·어노테이션. 화면 복원의 근거. */
+  function handleMockupState(res: ServerResponse, sessionId: string): void {
+    const mockups = store.listMockups(sessionId);
+    const latest = mockups.at(-1);
+    if (!latest) {
+      sendJson(res, 404, { error: '목업 없음' });
+      return;
+    }
+    const versionById = new Map(mockups.map((mockup) => [mockup.id, mockup.version]));
+    sendJson(res, 200, {
+      latestVersion: latest.version,
+      docVersion: latest.docVersion,
+      convergence: latest.convergence,
+      selectedTheme: latest.selectedTheme,
+      themeDelegated: latest.themeDelegated,
+      iterationsUsed: runner.mockupIterationsUsed(sessionId),
+      iterationBudget: runner.mockupIterationBudget,
+      versions: mockups.map((mockup) => ({
+        version: mockup.version,
+        docVersion: mockup.docVersion,
+        summary: mockup.summary,
+        createdAt: mockup.createdAt,
+      })),
+      themes: runner.themeCandidates(),
+      annotations: store.listMockupAnnotations(sessionId).map((annotation) => ({
+        mockupVersion: versionById.get(annotation.mockupId) ?? null,
+        text: annotation.text,
+        elementRef: annotation.elementRef,
+        createdAt: annotation.createdAt,
+      })),
+      processing: inFlight.has(sessionId),
+    });
+  }
+
+  /** 어노테이션 접수 → 202 즉시, 재생성은 백그라운드 (F4). 스테일 판 코멘트는 409. */
+  async function handleMockupAnnotations(
+    req: IncomingMessage,
+    res: ServerResponse,
+    sessionId: string,
+  ): Promise<void> {
+    const session = store.getSession(sessionId);
+    if (!session?.channelThreadKey) {
+      sendJson(res, 404, { error: '세션 없음' });
+      return;
+    }
+    const latest = store.latestMockup(sessionId);
+    if (!latest || session.status !== 'mockup') {
+      sendJson(res, 409, { error: '지금은 목업 코멘트를 받을 수 없어요.' });
+      return;
+    }
+    const body = await readJsonBody(req);
+    if (body.mockupVersion !== latest.version) {
+      sendJson(res, 409, {
+        code: 'stale_mockup',
+        error: '이 코멘트는 이전 판의 것이에요 — 최신 판을 불러올게요.',
+      });
+      return;
+    }
+    const comments = parseComments(body);
+    const threadKey = session.channelThreadKey;
+    const accepted = runInBackground(sessionId, () =>
+      runner.annotateMockup(
+        { address: { sessionId }, threadKey, channel: 'web', text: '' },
+        comments,
+      ),
+    );
+    if (!accepted) {
+      sendJson(res, 409, { error: '이미 처리 중이에요 — 잠시 뒤 다시 시도해 주세요.' });
+      return;
+    }
+    sendJson(res, 202, { sessionId, accepted: true });
+  }
+
+  /** 디자인 시스템 선정 (F4) — LLM 없는 동기 처리. 후보 밖 id는 400. */
+  async function handleMockupTheme(
+    req: IncomingMessage,
+    res: ServerResponse,
+    sessionId: string,
+  ): Promise<void> {
+    const session = store.getSession(sessionId);
+    if (!session?.channelThreadKey) {
+      sendJson(res, 404, { error: '세션 없음' });
+      return;
+    }
+    const body = await readJsonBody(req);
+    const delegated = body.delegated === true;
+    const themeId = typeof body.themeId === 'string' ? body.themeId : '';
+    if (!delegated && !themeId) throw new BadRequest('themeId 또는 delegated가 필요하다');
+    if (!delegated && !themes.get(themeId)) {
+      sendJson(res, 400, { error: `등록되지 않은 테마: ${themeId}` });
+      return;
+    }
+    const outcome = await runner.selectMockupTheme(
+      { address: { sessionId }, threadKey: session.channelThreadKey, channel: 'web', text: '' },
+      delegated ? { delegated: true } : { themeId },
+    );
+    if (!outcome) {
+      sendJson(res, 409, { error: '지금은 테마를 선정할 수 없어요.' });
+      return;
+    }
+    sendJson(res, 200, outcome);
+  }
+
+  /** 목업 최종 승인 → 202 즉시, 역주입은 백그라운드 (F4 역주입). 테마 미결정은 409. */
+  function handleMockupApproval(res: ServerResponse, sessionId: string): void {
+    const session = store.getSession(sessionId);
+    if (!session?.channelThreadKey) {
+      sendJson(res, 404, { error: '세션 없음' });
+      return;
+    }
+    const latest = store.latestMockup(sessionId);
+    if (!latest || session.status !== 'mockup' || latest.convergence !== 'iterating') {
+      sendJson(res, 409, { error: '지금은 목업을 승인할 수 없어요.' });
+      return;
+    }
+    if (!latest.selectedTheme && !latest.themeDelegated) {
+      sendJson(res, 409, {
+        code: 'theme_required',
+        error: '분위기를 하나 골라 주시거나 개발팀에 맡겨 주세요 — 그다음 최종 확인할 수 있어요.',
+      });
+      return;
+    }
+    const threadKey = session.channelThreadKey;
+    const accepted = runInBackground(sessionId, () =>
+      runner.approveMockup({ address: { sessionId }, threadKey, channel: 'web', text: '' }),
+    );
+    if (!accepted) {
+      sendJson(res, 409, { error: '이미 처리 중이에요 — 잠시 뒤 다시 시도해 주세요.' });
+      return;
+    }
+    sendJson(res, 202, { sessionId, accepted: true });
   }
 
   /** 업로드 가능 여부와 상한 — 세션 조회와 정책 조회가 같은 답을 준다. */
@@ -736,6 +943,29 @@ export function createWebServer(deps: WebServerDeps): Server {
         if (req.method === 'GET' && segments.length === 5 && segments[3] === 'attachments') {
           handleAttachmentDownload(res, sessionId, segments[4] ?? '');
           return;
+        }
+        // 목업 반복·디자인 시스템 선정 (F4, #54)
+        if (req.method === 'GET' && segments.length === 4 && segments[3] === 'mockup') {
+          handleMockupState(res, sessionId);
+          return;
+        }
+        if (req.method === 'GET' && segments.length === 5 && segments[3] === 'mockups') {
+          handleMockupServe(res, sessionId, segments[4] ?? '', url.searchParams.get('theme'));
+          return;
+        }
+        if (req.method === 'POST' && segments.length === 5 && segments[3] === 'mockup') {
+          if (segments[4] === 'annotations') {
+            await handleMockupAnnotations(req, res, sessionId);
+            return;
+          }
+          if (segments[4] === 'theme') {
+            await handleMockupTheme(req, res, sessionId);
+            return;
+          }
+          if (segments[4] === 'approval') {
+            handleMockupApproval(res, sessionId);
+            return;
+          }
         }
         if (req.method === 'POST' && segments.length === 5 && segments[3] === 'slots') {
           let slotKey: string;
