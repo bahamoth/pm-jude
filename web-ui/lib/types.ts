@@ -52,7 +52,37 @@ export interface SlotView {
   state: 'filled' | 'unfilled' | 'promoted' | string;
   value: string | null;
   confirmedByRequester: boolean;
+  /** 값이 첨부에서 왔다면 그 첨부 — 화면이 출처를 표시한다 (F2c, ADR-0011 결정 8). */
+  evidenceAttachmentId: string | null;
   openIssueAssignee: string | null;
+}
+
+/** 세션에 붙은 자료 (F1-Attach). 추출 텍스트는 오지 않는다 — 내용은 원본 다운로드로 본다. */
+export interface AttachmentView {
+  id: string;
+  filename: string;
+  mime: string;
+  bytes: number;
+  extractionStatus: 'pending' | 'ok' | 'failed' | string;
+  extractionError: string | null;
+}
+
+/** 업로드 표면을 열지·무엇을 고지할지의 근거. */
+export type UploadPolicy =
+  | { enabled: false }
+  | {
+      enabled: true;
+      supportedMimes: string[];
+      maxBytesPerFile: number;
+      maxPerSession: number;
+    };
+
+/** 업로드 응답 — 아직 발화에 붙지 않은 스테이징 상태다 (ADR-0011 결정 10). */
+export interface UploadedFile {
+  uploadId: string;
+  filename: string;
+  mime: string;
+  bytes: number;
 }
 
 export interface SessionDetail {
@@ -80,6 +110,9 @@ export interface SessionDetail {
   };
   utterances: Utterance[];
   slotStates: SlotView[];
+  /** 올린 자료와 읽힘 여부 — 읽지 못한 자료도 사유와 함께 남는다 (F1-Attach). */
+  attachments: AttachmentView[];
+  uploads: UploadPolicy;
 }
 
 export interface SessionSummary {

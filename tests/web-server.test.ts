@@ -705,6 +705,22 @@ describe('웹 어댑터 — 자료 첨부 (F1-Attach, ADR-0011)', () => {
     expect(res.status).toBe(400);
   });
 
+  it('세션 없는 화면도 업로드 정책을 물을 수 있다 — 인테이크 폼이 미리 고지한다', async () => {
+    const { baseUrl } = await startServer(new ScriptedBackend([]), { attachments: true });
+
+    const policy = await json<{ enabled: boolean; supportedMimes: string[] }>(
+      await fetch(`${baseUrl}/api/uploads`),
+    );
+
+    expect(policy.enabled).toBe(true);
+    expect(policy.supportedMimes).toContain('text/plain');
+
+    const { baseUrl: plain } = await startServer(new ScriptedBackend([]));
+    expect(await json<{ enabled: boolean }>(await fetch(`${plain}/api/uploads`))).toEqual({
+      enabled: false,
+    });
+  });
+
   it('세션 조회가 업로드 가능 여부와 상한을 알려준다 — 화면이 미리 고지할 근거', async () => {
     const { baseUrl } = await startServer(new ScriptedBackend([clarificationResponse]), {
       attachments: true,

@@ -127,7 +127,10 @@ document.getElementById('summary').innerHTML =
   stat('종결', dist(s.terminalCounts)) +
   stat('슬롯', 'filled ' + s.slotStateCounts.filled + ' · unfilled ' + s.slotStateCounts.unfilled +
     ' · promoted ' + s.slotStateCounts.promoted) +
-  stat('신호', dist(s.signalTypeCounts));
+  stat('신호', dist(s.signalTypeCounts)) +
+  stat('첨부', s.attachmentCounts.total === 0 ? '—' :
+    'ok ' + s.attachmentCounts.ok + ' · failed ' + s.attachmentCounts.failed +
+    ' · pending ' + s.attachmentCounts.pending, '총 ' + s.attachmentCounts.total + '건');
 
 const root = document.getElementById('sessions');
 if (!DATA.sessions.length) {
@@ -153,13 +156,25 @@ for (const sess of DATA.sessions) {
           '<span class="when">' + esc(u.createdAt.slice(11, 19)) + '</span>' +
           '<span class="txt">' + esc(u.originalText) + '</span>').join('') +
       '</div></div>' +
-      '<div><div class="sect">슬롯 상태</div><table><tr><th>slot</th><th>state</th><th>value</th><th>확인</th><th>오픈이슈 담당</th></tr>' +
+      (sess.attachments.length
+        ? '<div><div class="sect">첨부 자료 (F1-Attach)</div><table><tr><th>발화</th><th>mime</th><th>bytes</th><th>추출</th><th>추출기</th><th>내용·사유</th></tr>' +
+          sess.attachments.map((at) =>
+            '<tr><td class="mono">' + (at.utteranceSeq == null ? '—' : at.utteranceSeq) + '</td>' +
+            '<td class="mono">' + esc(at.mime) + '</td>' +
+            '<td class="mono">' + at.bytes + '</td>' +
+            '<td><span class="badge ' + (at.extractionStatus === 'ok' ? 'filled' : at.extractionStatus === 'failed' ? 'unfilled' : '') + '">' + esc(at.extractionStatus) + '</span></td>' +
+            '<td class="mono">' + esc(at.extractorVersion ?? '—') + '</td>' +
+            '<td>' + esc(at.extractionError ?? (at.extractedText ?? '—').slice(0, 200)) + '</td></tr>').join('') +
+          '</table></div>'
+        : '') +
+      '<div><div class="sect">슬롯 상태</div><table><tr><th>slot</th><th>state</th><th>value</th><th>확인</th><th>근거</th><th>오픈이슈 담당</th></tr>' +
         (sess.slotStates.map((sl) =>
           '<tr><td class="mono">' + esc(sl.slotKey) + '</td>' +
           '<td><span class="badge ' + esc(sl.state) + '">' + esc(sl.state) + '</span></td>' +
           '<td>' + (sl.value == null ? '—' : esc(JSON.stringify(sl.value))) + '</td>' +
           '<td>' + (sl.confirmedByRequester ? '✓' : '—') + '</td>' +
-          '<td>' + esc(sl.openIssueAssignee ?? '—') + '</td></tr>').join('') || '<tr><td colspan="5">—</td></tr>') +
+          '<td>' + (sl.evidenceAttachmentId ? '첨부' : '대화') + '</td>' +
+          '<td>' + esc(sl.openIssueAssignee ?? '—') + '</td></tr>').join('') || '<tr><td colspan="6">—</td></tr>') +
       '</table></div>' +
       '<div><div class="sect">신호 (F11)</div><table><tr><th>type</th><th>payload</th><th>occurred</th></tr>' +
         (sess.signals.map((sg) =>

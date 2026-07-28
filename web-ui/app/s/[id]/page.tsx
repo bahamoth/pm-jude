@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AckCard } from '@/components/ack-card';
+import { AttachmentList } from '@/components/attachment-list';
+import { AttachmentPicker } from '@/components/attachment-picker';
 import { DocumentView } from '@/components/document-view';
 import { HoldCard } from '@/components/hold-card';
 import { Jude, type JudeHandle } from '@/components/jude';
@@ -19,6 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { confirmSlotOk, correctSlot, getSession, retryRound, sendReply } from '@/lib/api';
+import type { UploadedFile } from '@/lib/types';
 import { rememberSession } from '@/lib/local-sessions';
 import { t, sessionLang, useLang, type Lang } from '@/lib/i18n';
 import { judeState, type JudeState } from '@/lib/jude-geometry';
@@ -38,6 +41,8 @@ export default function SessionPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [typing, setTyping] = useState(false);
+  /** 이번 답변에 붙일 자료 — 제출과 함께 발화에 매달린다 (F1-Attach). */
+  const [files, setFiles] = useState<UploadedFile[]>([]);
   const watchingRef = useRef(false);
   const judeRef = useRef<JudeHandle>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -143,7 +148,13 @@ export default function SessionPage() {
     slotStates,
     utterances,
     processing,
+    attachments,
+    uploads,
   } = detail;
+  // 아직 읽지 않은 자료 — 대기 카드가 「자료를 읽고 있어요」를 보여줄 근거 (ADR-0011 결정 9)
+  const readingFiles = attachments
+    .filter((file) => file.extractionStatus === 'pending')
+    .map((file) => file.filename);
   const onHold =
     session.status === 'closed' && session.terminalState === 'on_hold_insufficient_info';
   // 죽은 라운드 판정은 서버가 한다 (G-10) — 화면은 처리 중이 아닐 때만 재시도를 드러낸다
@@ -198,7 +209,7 @@ export default function SessionPage() {
       {session.status === 'intake' ? (
         <AckCard lang={lang} sessionId={sessionId} failed={failed} onRetry={retry} />
       ) : busy || processing ? (
-        <WaitingCard lang={lang} phase="reply" />
+        <WaitingCard lang={lang} phase="reply" readingFiles={readingFiles} />
       ) : session.status === 'clarifying' ? (
         // 라운드가 죽은 동안 마법사를 감춘다 — 같은 답을 다시 적으면 발화가 중복 기록된다
         failed ? null : (
@@ -211,7 +222,20 @@ export default function SessionPage() {
               round={Math.max(session.roundCount, 1)}
               lastRound={isLastRound(session.roundCount, roundBudget)}
               onType={onType}
-              onSubmit={(text) => void act(() => sendReply(sessionId, text, roundId))}
+              onSubmit={(text) => {
+                const ids = files.map((file) => file.uploadId);
+                setFiles([]);
+                void act(() => sendReply(sessionId, text, roundId, ids));
+              }}
+            />
+            {/* 자료는 답변을 보조한다 — 「모르겠다」와 나란한 제3의 경로가 아니다 */}
+            <AttachmentPicker
+              lang={lang}
+              policy={uploads}
+              files={files}
+              onChange={setFiles}
+              disabled={busy}
+              hintKey="attach.answerHint"
             />
           </div>
         )
@@ -220,6 +244,7 @@ export default function SessionPage() {
           <SlotReview
             lang={lang}
             slots={slotStates}
+            attachments={attachments}
             submitting={busy || failed}
             onConfirm={(slotKey) =>
               void confirmSlotOk(sessionId, slotKey)
@@ -236,6 +261,7 @@ export default function SessionPage() {
             version={documentVersion}
             fullyPromoted={fullyPromoted(slotStates)}
           />
+          <AttachmentList lang={lang} sessionId={sessionId} attachments={attachments} />
           {completed ? (
             <Alert>
               <AlertTitle>{t(lang, 'doc.completedTitle')}</AlertTitle>
