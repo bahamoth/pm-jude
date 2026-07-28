@@ -1,15 +1,20 @@
 import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { LlmBackend } from '../gateway/backend';
-import type { UsageLogger } from '../gateway/gateway';
+import type { LlmGateway, UsageLogger } from '../gateway/gateway';
 import { clarificationOutputSchema } from '../prompts/clarification-v0';
 import type { PromptRegistry } from '../prompts/registry';
 import {
+  DEFAULT_ATTACHMENT_LIMITS,
   IntakeRunner,
   TEMP_REQUIRED_SLOTS,
+  UploadRejectedError,
+  type AttachmentLimits,
   type ChannelPort,
   type ClarificationRoundPayload,
 } from '../runner/core-runner';
+import type { ExtractorRegistry } from '../extract/registry';
+import { BlobNotFoundError, type AttachmentStore } from '../store/attachment-store';
 import type { SessionStore } from '../store/session-store';
 import { handleDevSite } from './dev-site';
 
@@ -30,6 +35,10 @@ export interface WebServerDeps {
   usageLogger?: UsageLogger;
   teamLanguage?: string;
   maxRounds?: number;
+  /** 첨부 원본 저장소·추출기 (F1-Attach). 없으면 업로드 표면이 열리지 않는다. */
+  attachmentStore?: AttachmentStore;
+  createExtractors?: (gateway: LlmGateway) => ExtractorRegistry;
+  limits?: AttachmentLimits;
 }
 
 /** 질문별 「모르겠다」 1클릭 버튼(US-5) 렌더링에 필요한 최소 구조 — 내부 슬롯 매핑은 내보내지 않는다. */
@@ -79,6 +88,43 @@ function parseStoredQuestions(payload: unknown): ReplyQuestion[] | null {
 const MAX_BODY_BYTES = 1_000_000;
 const HEARTBEAT_MS = 15_000;
 
+/**
+ * 업로드 본문을 그대로 읽는다 — multipart 파서를 들이지 않는 대신 요청 하나에 파일 하나다.
+ *
+ * 상한 초과는 두 단계로 막는다. Content-Length가 이미 넘으면 본문을 받기 전에 끊고, 헤더가
+ * 없거나 거짓이면 읽되 버퍼에 쌓지 않는다. **소켓을 죽이지는 않는다** — 연결을 끊으면 거부
+ * 사유가 요청자에게 닿지 못해 무엇이 잘못됐는지 알 수 없는 실패가 된다(P-U1).
+ */
+function readRawBody(req: IncomingMessage, maxBytes: number): Promise<Buffer> {
+  const declared = Number(req.headers['content-length'] ?? Number.NaN);
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    return Promise.reject(new UploadRejectedError('파일이 너무 크다'));
+  }
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    let overLimit = false;
+    req.on('data', (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        // 메모리는 지키되 스트림은 끝까지 흘려보낸다 — 응답을 돌려주기 위해
+        overLimit = true;
+        chunks.length = 0;
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => {
+      if (overLimit) {
+        reject(new UploadRejectedError('파일이 너무 크다'));
+        return;
+      }
+      resolve(Buffer.concat(chunks));
+    });
+    req.on('error', reject);
+  });
+}
+
 function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -114,10 +160,20 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+/** 발화 제출이 참조하는 업로드 목록 (F1-Attach) — 값이 있으면 문자열 배열이어야 한다. */
+function parseUploadIds(body: Record<string, unknown>): string[] {
+  if (body.uploadIds === undefined) return [];
+  if (!Array.isArray(body.uploadIds) || body.uploadIds.some((id) => typeof id !== 'string')) {
+    throw new BadRequest('uploadIds는 문자열 배열이어야 한다');
+  }
+  return body.uploadIds as string[];
+}
+
 function parseIntakeBody(body: Record<string, unknown>): {
   text: string;
   name?: string;
   language?: 'ko' | 'en';
+  uploadIds?: string[];
 } {
   const text = typeof body.text === 'string' ? body.text.trim() : '';
   if (!text) throw new BadRequest('text는 비어 있지 않은 문자열이어야 한다');
@@ -125,10 +181,12 @@ function parseIntakeBody(body: Record<string, unknown>): {
     throw new BadRequest('language는 ko 또는 en이어야 한다');
   }
   const name = typeof body.name === 'string' ? body.name.trim() : '';
+  const uploadIds = parseUploadIds(body);
   return {
     text,
     ...(name ? { name } : {}),
     ...(body.language !== undefined ? { language: body.language as 'ko' | 'en' } : {}),
+    ...(uploadIds.length > 0 ? { uploadIds } : {}),
   };
 }
 
@@ -205,6 +263,7 @@ export function createWebServer(deps: WebServerDeps): Server {
     },
   };
   const runner = new IntakeRunner<WebAddress>({ ...deps, port });
+  const limits = deps.limits ?? DEFAULT_ATTACHMENT_LIMITS;
 
   /**
    * LLM 라운드를 백그라운드로 — 세션당 동시 1개(경합 방지). 종료 시 최종 status를
@@ -243,9 +302,82 @@ export function createWebServer(deps: WebServerDeps): Server {
     );
   }
 
+  /**
+   * 업로드 스테이징 (F1-Attach, ADR-0011 결정 10) — 인테이크 시점에는 세션이 없으므로
+   * 파일이 먼저 온다. 검증은 여기서 동기로 끝내고 거부 사유를 즉시 말한다(P-U1):
+   * 제출하고 나서 실패를 알게 되는 경로를 만들지 않는다. 읽는 일은 라운드 백그라운드 몫.
+   */
+  async function handleUpload(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const { attachmentStore } = deps;
+    if (!attachmentStore || !runner.attachmentsEnabled) {
+      sendJson(res, 404, { error: '이 서버는 자료 첨부를 받지 않는다' });
+      return;
+    }
+    const mime = (req.headers['content-type'] ?? '').split(';')[0]?.trim() ?? '';
+    const rawName = req.headers['x-filename'];
+    if (typeof rawName !== 'string' || !rawName) {
+      throw new BadRequest('X-Filename 헤더가 필요하다');
+    }
+    let filename: string;
+    try {
+      filename = decodeURIComponent(rawName);
+    } catch {
+      throw new BadRequest('X-Filename은 URI 인코딩된 파일명이어야 한다');
+    }
+    const bytes = await readRawBody(req, limits.maxBytesPerFile);
+    runner.validateUpload({ mime, bytes: bytes.length });
+    if (bytes.length === 0) throw new UploadRejectedError('빈 파일이다');
+
+    const stored = attachmentStore.put(bytes);
+    const uploadId = store.stageUpload({
+      filename,
+      mime,
+      bytes: bytes.length,
+      sha256: stored.sha256,
+      storageRef: stored.storageRef,
+    });
+    sendJson(res, 201, { uploadId, filename, mime, bytes: bytes.length });
+  }
+
+  /**
+   * 첨부 원본 내려주기 (ADR-0011 결정 13) — 브라우저 인라인 렌더를 원천 배제한다.
+   * 첨부는 요청자가 올린 임의의 파일이므로 표시 대상이 아니라 내려받기 대상이다.
+   */
+  function handleAttachmentDownload(
+    res: ServerResponse,
+    sessionId: string,
+    attachmentId: string,
+  ): void {
+    const { attachmentStore } = deps;
+    const row = store.getAttachment(attachmentId);
+    // 세션 스코프 — 다른 세션의 첨부 id를 알아도 이 경로로는 꺼낼 수 없다
+    if (!attachmentStore || !row || row.sessionId !== sessionId) {
+      sendJson(res, 404, { error: '첨부 없음' });
+      return;
+    }
+    let bytes: Buffer;
+    try {
+      bytes = attachmentStore.read(row.storageRef);
+    } catch (error) {
+      if (error instanceof BlobNotFoundError) {
+        sendJson(res, 404, { error: '원본을 찾을 수 없음' });
+        return;
+      }
+      throw error;
+    }
+    res.writeHead(200, {
+      'content-type': 'application/octet-stream',
+      'content-length': bytes.length,
+      'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(row.filename)}`,
+      'x-content-type-options': 'nosniff',
+      'cache-control': 'no-store',
+    });
+    res.end(bytes);
+  }
+
   /** 접수는 즉시 응답(F1 3초) — 질문 생성은 백그라운드, 결과는 SSE·세션 조회로. */
   async function handleIntake(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const { text, name, language } = parseIntakeBody(await readJsonBody(req));
+    const { text, name, language, uploadIds } = parseIntakeBody(await readJsonBody(req));
     const collector: Reply[] = [];
     const threadKey = `web:${randomUUID()}`;
     const { sessionId } = await runner.openSession({
@@ -255,6 +387,7 @@ export function createWebServer(deps: WebServerDeps): Server {
       ...(name !== undefined ? { authorId: name } : {}),
       text,
       ...(language !== undefined ? { language } : {}),
+      ...(uploadIds ? { uploadIds } : {}),
     });
     sendJson(res, 201, {
       sessionId,
@@ -304,7 +437,7 @@ export function createWebServer(deps: WebServerDeps): Server {
       });
       return;
     }
-    const { text, name, language } = parseIntakeBody(body);
+    const { text, name, language, uploadIds } = parseIntakeBody(body);
     const accepted = runInBackground(sessionId, () =>
       runner.handleReply({
         address: { sessionId },
@@ -313,6 +446,7 @@ export function createWebServer(deps: WebServerDeps): Server {
         ...(name !== undefined ? { authorId: name } : {}),
         text,
         ...(language !== undefined ? { language } : {}),
+        ...(uploadIds ? { uploadIds } : {}),
       }),
     );
     if (!accepted) {
@@ -342,11 +476,14 @@ export function createWebServer(deps: WebServerDeps): Server {
     if (!body.confirmed && !text) {
       throw new BadRequest('정정(confirmed=false)에는 text가 필요하다');
     }
+    const uploadIds = parseUploadIds(body);
     const event = {
       address: { sessionId },
       threadKey: session.channelThreadKey,
       channel: 'web' as const,
       text,
+      // 정정에도 자료를 붙일 수 있다 — 요청자가 입력을 넣는 지점이면 어디든 (ADR-0011 결정 2)
+      ...(uploadIds.length > 0 ? { uploadIds } : {}),
     };
     if (body.confirmed) {
       const outcome = await runner.confirmSlot(event, slotKey, true);
@@ -483,8 +620,32 @@ export function createWebServer(deps: WebServerDeps): Server {
         state: slot.state,
         value: typeof slot.value === 'string' ? slot.value : null,
         confirmedByRequester: slot.confirmedByRequester,
+        // 첨부에서 읽은 값은 화면이 출처를 표시한다 (F2c, ADR-0011 결정 8)
+        evidenceAttachmentId: slot.evidenceAttachmentId,
         openIssueAssignee: slot.openIssueAssignee,
       })),
+      /**
+       * 첨부 현황 (F1-Attach) — 추출 텍스트는 내보내지 않는다. 화면이 보여줄 것은 무엇을
+       * 올렸고 읽혔는지이며, 자료 내용은 원본 다운로드로 본다. 읽지 못한 자료도 사유와 함께
+       * 남는다 — 올린 자료가 조용히 사라지지 않는다.
+       */
+      attachments: store.listAttachments(sessionId).map((row) => ({
+        id: row.id,
+        filename: row.filename,
+        mime: row.mime,
+        bytes: row.bytes,
+        extractionStatus: row.extractionStatus,
+        extractionError: row.extractionError,
+      })),
+      /** 업로드 표면을 열지 판단하는 근거 — 지원 형식과 상한을 미리 고지한다. */
+      uploads: runner.attachmentsEnabled
+        ? {
+            enabled: true,
+            supportedMimes: runner.supportedUploadMimes(),
+            maxBytesPerFile: limits.maxBytesPerFile,
+            maxPerSession: limits.maxPerSession,
+          }
+        : { enabled: false },
     });
   }
 
@@ -494,6 +655,13 @@ export function createWebServer(deps: WebServerDeps): Server {
 
     // 로컬 허브 (#36) — /, /board, /trace, /repo/** (운영자·개발팀 열람 표면)
     if (handleDevSite(req, res, url, store)) return;
+    // 업로드는 세션 밖 경로다 — 인테이크 시점에는 아직 세션이 없다 (ADR-0011 결정 10)
+    if (segments[0] === 'api' && segments[1] === 'uploads' && segments.length === 2) {
+      if (req.method === 'POST') {
+        await handleUpload(req, res);
+        return;
+      }
+    }
     if (segments[0] === 'api' && segments[1] === 'sessions') {
       if (segments.length === 2) {
         if (req.method === 'POST') {
@@ -545,6 +713,10 @@ export function createWebServer(deps: WebServerDeps): Server {
           sendJson(res, 202, { accepted: true });
           return;
         }
+        if (req.method === 'GET' && segments.length === 5 && segments[3] === 'attachments') {
+          handleAttachmentDownload(res, sessionId, segments[4] ?? '');
+          return;
+        }
         if (req.method === 'POST' && segments.length === 5 && segments[3] === 'slots') {
           let slotKey: string;
           try {
@@ -564,6 +736,12 @@ export function createWebServer(deps: WebServerDeps): Server {
     route(req, res).catch((error: unknown) => {
       if (error instanceof BadRequest) {
         sendJson(res, 400, { error: error.message });
+        return;
+      }
+      // 업로드 거부는 사유를 그대로 요청자에게 전한다 — 무엇이 왜 거부됐는지 알아야 다시 올린다
+      if (error instanceof UploadRejectedError) {
+        if (!res.headersSent) sendJson(res, 400, { code: 'upload_rejected', error: error.message });
+        else res.end();
         return;
       }
       console.error('[web] 처리 실패:', error);

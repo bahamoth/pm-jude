@@ -229,7 +229,10 @@ function makeRunner(
     teamLanguage: 'ko',
     ...(options?.maxRounds !== undefined ? { maxRounds: options.maxRounds } : {}),
     ...(options?.attachments
-      ? { attachmentStore: options.attachments.store, extractors: options.attachments.extractors }
+      ? {
+          attachmentStore: options.attachments.store,
+          createExtractors: () => options.attachments!.extractors,
+        }
       : {}),
     ...(options?.limits ? { limits: { ...DEFAULT_ATTACHMENT_LIMITS, ...options.limits } } : {}),
   });
