@@ -177,6 +177,29 @@ export const slotState = sqliteTable(
   (table) => [primaryKey({ columns: [table.sessionId, table.slotKey] })],
 );
 
+/**
+ * requirements 문서 버전 (#53, data-model.md) — 게시마다 구조체와 vN을 영속한다.
+ * 발화로 남는 게시 텍스트는 전달 표면이고, 구현·역주입(F4)·화면 렌더의 정본은 이 구조체다.
+ * 행은 append-only — 정정은 새 버전을 만들지 기존 행을 고치지 않는다 (G-11).
+ */
+export const requirementsDoc = sqliteTable(
+  'requirements_doc',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => session.id),
+    /** vN — 목업 vN·URL vN과 1:1 매핑 예정 (F4). */
+    version: integer('version').notNull(),
+    /** 문제/사용자/스코프/스토리·수용기준/데이터 소스/오픈이슈 구조체. */
+    content: text('content', { mode: 'json' }).notNull(),
+    /** 역주입 원본 목업 (F4, Phase 2) — mockup 테이블 도입 전까지 null. */
+    backInjectedFrom: text('back_injected_from'),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [unique().on(table.sessionId, table.version)],
+);
+
 export const signal = sqliteTable(
   'signal',
   {

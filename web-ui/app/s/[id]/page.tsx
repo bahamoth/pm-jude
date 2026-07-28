@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { confirmSlotOk, correctSlot, getSession, retryRound, sendReply } from '@/lib/api';
+import { documentLinesFromContent, parseDocumentText } from '@/lib/document';
 import type { UploadedFile } from '@/lib/types';
 import { rememberSession } from '@/lib/local-sessions';
 import { t, sessionLang, useLang, type Lang } from '@/lib/i18n';
@@ -143,6 +144,7 @@ export default function SessionPage() {
     roundId,
     pendingRound,
     documentVersion,
+    document: storedDocument,
     completed,
     roundBudget,
     slotStates,
@@ -159,7 +161,18 @@ export default function SessionPage() {
     session.status === 'closed' && session.terminalState === 'on_hold_insufficient_info';
   // 죽은 라운드 판정은 서버가 한다 (G-10) — 화면은 처리 중이 아닐 때만 재시도를 드러낸다
   const failed = roundFailed(pendingRound, processing || busy);
-  const documentText = utterances.findLast((u) => u.authorType === 'agent')?.originalText ?? '';
+  // 정본은 저장 구조체 (#53). 저장 행이 없는 레거시 세션만 게시 텍스트 역파싱으로 폴백한다 —
+  // 마지막 발화가 문서가 아닐 수 있으므로(#52 안내 회신) 문서 머리로 골라낸다.
+  const docLines = storedDocument
+    ? documentLinesFromContent(storedDocument.content, {
+        version: storedDocument.version,
+        transcriptCount: utterances.length,
+      })
+    : parseDocumentText(
+        utterances.findLast(
+          (u) => u.authorType === 'agent' && u.originalText.startsWith('*requirements'),
+        )?.originalText ?? '',
+      );
 
   const face = judeState({
     status: session.status,
@@ -257,8 +270,8 @@ export default function SessionPage() {
           />
           <DocumentView
             lang={lang}
-            text={documentText}
-            version={documentVersion}
+            lines={docLines}
+            version={storedDocument?.version ?? documentVersion}
             fullyPromoted={fullyPromoted(slotStates)}
           />
           <AttachmentList lang={lang} sessionId={sessionId} attachments={attachments} />

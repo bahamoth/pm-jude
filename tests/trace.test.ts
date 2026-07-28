@@ -241,6 +241,37 @@ describe('trace-data — 저장소 export의 조형', () => {
     expect(html).toContain('pdf-text@0.1.0');
   });
 
+  it('requirements 문서 버전이 요약·세션·HTML에 실린다 (#53, AGENTS.md 동반 지침)', async () => {
+    store = SessionStore.open(':memory:');
+    await seedSession(store, '대시보드 요청');
+    const exported = store.exportSessions()[0];
+    if (!exported) throw new Error('시드 세션 없음');
+    store.appendRequirementsDoc({
+      sessionId: exported.session.id,
+      version: 1,
+      content: {
+        problem: '영업 실적을 정리해 볼 수단이 없다',
+        users: ['영업팀 매니저'],
+        scope: { inScope: ['월별 매출 추이'], outOfScope: [] },
+        stories: [],
+        dataSources: [],
+        openIssues: [],
+      },
+    });
+
+    const data = buildTraceData(store.exportSessions(), store.listVersionRegistry(), GENERATED_AT);
+
+    expect(data.summary.documentCount).toBe(1);
+    expect(data.sessions[0]?.documents).toHaveLength(1);
+    expect(data.sessions[0]?.documents[0]).toMatchObject({ version: 1 });
+    expect(data.sessions[0]?.documents[0]?.content).toMatchObject({
+      problem: '영업 실적을 정리해 볼 수단이 없다',
+    });
+
+    const html = renderTraceHtml(data);
+    expect(html).toContain('requirements 문서');
+  });
+
   it('빈 저장소 — 세션 0건, 평균 왕복 null', () => {
     store = SessionStore.open(':memory:');
     const data = buildTraceData(store.exportSessions(), store.listVersionRegistry(), GENERATED_AT);

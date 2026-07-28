@@ -85,6 +85,22 @@ export interface UploadedFile {
   bytes: number;
 }
 
+/** requirements 문서 구조체 — 서버 requirements_doc.content의 뷰 타입 (#53, data-model.md). */
+export interface DocumentContent {
+  problem: string;
+  users: string[];
+  scope: { inScope: string[]; outOfScope: string[] };
+  stories: Array<{
+    story: string;
+    acceptanceCriteria: Array<{
+      ears: string;
+      gwt: { given: string; when: string; then: string };
+    }>;
+  }>;
+  dataSources: string[];
+  openIssues: Array<{ slotKey: string; question: string; assignee: string | null }>;
+}
+
 export interface SessionDetail {
   latestQuestions: ReplyQuestion[] | null;
   /** 최신 명확화 라운드의 식별자 — 답변 제출이 동반해야 한다 (G-10 라운드 정합). */
@@ -93,6 +109,8 @@ export interface SessionDetail {
   pendingRound: PendingRound;
   /** 지금까지 게시된 requirements 문서 수 = 현재 문서의 vN. 문서 전이면 0 (G-11). */
   documentVersion: number;
+  /** 최신 문서의 정본 구조체 (#53) — null이면 레거시 세션, 발화 텍스트 파서로 폴백. */
+  document: { version: number; content: DocumentContent } | null;
   /** 현재 문서 버전에서 전 슬롯 확인이 끝났는가 — Phase 0 종착 (G-11). */
   completed: boolean;
   roundBudget: number;

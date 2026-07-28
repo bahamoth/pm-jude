@@ -593,6 +593,14 @@ export function createWebServer(deps: WebServerDeps): Server {
       pendingRound: session.channelThreadKey ? runner.pendingRound(session.channelThreadKey) : null,
       /** 지금까지 게시된 문서 수 = 현재 문서의 vN (G-11). 문서 전이라면 0. */
       documentVersion: runner.documentVersionOf(sessionId),
+      /**
+       * 최신 문서 버전의 정본 구조체 (#53) — 화면은 게시 텍스트 역파싱이 아니라 이걸 렌더한다.
+       * 저장 행이 없는 레거시 세션은 null — 클라이언트가 발화 텍스트 파서로 폴백한다.
+       */
+      document: (() => {
+        const latest = store.listRequirementsDocs(sessionId).at(-1);
+        return latest ? { version: latest.version, content: latest.content } : null;
+      })(),
       /** 현재 문서 버전에서 전 슬롯 확인이 끝났는가 — Phase 0 종착 (G-11). */
       completed: runner.isCompleted(sessionId),
       roundBudget: runner.roundBudgetOf(sessionId),

@@ -1016,6 +1016,8 @@ export class IntakeRunner<A> {
       originalLanguage: this.teamLanguage,
     });
     store.updateSessionState(sessionId, { status: 'documented' });
+    // 구조체 영속 (#53) — 게시 텍스트는 전달 표면이고, 화면·역주입(F4)·골든셋의 정본은 이 행이다
+    store.appendRequirementsDoc({ sessionId, version, content: doc.content });
     store.recordSignal({
       sessionId,
       type: 'document_delivered',
@@ -1032,11 +1034,17 @@ export class IntakeRunner<A> {
     this.recordCompletion(sessionId, versionAxes);
   }
 
-  /** 지금까지 게시된 requirements 문서 수 = 현재 문서의 버전. 문서 전이면 0 (G-11). */
+  /**
+   * 현재 문서의 버전. 문서 전이면 0 (G-11). 정본은 requirements_doc 저장 행이고,
+   * 저장 행이 없는 레거시 세션(#53 이전)은 게시 신호 수로 파생한다 — 정정 재생성이
+   * 버전을 이어 세도록 둘 중 큰 쪽을 취한다.
+   */
   documentVersionOf(sessionId: string): number {
-    return this.deps.store
+    const stored = this.deps.store.listRequirementsDocs(sessionId).at(-1)?.version ?? 0;
+    const derived = this.deps.store
       .listSignals(sessionId)
       .filter((signal) => signal.type === 'document_delivered').length;
+    return Math.max(stored, derived);
   }
 
   /** 세션 행에 고정된 버전 축을 신호 기록용으로 되돌린다 (F11 — 세션 생성 시점 버전 귀속). */
