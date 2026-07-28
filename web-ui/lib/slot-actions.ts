@@ -6,10 +6,7 @@ export type SlotAction = 'confirm-or-correct' | 'correct-only' | 'none';
  * 뒤에도 정정 재생성을 허용하므로(confirmSlot), 화면이 그 경로를 막으면 문서를
  * 고칠 방법이 API 직접 호출뿐이게 된다. 확인을 되돌리는 건 정정 제출이 하는 일이다.
  */
-export function slotActionOf(slot: {
-  state: string;
-  confirmedByRequester: boolean;
-}): SlotAction {
+export function slotActionOf(slot: { state: string; confirmedByRequester: boolean }): SlotAction {
   if (slot.state !== 'filled') return 'none';
   return slot.confirmedByRequester ? 'correct-only' : 'confirm-or-correct';
 }
