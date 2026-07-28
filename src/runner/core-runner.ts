@@ -216,16 +216,17 @@ const MESSAGES = {
     mockupReady:
       '말씀하신 내용을 화면 초안으로 만들어 봤어요. 눌러 보면서 확인해 주시고, 고칠 곳은 코멘트로 남겨 주세요 — 다음 판에 반영할게요.',
     mockupUpdated: '코멘트를 반영해 새 판을 만들었어요. 다시 한번 확인해 주세요.',
+    mockupThemeReset:
+      '새 판은 다시 흑백으로 보여 드려요 — 화면 구성이 정리되면 분위기를 다시 골라 주세요.',
     mockupEscalated:
       '목업 수정을 정해 둔 횟수만큼 다 썼어요. 남기신 코멘트는 모두 기록해서 개발팀 검토로 넘길게요 — 문서의 항목별 확인·정정은 계속 하실 수 있어요.',
     mockupGuide:
       '지금은 화면 목업을 확인하는 단계예요 — 목업에 코멘트를 남기시거나, 항목별 확인·정정으로 문서를 고칠 수 있어요.',
     themeSelected: (name: string) =>
       `「${name}」 분위기로 기록해 둘게요 — 목업에서 바로 확인해 보실 수 있어요. 이대로 좋으면 최종 확인해 주세요.`,
-    themeDelegated:
-      '분위기 선택은 개발팀 몫으로 남겨 둘게요. 이대로 좋으면 최종 확인해 주세요.',
+    themeDelegated: '분위기 선택은 개발팀 몫으로 남겨 둘게요. 이대로 좋으면 최종 확인해 주세요.',
     mockupApproved:
-      '확인 감사해요! 목업에서 확정된 내용을 문서에 반영해 새 버전으로 정리했어요. 이제 문서가 기준이 되고, 목업은 참고용이에요.',
+      '목업에서 확정된 내용을 문서에 반영해 새 버전으로 정리했어요. 이제 문서가 기준이 되고, 목업은 참고용이에요.',
   },
   en: {
     ack: "Got it. I'll ask a few questions to pin the request down.",
@@ -238,6 +239,8 @@ const MESSAGES = {
     mockupReady:
       "I've turned this into a first screen draft. Click around, and leave comments on anything to fix — I'll fold them into the next round.",
     mockupUpdated: "I've folded your comments into a new round — please take another look.",
+    mockupThemeReset:
+      'The new round is back in grayscale — once the layout settles, pick a look again.',
     mockupEscalated:
       "We've used up the mockup revision rounds. Every comment you left is recorded and goes to the team for review — the item-by-item confirm and correct flow is still open.",
     mockupGuide:
@@ -247,7 +250,7 @@ const MESSAGES = {
     themeDelegated:
       "I'll leave the look for the team to decide. If everything looks right, give it a final confirm.",
     mockupApproved:
-      "Thanks for confirming! Everything settled on the mockup is now folded into a new version of the document. The document is the reference from here — the mockup stays around only for context.",
+      'Everything settled on the mockup is now folded into a new version of the document. The document is the reference from here — the mockup stays around only for context.',
   },
 } as const;
 
@@ -1169,9 +1172,28 @@ export class IntakeRunner<A> {
     store.updateSessionState(sessionId, { status: 'mockup' });
   }
 
+  /** 요청자 대면 회신의 공통 경로 — 게시와 원문 전사 보존이 항상 함께 간다 (원칙 7). */
+  private async postAgentReply(
+    sessionId: string,
+    event: IntakeEvent<A>,
+    text: string,
+    language: string,
+    payload?: RoundPayload,
+  ): Promise<void> {
+    await this.deps.port.post(event.address, text, payload);
+    this.deps.store.appendUtterance({
+      sessionId,
+      authorType: 'agent',
+      channel: event.channel,
+      originalText: text,
+      originalLanguage: language,
+    });
+  }
+
   /**
    * 목업 생성·재생성 (F4) — 구조 층 HTML을 게이트웨이 구조화 호출로 산출하고 vN으로
    * 영속·게시한다. 테마·워터마크는 여기 없다 — 서빙 렌더러(코드)가 입힌다 (원칙 2).
+   * 새 버전은 항상 그레이스케일로 시작한다(테마 미선정 행) — 반복 단계 규정(F4 v1.7).
    */
   private async generateMockup(
     sessionId: string,
@@ -1181,6 +1203,8 @@ export class IntakeRunner<A> {
       trigger: 'initial' | 'annotation';
       previousHtml?: string;
       annotations?: Array<{ text: string; elementRef: string | null }>;
+      /** 이전 판의 테마 결정이 새 판에서 무효가 됐다 — 침묵 리셋 금지 (원칙 5). */
+      themeReset?: boolean;
     },
   ): Promise<void> {
     const { store } = this.deps;
@@ -1205,8 +1229,14 @@ export class IntakeRunner<A> {
       summary: result.output.summary,
     });
 
-    const text = version === 1 ? MESSAGES[language].mockupReady : MESSAGES[language].mockupUpdated;
-    await this.deps.port.post(event.address, text, {
+    const t = MESSAGES[language];
+    const text =
+      version === 1
+        ? t.mockupReady
+        : options.themeReset
+          ? `${t.mockupUpdated} ${t.mockupThemeReset}`
+          : t.mockupUpdated;
+    await this.postAgentReply(sessionId, event, text, language, {
       kind: 'mockup_ready',
       version: row.version,
       docVersion: row.docVersion,
@@ -1214,13 +1244,6 @@ export class IntakeRunner<A> {
       iterationsUsed: this.mockupIterationsUsed(sessionId),
       iterationBudget: this.maxMockupIterations,
       themeCandidates: this.themeCandidates(),
-    });
-    store.appendUtterance({
-      sessionId,
-      authorType: 'agent',
-      channel: event.channel,
-      originalText: text,
-      originalLanguage: language,
     });
     store.recordSignal({
       sessionId,
@@ -1272,15 +1295,7 @@ export class IntakeRunner<A> {
 
     if (this.mockupIterationsUsed(session.id) >= this.maxMockupIterations) {
       store.updateMockup(current.id, { convergence: 'escalated' });
-      const text = MESSAGES[language].mockupEscalated;
-      await this.deps.port.post(event.address, text);
-      store.appendUtterance({
-        sessionId: session.id,
-        authorType: 'agent',
-        channel: event.channel,
-        originalText: text,
-        originalLanguage: language,
-      });
+      await this.postAgentReply(session.id, event, MESSAGES[language].mockupEscalated, language);
       store.updateSessionState(session.id, { status: 'documented' });
       store.recordSignal({
         sessionId: session.id,
@@ -1303,6 +1318,8 @@ export class IntakeRunner<A> {
       trigger: 'annotation',
       previousHtml: current.html,
       annotations,
+      // 새 판은 그레이스케일로 시작한다 — 이전 판의 테마 결정은 무효가 되므로 안내한다 (원칙 5)
+      themeReset: current.selectedTheme !== null || current.themeDelegated,
     });
     return this.outcomeOf(session.id);
   }
@@ -1319,9 +1336,7 @@ export class IntakeRunner<A> {
 
   /** 디자인 시스템 선정 후보 — 어댑터 표시용 (테마 상세는 서빙 렌더러가 안다). */
   themeCandidates(): Array<{ id: string; name: string; description: string }> {
-    return this.themes
-      .list()
-      .map(({ id, name, description }) => ({ id, name, description }));
+    return this.themes.list().map(({ id, name, description }) => ({ id, name, description }));
   }
 
   /**
@@ -1350,14 +1365,7 @@ export class IntakeRunner<A> {
       store.updateMockup(current.id, { selectedTheme: null, themeDelegated: true });
       text = MESSAGES[language].themeDelegated;
     }
-    await this.deps.port.post(event.address, text);
-    store.appendUtterance({
-      sessionId: session.id,
-      authorType: 'agent',
-      channel: event.channel,
-      originalText: text,
-      originalLanguage: language,
-    });
+    await this.postAgentReply(session.id, event, text, language);
     store.recordSignal({
       sessionId: session.id,
       type: 'design_system_selected',
@@ -1389,14 +1397,9 @@ export class IntakeRunner<A> {
     const language = this.sessionLanguageOf(session.id, event);
     const versionAxes = this.versionAxesOf(session);
     const { request } = this.buildConversation(session.id);
-    const versionByMockupId = new Map(
-      store.listMockups(session.id).map((mockup) => [mockup.id, mockup.version]),
-    );
-    const annotations = store.listMockupAnnotations(session.id).map((annotation) => ({
-      text: annotation.text,
-      elementRef: annotation.elementRef,
-      mockupVersion: versionByMockupId.get(annotation.mockupId) ?? null,
-    }));
+    const annotations = store
+      .listMockupAnnotationsWithVersions(session.id)
+      .map(({ text, elementRef, mockupVersion }) => ({ text, elementRef, mockupVersion }));
     const theme = current.selectedTheme ? this.themes.get(current.selectedTheme) : undefined;
     const visualDirection: VisualDirection = {
       themeId: current.selectedTheme,
@@ -1410,7 +1413,10 @@ export class IntakeRunner<A> {
       document: store.latestRequirementsDoc(session.id)?.content ?? null,
       annotations,
       // 시각 방향은 참고로만 준다 — 문서 필드 보장은 아래 코드 몫 (원칙 2)
-      visualDirection: { themeName: visualDirection.themeName, delegated: visualDirection.delegated },
+      visualDirection: {
+        themeName: visualDirection.themeName,
+        delegated: visualDirection.delegated,
+      },
     });
 
     // 승격 슬롯 오픈이슈 합류·원문 전사 첨부는 역주입에서도 코드가 보장한다 (원칙 2)
@@ -1434,16 +1440,9 @@ export class IntakeRunner<A> {
     });
     const version = this.documentVersionOf(session.id) + 1;
 
-    await this.deps.port.post(event.address, MESSAGES[language].mockupApproved);
+    await this.postAgentReply(session.id, event, MESSAGES[language].mockupApproved, language);
     const text = formatDocument(doc, version, visualDirection);
-    await this.deps.port.post(event.address, text);
-    store.appendUtterance({
-      sessionId: session.id,
-      authorType: 'agent',
-      channel: event.channel,
-      originalText: text,
-      originalLanguage: this.teamLanguage,
-    });
+    await this.postAgentReply(session.id, event, text, this.teamLanguage);
     store.updateMockup(current.id, { convergence: 'approved' });
     store.updateSessionState(session.id, { status: 'documented' });
     // 확정된 시각 방향은 문서 구조체에 코드가 합류시킨다 — 프롬프트 산출물이 아니다 (원칙 2)

@@ -35,6 +35,8 @@ export function MockupPanel({
 }: Props) {
   const [state, setState] = useState<MockupState | null>(null);
   const [comment, setComment] = useState('');
+  /** 확정 전의 입혀 보기 — 선정 기록과 분리한다 (US-9: 실제 화면으로 비교해 고른다). */
+  const [previewTheme, setPreviewTheme] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,7 +59,11 @@ export function MockupPanel({
 
   const iterationsLeft = Math.max(0, state.iterationBudget - state.iterationsUsed);
   const themeDecided = state.selectedTheme !== null || state.themeDelegated;
-  const frameSrc = mockupUrl(sessionId, state.latestVersion, state.selectedTheme);
+  const shownTheme = previewTheme ?? state.selectedTheme;
+  const frameSrc = mockupUrl(sessionId, state.latestVersion, shownTheme);
+  const previewing = state.themes.find(
+    (theme) => theme.id === previewTheme && previewTheme !== state.selectedTheme,
+  );
 
   return (
     <Card>
@@ -122,14 +128,10 @@ export function MockupPanel({
           </div>
           {state.annotations.length > 0 && (
             <ul className="grid gap-1 text-sm text-muted-foreground">
-              <li className="font-medium text-foreground">
-                {t(lang, 'mockup.annotationsTitle')}
-              </li>
+              <li className="font-medium text-foreground">{t(lang, 'mockup.annotationsTitle')}</li>
               {state.annotations.map((annotation, index) => (
                 <li key={index}>
-                  <span className="font-mono text-[11px]">
-                    v{annotation.mockupVersion ?? '?'}
-                  </span>{' '}
+                  <span className="font-mono text-[11px]">v{annotation.mockupVersion ?? '?'}</span>{' '}
                   {annotation.text}
                 </li>
               ))}
@@ -145,20 +147,49 @@ export function MockupPanel({
           <p className="text-sm text-muted-foreground">{t(lang, 'mockup.themeLede')}</p>
           <div className="grid gap-2 sm:grid-cols-2">
             {state.themes.map((theme) => (
+              // 누르면 위 화면에 입혀만 본다 — 선정 기록은 아래 확정 버튼이 한다 (US-9)
               <button
                 key={theme.id}
                 type="button"
                 disabled={submitting}
-                onClick={() => onSelectTheme({ themeId: theme.id })}
+                onClick={() => setPreviewTheme(theme.id)}
                 className={`rounded-md border p-3 text-left text-sm transition-colors hover:bg-accent ${
-                  state.selectedTheme === theme.id ? 'border-primary ring-1 ring-primary' : ''
+                  state.selectedTheme === theme.id
+                    ? 'border-primary ring-1 ring-primary'
+                    : previewTheme === theme.id
+                      ? 'border-primary/50 ring-1 ring-primary/50'
+                      : ''
                 }`}
               >
-                <span className="font-medium">{theme.name}</span>
+                <span className="font-medium">
+                  {theme.name}
+                  {state.selectedTheme === theme.id && (
+                    <span className="ml-2 text-[11px] text-primary">
+                      {t(lang, 'mockup.themeCurrent')}
+                    </span>
+                  )}
+                </span>
                 <span className="mt-1 block text-muted-foreground">{theme.description}</span>
               </button>
             ))}
           </div>
+          {previewing && (
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                disabled={submitting}
+                onClick={() => {
+                  setPreviewTheme(null);
+                  onSelectTheme({ themeId: previewing.id });
+                }}
+              >
+                {t(lang, 'mockup.themeCommit')}
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                {t(lang, 'mockup.themePreviewing', { name: previewing.name })}
+              </span>
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <Button
               size="sm"
