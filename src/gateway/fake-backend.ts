@@ -1,5 +1,6 @@
 import type { PromptRegistry } from '../prompts/registry';
 import {
+  ATTACHMENT_EXTRACTION_V0,
   CLARIFICATION_V1,
   COMPLETENESS_V0,
   PROMOTION_V0,
@@ -19,6 +20,7 @@ export function createFakeBackend(registry: PromptRegistry): LlmBackend {
   const completenessBody = registry.get(COMPLETENESS_V0).body;
   const promotionBody = registry.get(PROMOTION_V0).body;
   const requirementsBody = registry.get(REQUIREMENTS_V0).body;
+  const extractionBody = registry.get(ATTACHMENT_EXTRACTION_V0).body;
 
   const clarification = JSON.stringify({
     interpretations: ['관리자용 실적 대시보드', '영업사원 개인 실적 화면'],
@@ -109,6 +111,12 @@ export function createFakeBackend(registry: PromptRegistry): LlmBackend {
     openIssues: [],
   });
 
+  const extraction = JSON.stringify({
+    readable: true,
+    description: '매출 관리 화면의 캡처. 상단에 기간 선택 필터, 아래에 팀별 매출 표가 있다',
+    textContent: ['기간', '팀명', '매출액', '영업1팀', '12,400,000'],
+  });
+
   return {
     run(request: BackendRequest): Promise<BackendResponse> {
       const usage = { inputTokens: 0, outputTokens: 0 };
@@ -127,6 +135,13 @@ export function createFakeBackend(registry: PromptRegistry): LlmBackend {
       }
       if (request.promptBody === requirementsBody) {
         return Promise.resolve({ outputText: requirements, usage });
+      }
+      if (request.promptBody === extractionBody) {
+        // 이미지가 실려 오지 않았다면 배선이 끊긴 것이다 — 조용히 그럴듯한 서술을 지어내면
+        // 데모가 통과하면서 실제로는 아무것도 읽지 않는 상태를 가린다
+        return request.images?.length
+          ? Promise.resolve({ outputText: extraction, usage })
+          : Promise.reject(new Error('가짜 백엔드: 추출 호출에 이미지가 실려 오지 않았다'));
       }
       return Promise.reject(new Error('가짜 백엔드: 알 수 없는 프롬프트'));
     },
