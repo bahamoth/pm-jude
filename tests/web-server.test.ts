@@ -1,8 +1,15 @@
+import { mkdtempSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { ExtractorRegistry } from '../src/extract/registry';
+import { textExtractor } from '../src/extract/text';
 import type { BackendRequest, BackendResponse, LlmBackend } from '../src/gateway/backend';
 import { createDefaultRegistry } from '../src/prompts/catalog';
+import { DEFAULT_ATTACHMENT_LIMITS } from '../src/runner/core-runner';
 import { slot } from './slot-fixture';
+import { AttachmentStore } from '../src/store/attachment-store';
 import { SessionStore } from '../src/store/session-store';
 import { createWebServer } from '../src/web/server';
 
@@ -133,9 +140,12 @@ afterEach(async () => {
 
 async function startServer(
   backend: LlmBackend,
-  options?: { maxRounds?: number },
+  options?: { maxRounds?: number; attachments?: boolean; maxBytesPerFile?: number },
 ): Promise<{ baseUrl: string; store: SessionStore }> {
   store = SessionStore.open(':memory:');
+  // 첨부를 켜는 구성은 텍스트 추출기만 등록한다 — 어댑터 계약 검증에 이미지 호출은 불필요
+  const extractors = new ExtractorRegistry();
+  extractors.register(textExtractor);
   const server = createWebServer({
     store,
     backend,
@@ -143,6 +153,15 @@ async function startServer(
     modelVersion: 'claude-sonnet-5',
     teamLanguage: 'ko',
     ...(options?.maxRounds !== undefined ? { maxRounds: options.maxRounds } : {}),
+    ...(options?.attachments
+      ? {
+          attachmentStore: new AttachmentStore(mkdtempSync(join(tmpdir(), 'pm-jude-web-attach-'))),
+          createExtractors: () => extractors,
+          ...(options.maxBytesPerFile !== undefined
+            ? { limits: { ...DEFAULT_ATTACHMENT_LIMITS, maxBytesPerFile: options.maxBytesPerFile } }
+            : {}),
+        }
+      : {}),
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   closeServer = () =>
@@ -544,5 +563,160 @@ describe('웹 어댑터 HTTP 계약 smoke', () => {
 
     const unknown = await fetch(`${baseUrl}/api/unknown`);
     expect(unknown.status).toBe(404);
+  });
+});
+
+describe('웹 어댑터 — 자료 첨부 (F1-Attach, ADR-0011)', () => {
+  /** 업로드 요청 하나 — multipart 없이 raw body + 헤더다 (결정 10). */
+  function upload(baseUrl: string, filename: string, text: string, mime = 'text/plain') {
+    return fetch(`${baseUrl}/api/uploads`, {
+      method: 'POST',
+      headers: { 'content-type': mime, 'x-filename': encodeURIComponent(filename) },
+      body: Buffer.from(text, 'utf8'),
+    });
+  }
+
+  it('업로드 → 참조 → 추출이 관통하고, 첨부가 세션 조회에 실린다', async () => {
+    const { baseUrl } = await startServer(
+      new ScriptedBackend([
+        clarificationResponse,
+        refinedCompletenessResponse,
+        requirementsResponse,
+      ]),
+      { attachments: true },
+    );
+
+    const uploaded = await json<{ uploadId: string; filename: string; bytes: number }>(
+      await upload(baseUrl, '기획서.txt', '대상 사용자: 영업팀 매니저'),
+    );
+    expect(uploaded.filename).toBe('기획서.txt');
+
+    const intake = await json<{ sessionId: string }>(
+      await fetch(`${baseUrl}/api/sessions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          text: '영업 실적 대시보드 하나 만들어 주세요',
+          language: 'ko',
+          uploadIds: [uploaded.uploadId],
+        }),
+      }),
+    );
+
+    const detail = await waitFor(async () => {
+      const d = await json<{
+        processing: boolean;
+        attachments: Array<{ id: string; filename: string; extractionStatus: string }>;
+      }>(await fetch(`${baseUrl}/api/sessions/${intake.sessionId}`));
+      return !d.processing && d.attachments[0]?.extractionStatus !== 'pending' ? d : null;
+    });
+    expect(detail.attachments).toEqual([
+      expect.objectContaining({ filename: '기획서.txt', extractionStatus: 'ok' }),
+    ]);
+  });
+
+  it('업로드 거부는 사유와 함께 즉시 온다 — 제출한 뒤에 알게 하지 않는다 (P-U1)', async () => {
+    const { baseUrl } = await startServer(new ScriptedBackend([]), {
+      attachments: true,
+      maxBytesPerFile: 32,
+    });
+
+    const unsupported = await upload(baseUrl, 'a.zip', 'x', 'application/zip');
+    expect(unsupported.status).toBe(400);
+    expect(await json<{ code: string; error: string }>(unsupported)).toMatchObject({
+      code: 'upload_rejected',
+    });
+
+    const tooBig = await upload(baseUrl, 'big.txt', 'x'.repeat(100));
+    expect(tooBig.status).toBe(400);
+
+    const empty = await upload(baseUrl, 'empty.txt', '');
+    expect(empty.status).toBe(400);
+
+    const noName = await fetch(`${baseUrl}/api/uploads`, {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain' },
+      body: 'x',
+    });
+    expect(noName.status).toBe(400);
+  });
+
+  it('첨부를 받지 않는 구성에서는 업로드 경로가 열리지 않는다', async () => {
+    const { baseUrl } = await startServer(new ScriptedBackend([]));
+
+    expect((await upload(baseUrl, 'a.txt', 'x')).status).toBe(404);
+  });
+
+  it('원본 다운로드는 인라인 렌더를 막고 세션 스코프를 지킨다 (결정 13)', async () => {
+    const { baseUrl } = await startServer(new ScriptedBackend([clarificationResponse]), {
+      attachments: true,
+    });
+    const uploaded = await json<{ uploadId: string }>(
+      await upload(baseUrl, '기획서.txt', '본문 내용'),
+    );
+    const intake = await json<{ sessionId: string }>(
+      await fetch(`${baseUrl}/api/sessions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: '대시보드 만들어 주세요', uploadIds: [uploaded.uploadId] }),
+      }),
+    );
+    const detail = await waitFor(async () => {
+      const d = await json<{ processing: boolean; attachments: Array<{ id: string }> }>(
+        await fetch(`${baseUrl}/api/sessions/${intake.sessionId}`),
+      );
+      return !d.processing && d.attachments.length > 0 ? d : null;
+    });
+    const attachmentId = detail.attachments[0]?.id ?? '';
+
+    const res = await fetch(
+      `${baseUrl}/api/sessions/${intake.sessionId}/attachments/${attachmentId}`,
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('application/octet-stream');
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(res.headers.get('content-disposition')).toContain('attachment;');
+    expect(await res.text()).toBe('본문 내용');
+
+    // 다른 세션 경로로는 같은 첨부를 꺼낼 수 없다
+    const other = await json<{ sessionId: string }>(
+      await fetch(`${baseUrl}/api/sessions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: '다른 요청입니다' }),
+      }),
+    );
+    const cross = await fetch(
+      `${baseUrl}/api/sessions/${other.sessionId}/attachments/${attachmentId}`,
+    );
+    expect(cross.status).toBe(404);
+  });
+
+  it('uploadIds가 문자열 배열이 아니면 거부한다', async () => {
+    const { baseUrl } = await startServer(new ScriptedBackend([]), { attachments: true });
+
+    const res = await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: '요청입니다', uploadIds: 'not-an-array' }),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('세션 조회가 업로드 가능 여부와 상한을 알려준다 — 화면이 미리 고지할 근거', async () => {
+    const { baseUrl } = await startServer(new ScriptedBackend([clarificationResponse]), {
+      attachments: true,
+    });
+    const sessionId = await openClarifyingSession(baseUrl);
+
+    const detail = await json<{
+      uploads: { enabled: boolean; supportedMimes?: string[]; maxPerSession?: number };
+    }>(await fetch(`${baseUrl}/api/sessions/${sessionId}`));
+
+    expect(detail.uploads.enabled).toBe(true);
+    expect(detail.uploads.supportedMimes).toContain('text/plain');
+    expect(detail.uploads.maxPerSession).toBe(DEFAULT_ATTACHMENT_LIMITS.maxPerSession);
   });
 });

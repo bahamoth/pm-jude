@@ -1,8 +1,10 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { createDefaultExtractorRegistry } from '../extract/registry';
 import { AgentSdkBackend } from '../gateway/agent-sdk-backend';
 import { createFakeBackend } from '../gateway/fake-backend';
 import { createDefaultRegistry } from '../prompts/catalog';
+import { AttachmentStore } from '../store/attachment-store';
 import { SessionStore } from '../store/session-store';
 import { createWebServer } from '../web/server';
 
@@ -17,6 +19,11 @@ const dbPath = resolve(
 );
 mkdirSync(dirname(dbPath), { recursive: true });
 const store = SessionStore.open(dbPath);
+
+// 첨부 원본 저장소 (F1-Attach) — 내용 주소 기반이라 세션 DB와 분리해 둔다.
+// 원본에는 삭제 경로가 없다: 보존 기간이 정해지면 그때 일괄 정리한다(PRD §12-20).
+const attachmentsRoot = resolve(process.env.PMJUDE_ATTACHMENTS_PATH ?? './data/attachments');
+mkdirSync(attachmentsRoot, { recursive: true });
 
 const registry = createDefaultRegistry();
 const model = process.env.PMJUDE_MODEL;
@@ -35,6 +42,9 @@ const server = createWebServer({
   },
   teamLanguage: process.env.PMJUDE_TEAM_LANGUAGE ?? 'ko',
   ...(process.env.PMJUDE_MAX_ROUNDS ? { maxRounds: Number(process.env.PMJUDE_MAX_ROUNDS) } : {}),
+  attachmentStore: new AttachmentStore(attachmentsRoot),
+  // 추출기는 러너의 게이트웨이를 받는다 — 이미지 추출도 같은 폭주 상한 아래 놓인다
+  createExtractors: createDefaultExtractorRegistry,
 });
 
 const port = Number(process.env.PMJUDE_WEB_PORT ?? 8787);

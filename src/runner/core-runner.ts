@@ -199,9 +199,12 @@ export interface IntakeRunnerDeps<A> {
   /**
    * 첨부 원본 저장소·추출기 (F1-Attach). 둘 다 없으면 첨부 없는 세션만 도는 구성이 되고,
    * uploadIds가 실려 오면 거부한다 — 자료를 받아 놓고 조용히 버리는 상태를 만들지 않는다.
+   *
+   * 추출기는 팩토리로 받는다: 이미지 추출은 게이트웨이 호출이므로 **러너와 같은 게이트웨이**를
+   * 써야 타임아웃·동시성·비용 로깅이 한 곳에서 걸린다(F14 폭주 방지 상한).
    */
   attachmentStore?: AttachmentStore;
-  extractors?: ExtractorRegistry;
+  createExtractors?: (gateway: LlmGateway) => ExtractorRegistry;
   limits?: AttachmentLimits;
 }
 
@@ -259,6 +262,7 @@ export class IntakeRunner<A> {
   private readonly teamLanguage: string;
   private readonly maxRounds: number;
   private readonly limits: AttachmentLimits;
+  private readonly extractors: ExtractorRegistry | undefined;
 
   constructor(private readonly deps: IntakeRunnerDeps<A>) {
     this.gateway = new LlmGateway({
@@ -269,11 +273,13 @@ export class IntakeRunner<A> {
     this.teamLanguage = deps.teamLanguage ?? 'ko';
     this.maxRounds = deps.maxRounds ?? 3;
     this.limits = deps.limits ?? DEFAULT_ATTACHMENT_LIMITS;
+    // 추출기는 러너의 게이트웨이를 쓴다 — 이미지 추출도 같은 폭주 상한 아래 놓인다
+    this.extractors = deps.createExtractors?.(this.gateway);
   }
 
   /** 첨부를 다룰 수 있는 구성인가 — 어댑터가 업로드 표면을 열지 판단하는 근거. */
   get attachmentsEnabled(): boolean {
-    return this.deps.attachmentStore !== undefined && this.deps.extractors !== undefined;
+    return this.deps.attachmentStore !== undefined && this.extractors !== undefined;
   }
 
   /**
@@ -281,10 +287,10 @@ export class IntakeRunner<A> {
    * 세션이 아직 없으므로 여기서 세션 총량을 볼 수 없고, 그 검사는 참조 시점으로 미룬다.
    */
   validateUpload(input: { mime: string; bytes: number }): void {
-    if (!this.deps.extractors) {
+    if (!this.extractors) {
       throw new UploadRejectedError('이 서버는 자료 첨부를 받지 않는다');
     }
-    if (!this.deps.extractors.supports(input.mime)) {
+    if (!this.extractors.supports(input.mime)) {
       throw new UploadRejectedError(`지원하지 않는 형식이다: ${input.mime}`);
     }
     if (input.bytes > this.limits.maxBytesPerFile) {
@@ -295,7 +301,7 @@ export class IntakeRunner<A> {
 
   /** 요청자에게 「무엇을 올릴 수 있는가」를 알리는 근거 (P-U1 — 제출 후에 알게 하지 않는다). */
   supportedUploadMimes(): string[] {
-    return this.deps.extractors?.supportedMimes() ?? [];
+    return this.extractors?.supportedMimes() ?? [];
   }
 
   /**
@@ -374,7 +380,8 @@ export class IntakeRunner<A> {
    * 자료가 반영됐다고 믿은 채 「정보 부족」을 받는다.
    */
   private async extractPendingAttachments(sessionId: string): Promise<void> {
-    const { store, attachmentStore, extractors } = this.deps;
+    const { store, attachmentStore } = this.deps;
+    const extractors = this.extractors;
     if (!attachmentStore || !extractors) return;
     const attachments = store.listAttachments(sessionId);
     const pending = attachments.filter((row) => row.extractionStatus === 'pending');
