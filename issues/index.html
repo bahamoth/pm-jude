@@ -1278,7 +1278,13 @@
     "created": "2026-07-28",
     "updated": "2026-07-28",
     "body": "설계 근거는 #45. 코드 변경의 첫 단계 — 저장만, 추출·배선 없음.\n\n## 범위\n\n- `attachment` 테이블 — session_id, utterance_id(발화에 붙는다), filename, mime, bytes, sha256, storage_ref, extracted_text(nullable), extraction_status, extractor_version(nullable), created_at\n- `slot_state.evidence_attachment_id` 추가\n- 마이그레이션 — 원본 불변 트리거(삭제·sha256/storage_ref 수정 차단). utterance 불변 트리거(0001)와 동형이되 **extracted_text는 수정 가능**해야 한다 (재추출 전제, #45 결정 3)\n- 파일 스토어 — sha256 주소 저장, 중복 제거. data/ 아래(gitignore 대상)\n- SessionStore API — appendAttachment / listAttachments / setExtraction / findByHash\n- 스테이징 보관과 TTL 정리 (#45 결정 10)\n\n## 수용기준\n\n- 추출 텍스트는 갱신되고 원본 메타는 트리거가 막는다\n- 같은 파일 두 번 업로드 시 저장은 1회\n- exportSessions에 첨부가 포함되되 요청자 식별자는 나가지 않는다 (기존 규약)",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-28",
+        "body": "코드 완료 — 브랜치 docs/attachment-canon (머지 대기).\n\nattachment.utterance_id가 NOT NULL이라 첨부만 단독으로 존재하는 행이 없고, 첨부 시점이 전사 순서에 남는다. 트리거는 원본 메타(session_id·utterance_id·filename·mime·bytes·sha256·storage_ref)의 삭제·수정을 막고 추출 필드만 열어 둔다 — 원문 전사(0001)와 같은 규율이되 재추출이 가능해야 하므로 범위가 다르다.\n\n인테이크 시점에는 세션이 없으므로 staged_upload가 그 구간을 맡고, 발화 제출이 참조하면 attachment로 승격한다. 알 수 없는 uploadId가 하나라도 섞이면 전부 거부 — 올린 자료 중 일부만 조용히 빠지지 않는다.\n\nAttachmentStore는 내용 주소(sha256) 기반이라 재업로드가 저장 1회다. 삭제 API는 두지 않았다: 여러 세션이 같은 내용을 가리킬 수 있어 참조 카운트 없이는 안전하지 않고, 일괄 정리는 보존 기간이 정해진 뒤의 일이다(PRD §12-20). DB 값이라도 경로로 쓰기 전에 루트 안인지 확인한다."
+      }
+    ]
   },
   {
     "id": 47,
@@ -1296,7 +1302,13 @@
     "created": "2026-07-28",
     "updated": "2026-07-28",
     "body": "설계 근거는 #45 결정 5·6·9.\n\n## 범위\n\n- MIME → 추출기 매핑 레지스트리. 미등록 MIME은 명시적 거부(무엇을 지원하는지 알리는 메시지)\n- 추출기 4군\n  - 텍스트류(txt·md·csv·json·log) — 무의존\n  - OOXML(docx·xlsx·pptx) — zip 해제 1개 의존성으로 3종 공통\n  - PDF — 텍스트 레이어. 텍스트가 없는 스캔본은 추출 실패로 분류한다(무음 통과 금지)\n  - 이미지(png·jpg·webp) — `attachment-extraction@0.1.0` 게이트웨이 호출로 서술 텍스트. SVG는 허용 타입 제외(#45 결정 13)\n- 추출기마다 버전 문자열을 갖고 attachment 행에 기록 (#45 결정 4)\n- 실패는 예외가 아니라 결과 — status와 사유를 남기고 호출자가 진행 여부를 정한다 (#45 결정 9)\n\n## 수용기준\n\n- 추출기 추가가 레지스트리 등록 한 줄\n- 각 군의 실패 모드(암호화·손상·빈 텍스트 레이어)가 사유와 함께 분류된다\n- attachment-extraction은 내부 판정이므로 Jude의 목소리를 쓰지 않는다 (ADR-0010)",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-28",
+        "body": "코드 완료 — 브랜치 docs/attachment-canon (머지 대기).\n\nMIME→추출기 레지스트리 + 4군(텍스트·OOXML·PDF·이미지). 미등록 MIME은 조용한 실패가 아니라 예외다 — best-effort로 아무 파일이나 긁으면 쓰레기 추출물이 판정을 오염시키고 실패 원인을 추출 결함과 프롬프트 결함으로 가를 수 없게 된다(F13 전제).\n\n빈 결과를 성공으로 통과시키지 않는다: 스캔본 PDF·내용 없는 docx·바이너리가 섞인 텍스트는 전부 사유를 단 실패다. OOXML 3종은 zip+XML이라 하나로 다루되 표의 행·셀 경계는 지킨다 — 셀이 한 줄로 뭉개지면 어느 컬럼의 값인지가 사라진다.\n\n**ADR-0011 결정 3을 보정했다**: 「원본 블록으로 모델에 전달되지 않는다」는 파이프라인 호출의 규율이고, 이미지가 모델에 닿는 지점은 추출 호출 하나다. 그 예외 없이는 이미지 지원이 성립하지 않으며, 예외는 게이트웨이 안에 갇힌다.\n\n의존성 2건 추가: fflate(zip), unpdf(PDF 텍스트 레이어)."
+      }
+    ]
   },
   {
     "id": 48,
@@ -1315,7 +1327,13 @@
     "created": "2026-07-28",
     "updated": "2026-07-28",
     "body": "설계 근거는 #45 결정 1·2·7·8·11·12. 상태 머신은 건드리지 않는다.\n\n## 범위\n\n- `IntakeEvent`에 첨부 참조 — 채널 무관 계약. 웹은 #49에서, Slack 어댑터 배선은 #8 후순위 유지\n- `buildConversation()`이 발화별 첨부를 조립 — 첨부는 발화와 **구분되어** 실린다(요청자 발화로 오귀속 금지)\n- 라운드 백그라운드의 첫 단계로 추출 실행. 실패 시 고지 후 진행(P-U3)\n- 세션당 추출 텍스트 총량 상한 검사 — 초과는 업로드 시점 거부(#49가 호출)\n- 완결성 판정 결과의 슬롯 근거가 첨부면 evidence_attachment_id 기록\n- 신호 — attachment_uploaded / attachment_extracted / attachment_extraction_failed. payload에 extractor_version·mime·bytes (5축은 그대로)\n- 프롬프트 개정 3종\n  - `clarification@0.3.0` — 자료에 이미 답이 있는 항목은 묻지 않는다\n  - `completeness@0.2.0` — 첨부 근거 슬롯 판정과 출처 귀속\n  - `requirements@0.2.0` — 첨부 유래 확정 사항을 문서 문장으로 흡수, 첨부는 참고용 목록으로 동봉\n  - promotion은 컨텍스트만 늘어나므로 본문 무변경\n\n## 수용기준\n\n- 첨부 추가가 왕복 상한을 소비하지 않는다\n- 첨부 유래 슬롯 값이 발화 유래와 구분되어 조회에 실린다\n- 첨부를 지워도 문서만으로 구현 가능한 상태 — 흡수 누락이 없다 (ADR-0002, F4 역주입과 같은 규율)",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-28",
+        "body": "코드 완료 — 브랜치 docs/attachment-canon (머지 대기).\n\n상태 머신 무변경으로 얹혔다 — 첨부가 발화에 붙으므로 라운드 정합·왕복 상한·동시성 규칙이 그대로고, 추출은 상태가 아니라 라운드 백그라운드의 첫 단계다. 자료를 더 붙여도 라운드를 소비하지 않는다.\n\n추출 텍스트는 발화와 **구분되어** 실린다. 요청 원문에 이어 붙이면 판정이 요청자가 한 말로 오귀속해 출처 추적이 성립하지 않는다. 첨부는 UUID가 아니라 짧은 참조(A1)로 오가고 되돌리는 것은 코어 몫이다.\n\n상한 셋 중 둘은 거부하고 하나는 실패로 남긴다: 추출 텍스트 총량은 추출 전에 알 수 없으므로 초과분을 사유와 함께 실패로 기록한다. 조용히 잘리면 요청자는 자료가 반영됐다고 믿은 채 「정보 부족」을 받는다.\n\n프롬프트 3종 개정(clarification@0.3.0 · completeness@0.2.0 · requirements@0.2.0), promotion은 컨텍스트만 늘어 본문 무변경. 신호 3종 신설."
+      }
+    ]
   },
   {
     "id": 49,
@@ -1333,7 +1351,13 @@
     "created": "2026-07-28",
     "updated": "2026-07-28",
     "body": "설계 근거는 #45 결정 9·10·13.\n\n## 범위\n\n- `POST /api/uploads` — raw body 단건(파일명·MIME은 헤더). multipart 파서를 들이지 않는다. 검증(타입·크기·세션 총량)은 여기서 동기 수행하고 즉시 거부\n- 인테이크·답변·슬롯 정정 본문에 `uploadIds` 참조. 참조 시점에 attachment로 승격, 미참조는 TTL 정리\n- `GET /api/sessions/:id/attachments/:aid` — Content-Disposition: attachment + X-Content-Type-Options: nosniff 강제, 세션 스코프\n- SSE 단계 메시지에 「자료를 읽고 있어요」 추가. inFlight·수명 규칙은 그대로\n- 기존 MAX_BODY_BYTES(1MB)는 JSON 경로용으로 유지하고 업로드 경로는 별도 상한\n\n## 수용기준\n\n- 접수 응답이 추출을 기다리지 않는다 (F1 3초)\n- 거부는 무엇이 왜 거부됐는지 요청자 언어로 말한다\n- 처리 중(inFlight) 세션에도 업로드 자체는 가능하다 — 업로드는 세션 상태를 건드리지 않는다",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-28",
+        "body": "코드 완료 — 브랜치 docs/attachment-canon (머지 대기).\n\nPOST /api/uploads가 raw body 단건을 받는다 — multipart 파서를 들이지 않는 대신 파일 하나가 요청 하나이고, 그래서 거부도 건별로 나뉜다. 상한 초과는 Content-Length에서 먼저 끊고 헤더가 거짓이면 읽되 버퍼에 쌓지 않는다. **소켓을 죽이지는 않는다**: 연결을 끊으면 거부 사유가 요청자에게 닿지 못해 알 수 없는 실패가 된다.\n\n다운로드는 octet-stream + Content-Disposition: attachment + nosniff, 세션 스코프다. 첨부는 요청자가 올린 임의의 파일이므로 표시 대상이 아니라 내려받기 대상이다.\n\n추출기를 팩토리로 받도록 고쳤다 — 이미지 추출은 게이트웨이 호출이므로 러너와 같은 게이트웨이를 써야 타임아웃·동시성·비용 로깅이 한 곳에서 걸린다(F14). 별도 인스턴스면 폭주 상한이 둘로 갈린다."
+      }
+    ]
   },
   {
     "id": 50,
@@ -1351,7 +1375,13 @@
     "created": "2026-07-28",
     "updated": "2026-07-28",
     "body": "설계 근거는 #45 결정 8·11. trace 확장은 AGENTS.md 상시 지시(세션 저장소 쓰기를 늘리면 src/trace/가 렌더해야 한다).\n\n## 범위\n\n- 인테이크 폼 — 파일 첨부 영역, 지원 형식·상한 고지, 건별 진행·거부 표시\n- 명확화 마법사 — 답변에 자료 붙이기. 「모르겠다」와 나란한 경로가 아니라 답변 보조\n- 대기 카드 — 「자료를 읽고 있어요」 단계\n- 문서 화면 — 첨부 목록(참고용, 구현 근거는 문서), 슬롯 확인 카드에 「자료에서 읽은 값」 출처 배지\n- 추출 실패 고지 — 진행을 막지 않되 무엇을 못 읽었는지 알린다\n- trace 뷰어 — 첨부·추출 상태·신규 신호 3종 렌더 + tests/trace.test.ts\n\n## 수용기준\n\n- 요청자가 자기가 말하지 않은 슬롯 값의 출처를 화면에서 알 수 있다\n- 첨부 있는 세션이 trace에서 누락 없이 보인다\n- 화면 언어는 요청자 언어 (chrome 다국어 G-8은 이연 상태 유지)",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-28",
+        "body": "코드 완료 — 브랜치 docs/attachment-canon (머지 대기).\n\n요청자가 입력을 넣는 지점이면 어디서든 같은 컴포넌트를 쓴다. 자료는 답변을 보조하는 수단이지 「모르겠다」와 나란한 제3의 경로가 아니라, 마법사 아래에 놓고 제출과 함께 보낸다. 세션 없는 인테이크 폼도 정책을 물을 수 있도록 GET /api/uploads를 열었다.\n\n슬롯 확인 카드가 첨부 유래 값의 출처를 적는다 — 요청자가 말한 적 없는 값이므로 어디서 왔는지 보여야 확인이 판단 가능한 물음이 된다. 문서 화면의 첨부 목록은 원문 전사와 같은 지위이고, 읽지 못한 자료도 사유와 함께 남는다.\n\ntrace 뷰어에 attachmentCounts 요약·세션별 첨부 표·슬롯 근거 열을 더했다(AGENTS.md 상시 지시). 추출 실패가 쌓이는 것이 F13에서 추출기를 고칠 신호이므로 사유를 깎지 않는다.\n\n검증: 백엔드 175 + web-ui 26 테스트, 타입·린트·포맷 통과."
+      }
+    ]
   }
 ]
 </script>
