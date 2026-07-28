@@ -1,10 +1,10 @@
 import type { PromptRegistry } from '../prompts/registry';
 import {
   ATTACHMENT_EXTRACTION_V0,
-  CLARIFICATION_V1,
-  COMPLETENESS_V0,
+  CLARIFICATION_V2,
+  COMPLETENESS_V1,
   PROMOTION_V0,
-  REQUIREMENTS_V0,
+  REQUIREMENTS_V1,
 } from '../prompts/catalog';
 import type { BackendRequest, BackendResponse, LlmBackend } from './backend';
 
@@ -16,10 +16,10 @@ import type { BackendRequest, BackendResponse, LlmBackend } from './backend';
  * 시나리오: 1라운드 답변까지는 미정제(다음 라운드 유도), 2번째 답변부터 정제 완료.
  */
 export function createFakeBackend(registry: PromptRegistry): LlmBackend {
-  const clarificationBody = registry.get(CLARIFICATION_V1).body;
-  const completenessBody = registry.get(COMPLETENESS_V0).body;
+  const clarificationBody = registry.get(CLARIFICATION_V2).body;
+  const completenessBody = registry.get(COMPLETENESS_V1).body;
   const promotionBody = registry.get(PROMOTION_V0).body;
-  const requirementsBody = registry.get(REQUIREMENTS_V0).body;
+  const requirementsBody = registry.get(REQUIREMENTS_V1).body;
   const extractionBody = registry.get(ATTACHMENT_EXTRACTION_V0).body;
 
   const clarification = JSON.stringify({
@@ -46,11 +46,28 @@ export function createFakeBackend(registry: PromptRegistry): LlmBackend {
     ],
   });
 
+  const fromConversation = { source: 'conversation' as const };
+
   const unrefined = JSON.stringify({
     slots: [
-      { slotKey: 'target-user', verdict: 'filled', rationale: '대상 사용자를 확답함' },
-      { slotKey: 'purpose', verdict: 'unfilled', rationale: '해결하려는 문제가 아직 불명' },
-      { slotKey: 'data-source', verdict: 'unfilled', rationale: '데이터 출처 답이 없음' },
+      {
+        slotKey: 'target-user',
+        verdict: 'filled',
+        rationale: '대상 사용자를 확답함',
+        evidence: fromConversation,
+      },
+      {
+        slotKey: 'purpose',
+        verdict: 'unfilled',
+        rationale: '해결하려는 문제가 아직 불명',
+        evidence: fromConversation,
+      },
+      {
+        slotKey: 'data-source',
+        verdict: 'unfilled',
+        rationale: '데이터 출처 답이 없음',
+        evidence: fromConversation,
+      },
     ],
     remainingAmbiguities: ['해결하려는 문제의 범위'],
     rubric: { score: 45, rationale: '핵심 슬롯이 비어 있음' },
@@ -58,12 +75,49 @@ export function createFakeBackend(registry: PromptRegistry): LlmBackend {
 
   const refined = JSON.stringify({
     slots: [
-      { slotKey: 'target-user', verdict: 'filled', rationale: '대상 사용자를 확답함' },
-      { slotKey: 'purpose', verdict: 'filled', rationale: '해결하려는 문제를 확답함' },
+      {
+        slotKey: 'target-user',
+        verdict: 'filled',
+        rationale: '대상 사용자를 확답함',
+        evidence: fromConversation,
+      },
+      {
+        slotKey: 'purpose',
+        verdict: 'filled',
+        rationale: '해결하려는 문제를 확답함',
+        evidence: fromConversation,
+      },
       {
         slotKey: 'data-source',
         verdict: 'promoted',
         rationale: '요청자가 「모르겠어요 — 개발팀이 정해 주세요」를 택함',
+        evidence: fromConversation,
+      },
+    ],
+    remainingAmbiguities: [],
+    rubric: { score: 90, rationale: '핵심 슬롯 모두 해소' },
+  });
+
+  /** 자료가 붙은 세션의 첫 판정 — 첫 슬롯을 첨부에서 읽은 것으로 돌려준다 (출처 표시 데모). */
+  const refinedWithAttachment = JSON.stringify({
+    slots: [
+      {
+        slotKey: 'target-user',
+        verdict: 'filled',
+        rationale: '올려주신 자료에 대상 사용자가 적혀 있음',
+        evidence: { source: 'attachment', attachmentRef: 'A1' },
+      },
+      {
+        slotKey: 'purpose',
+        verdict: 'filled',
+        rationale: '해결하려는 문제를 확답함',
+        evidence: fromConversation,
+      },
+      {
+        slotKey: 'data-source',
+        verdict: 'promoted',
+        rationale: '요청자가 「모르겠어요 — 개발팀이 정해 주세요」를 택함',
+        evidence: fromConversation,
       },
     ],
     remainingAmbiguities: [],
@@ -124,9 +178,11 @@ export function createFakeBackend(registry: PromptRegistry): LlmBackend {
         return Promise.resolve({ outputText: clarification, usage });
       }
       if (request.promptBody === completenessBody) {
-        const conversation = (request.input as { conversation?: unknown[] }).conversation ?? [];
+        const input = request.input as { conversation?: unknown[]; attachments?: unknown[] };
+        const conversation = input.conversation ?? [];
+        if (conversation.length < 2) return Promise.resolve({ outputText: unrefined, usage });
         return Promise.resolve({
-          outputText: conversation.length < 2 ? unrefined : refined,
+          outputText: input.attachments?.length ? refinedWithAttachment : refined,
           usage,
         });
       }

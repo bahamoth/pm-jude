@@ -2,6 +2,7 @@ import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { BackendRequest, BackendResponse, LlmBackend } from '../src/gateway/backend';
 import { createDefaultRegistry } from '../src/prompts/catalog';
+import { slot } from './slot-fixture';
 import { SessionStore } from '../src/store/session-store';
 import { createWebServer } from '../src/web/server';
 
@@ -64,13 +65,9 @@ const clarificationResponse = JSON.stringify({
 
 const refinedCompletenessResponse = JSON.stringify({
   slots: [
-    { slotKey: 'target-user', verdict: 'filled', rationale: '「영업팀 매니저」라고 확답' },
-    { slotKey: 'purpose', verdict: 'filled', rationale: '수작업 집계 제거라고 답함' },
-    {
-      slotKey: 'data-source',
-      verdict: 'promoted',
-      rationale: '요청자가 「모르겠어요 — 개발팀이 정해 주세요」를 택함',
-    },
+    slot('target-user', 'filled', '「영업팀 매니저」라고 확답'),
+    slot('purpose', 'filled', '수작업 집계 제거라고 답함'),
+    slot('data-source', 'promoted', '요청자가 「모르겠어요 — 개발팀이 정해 주세요」를 택함'),
   ],
   remainingAmbiguities: [],
   rubric: { score: 90, rationale: '핵심 슬롯 모두 해소' },
@@ -78,9 +75,9 @@ const refinedCompletenessResponse = JSON.stringify({
 
 const unrefinedCompletenessResponse = JSON.stringify({
   slots: [
-    { slotKey: 'target-user', verdict: 'filled', rationale: '「영업팀 매니저」라고 확답' },
-    { slotKey: 'purpose', verdict: 'unfilled', rationale: '어떤 문제를 푸는지 답이 없음' },
-    { slotKey: 'data-source', verdict: 'unfilled', rationale: '데이터 출처 답이 없음' },
+    slot('target-user', 'filled', '「영업팀 매니저」라고 확답'),
+    slot('purpose', 'unfilled', '어떤 문제를 푸는지 답이 없음'),
+    slot('data-source', 'unfilled', '데이터 출처 답이 없음'),
   ],
   remainingAmbiguities: ['해결하려는 문제가 불명'],
   rubric: { score: 35, rationale: '핵심이 비어 있음' },

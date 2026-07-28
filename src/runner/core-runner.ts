@@ -1,18 +1,18 @@
 import type { LlmBackend } from '../gateway/backend';
 import { LlmGateway, type UsageLogger } from '../gateway/gateway';
 import {
-  CLARIFICATION_V1,
-  COMPLETENESS_V0,
+  CLARIFICATION_V2,
+  COMPLETENESS_V1,
   PROMOTION_V0,
-  REQUIREMENTS_V0,
+  REQUIREMENTS_V1,
 } from '../prompts/catalog';
 import type { ClarificationOutput } from '../prompts/clarification-v0';
 import {
   COMPLETENESS_RUBRIC_V0,
   judgeCompleteness,
   runRuleLayer,
-  type CompletenessOutput,
 } from '../prompts/completeness-v0';
+import type { CompletenessV1Output } from '../prompts/completeness-v1';
 import type { PromotionOutput } from '../prompts/promotion-v0';
 import {
   assembleRequirementsDocument,
@@ -20,7 +20,9 @@ import {
   type RequirementsOutput,
 } from '../prompts/requirements-v0';
 import type { PromptRegistry } from '../prompts/registry';
+import type { AttachmentStore } from '../store/attachment-store';
 import type { SessionStore } from '../store/session-store';
+import { UnsupportedMimeError, type ExtractorRegistry } from '../extract/registry';
 
 /**
  * #10(필수 슬롯 초안, ←#9 소급 분석) 전까지 개발용으로 쓰는 임시 슬롯 목록.
@@ -34,13 +36,13 @@ export const TEMP_REQUIRED_SLOTS = [
 
 /** 카탈로그의 프롬프트 버전과 임시 임계치·슬롯 스키마를 DB 버전 레지스트리에 아이덤포턴트하게 동기화한다. */
 export function ensureVersionAxes(store: SessionStore, registry: PromptRegistry) {
-  const clarification = registry.get(CLARIFICATION_V1);
+  const clarification = registry.get(CLARIFICATION_V2);
   const promptVersionId =
     store.findVersionId('prompt', clarification.name, clarification.semver) ??
     store.registerPromptVersion({
       name: clarification.name,
       semver: clarification.semver,
-      bodyRef: 'src/prompts/clarification-v0.ts',
+      bodyRef: 'src/prompts/clarification-v2.ts',
       regressionPassed: clarification.regressionPassed,
     });
   const thresholdVersionId =
@@ -93,7 +95,35 @@ export interface IntakeEvent<A> {
   text: string;
   /** 명시 요청자 언어 (웹 간이 식별). 없으면 발화 문자로 감지한다. */
   language?: 'ko' | 'en';
+  /**
+   * 이 발화에 붙일 스테이징 업로드 (F1-Attach, ADR-0011 결정 2).
+   * 채널 무관 계약이다 — 웹은 uploadId를, Slack 어댑터는 내려받은 파일을 같은 형태로 넘긴다.
+   */
+  uploadIds?: string[];
 }
+
+/**
+ * 첨부 상한 (F1-Attach) — 수치는 전부 결정 대기다(PRD §12-19). 아래 값은 상한이 동작하는지
+ * 확인하기 위한 자리이며, 운영자 결정이 나오면 교체한다.
+ *
+ * 파일당 크기와 개수는 참조 시점에 거부할 수 있지만, **추출 텍스트 총량은 추출 전에 알 수 없다**.
+ * 그래서 총량 초과분은 추출하지 않고 사유를 단 실패로 남긴다 — 요청자는 무엇이 왜 반영되지
+ * 않았는지 알게 되고, 조용히 잘려 「정보 부족」 보류로 끝나는 경로가 생기지 않는다.
+ */
+export interface AttachmentLimits {
+  maxBytesPerFile: number;
+  maxPerSession: number;
+  maxSessionTextChars: number;
+}
+
+export const DEFAULT_ATTACHMENT_LIMITS: AttachmentLimits = {
+  maxBytesPerFile: 20 * 1024 * 1024,
+  maxPerSession: 10,
+  maxSessionTextChars: 200_000,
+};
+
+/** 업로드 검증 실패 — 어댑터가 사유를 요청자에게 그대로 전한다. */
+export class UploadRejectedError extends Error {}
 
 export interface ReplyOutcome {
   sessionId: string;
@@ -113,10 +143,20 @@ function nonEmptyText(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
-/** 요청 원문 + Q/A 쌍 — LLM 호출 3종이 함께 받는 대화 맥락 (무상태 게이트웨이, F14). */
+/** 첨부 하나가 LLM 입력에 실리는 형태 — UUID가 아니라 짧은 참조로 오간다 (ADR-0011). */
+interface AttachmentContext {
+  ref: string;
+  filename: string;
+  text: string;
+}
+
+/** 요청 원문 + Q/A 쌍 + 첨부 — LLM 호출들이 함께 받는 맥락 (무상태 게이트웨이, F14). */
 interface ConversationContext {
   request: string;
   conversation: Array<{ question: string; answer: string }>;
+  attachments: AttachmentContext[];
+  /** ref → attachment.id. 판정이 돌려준 참조를 실제 첨부로 되돌린다 — LLM 입력에는 싣지 않는다. */
+  attachmentIdByRef: Map<string, string>;
 }
 
 /**
@@ -156,6 +196,13 @@ export interface IntakeRunnerDeps<A> {
   teamLanguage?: string;
   /** 명확화 왕복 상한 — 수치는 PoC 중 확정 (PRD §12). 기본 3. */
   maxRounds?: number;
+  /**
+   * 첨부 원본 저장소·추출기 (F1-Attach). 둘 다 없으면 첨부 없는 세션만 도는 구성이 되고,
+   * uploadIds가 실려 오면 거부한다 — 자료를 받아 놓고 조용히 버리는 상태를 만들지 않는다.
+   */
+  attachmentStore?: AttachmentStore;
+  extractors?: ExtractorRegistry;
+  limits?: AttachmentLimits;
 }
 
 function formatQuestions(output: ClarificationOutput, language: 'ko' | 'en'): string {
@@ -211,6 +258,7 @@ export class IntakeRunner<A> {
   private readonly gateway: LlmGateway;
   private readonly teamLanguage: string;
   private readonly maxRounds: number;
+  private readonly limits: AttachmentLimits;
 
   constructor(private readonly deps: IntakeRunnerDeps<A>) {
     this.gateway = new LlmGateway({
@@ -220,6 +268,34 @@ export class IntakeRunner<A> {
     });
     this.teamLanguage = deps.teamLanguage ?? 'ko';
     this.maxRounds = deps.maxRounds ?? 3;
+    this.limits = deps.limits ?? DEFAULT_ATTACHMENT_LIMITS;
+  }
+
+  /** 첨부를 다룰 수 있는 구성인가 — 어댑터가 업로드 표면을 열지 판단하는 근거. */
+  get attachmentsEnabled(): boolean {
+    return this.deps.attachmentStore !== undefined && this.deps.extractors !== undefined;
+  }
+
+  /**
+   * 업로드를 받기 전 검증 (F1-Attach) — 세션과 무관한 검사만 한다. 인테이크 시점에는
+   * 세션이 아직 없으므로 여기서 세션 총량을 볼 수 없고, 그 검사는 참조 시점으로 미룬다.
+   */
+  validateUpload(input: { mime: string; bytes: number }): void {
+    if (!this.deps.extractors) {
+      throw new UploadRejectedError('이 서버는 자료 첨부를 받지 않는다');
+    }
+    if (!this.deps.extractors.supports(input.mime)) {
+      throw new UploadRejectedError(`지원하지 않는 형식이다: ${input.mime}`);
+    }
+    if (input.bytes > this.limits.maxBytesPerFile) {
+      const mb = Math.floor(this.limits.maxBytesPerFile / (1024 * 1024));
+      throw new UploadRejectedError(`파일 하나는 ${String(mb)}MB까지 올릴 수 있다`);
+    }
+  }
+
+  /** 요청자에게 「무엇을 올릴 수 있는가」를 알리는 근거 (P-U1 — 제출 후에 알게 하지 않는다). */
+  supportedUploadMimes(): string[] {
+    return this.deps.extractors?.supportedMimes() ?? [];
   }
 
   /**
@@ -239,7 +315,7 @@ export class IntakeRunner<A> {
       ...versionAxes,
     });
     const language = this.languageOf(event);
-    store.appendUtterance({
+    const utterance = store.appendUtterance({
       sessionId: session.id,
       authorType: 'requester',
       ...(event.authorId !== undefined ? { authorId: event.authorId } : {}),
@@ -247,9 +323,128 @@ export class IntakeRunner<A> {
       originalText: event.text,
       originalLanguage: language,
     });
-    // 접수 확인은 LLM 호출보다 먼저 나간다 (F1 수용기준 — 즉시 확인 응답)
+    this.attachUploads(session.id, utterance.id, event);
+    // 접수 확인은 LLM 호출보다 먼저 나간다 (F1 수용기준 — 즉시 확인 응답).
+    // 첨부가 있어도 마찬가지다: 검증은 업로드 때 끝났고 읽는 일은 접수 뒤로 미룬다.
     await this.deps.port.post(event.address, MESSAGES[language].ack);
     return { sessionId: session.id, existing: false };
+  }
+
+  /**
+   * 발화에 업로드를 붙인다 (ADR-0011 결정 2). 세션이 확정된 시점이라 개수 상한을 여기서 본다.
+   * 첨부를 다루지 못하는 구성인데 uploadIds가 실려 오면 거부한다 — 받아 놓고 버리지 않는다.
+   */
+  private attachUploads(sessionId: string, utteranceId: string, event: IntakeEvent<A>): void {
+    const uploadIds = event.uploadIds ?? [];
+    if (uploadIds.length === 0) return;
+    if (!this.attachmentsEnabled) {
+      throw new UploadRejectedError('이 서버는 자료 첨부를 받지 않는다');
+    }
+    const { store } = this.deps;
+    const existing = store.listAttachments(sessionId).length;
+    if (existing + uploadIds.length > this.limits.maxPerSession) {
+      throw new UploadRejectedError(
+        `요청 하나에 자료는 ${String(this.limits.maxPerSession)}개까지 붙일 수 있다`,
+      );
+    }
+    const created = store.promoteUploads({ sessionId, utteranceId, uploadIds });
+    const session = store.getSession(sessionId);
+    if (!session) return;
+    for (const attachment of created) {
+      store.recordSignal({
+        sessionId,
+        type: 'attachment_uploaded',
+        payload: {
+          attachmentId: attachment.id,
+          mime: attachment.mime,
+          bytes: attachment.bytes,
+        },
+        modelVersion: this.deps.modelVersion,
+        ...this.versionAxesOf(session),
+      });
+    }
+  }
+
+  /**
+   * 아직 읽지 않은 첨부를 읽는다 — 라운드 백그라운드의 첫 단계다 (ADR-0011 결정 9).
+   * 새 세션 상태를 만들지 않으므로 동시성·SSE·재시도 계약이 그대로 적용된다.
+   *
+   * 실패는 라운드를 죽이지 않는다(P-U3). 세션 텍스트 총량을 넘어서는 첨부도 실패로 남긴다 —
+   * 추출 전에는 길이를 알 수 없어 업로드 시점에 거부할 수 없고, 조용히 버리면 요청자는
+   * 자료가 반영됐다고 믿은 채 「정보 부족」을 받는다.
+   */
+  private async extractPendingAttachments(sessionId: string): Promise<void> {
+    const { store, attachmentStore, extractors } = this.deps;
+    if (!attachmentStore || !extractors) return;
+    const attachments = store.listAttachments(sessionId);
+    const pending = attachments.filter((row) => row.extractionStatus === 'pending');
+    if (pending.length === 0) return;
+    const session = store.getSession(sessionId);
+    if (!session) return;
+    const versionAxes = this.versionAxesOf(session);
+    let usedChars = attachments.reduce((sum, row) => sum + (row.extractedText?.length ?? 0), 0);
+
+    for (const row of pending) {
+      let outcome: { status: 'ok' | 'failed'; text?: string; error?: string; version: string };
+      try {
+        const result = await extractors.extract({
+          bytes: attachmentStore.read(row.storageRef),
+          filename: row.filename,
+          mime: row.mime,
+        });
+        outcome = { ...result, version: result.extractorVersion };
+      } catch (error) {
+        // 미등록 MIME이 여기 오는 것은 업로드 검증이 뚫렸다는 뜻이다 — 사유를 남겨 드러낸다
+        const message =
+          error instanceof UnsupportedMimeError
+            ? `업로드 검증을 통과했지만 추출기가 없다: ${row.mime}`
+            : `원본을 읽지 못했다: ${error instanceof Error ? error.message : String(error)}`;
+        outcome = { status: 'failed', error: message, version: 'none' };
+      }
+
+      if (
+        outcome.status === 'ok' &&
+        usedChars + (outcome.text?.length ?? 0) > this.limits.maxSessionTextChars
+      ) {
+        outcome = {
+          status: 'failed',
+          error: '이 요청에 담을 수 있는 자료 분량을 넘었다',
+          version: outcome.version,
+        };
+      }
+
+      if (outcome.status === 'ok') {
+        usedChars += outcome.text?.length ?? 0;
+        store.setExtraction({
+          id: row.id,
+          status: 'ok',
+          extractedText: outcome.text ?? '',
+          extractorVersion: outcome.version,
+        });
+      } else {
+        store.setExtraction({
+          id: row.id,
+          status: 'failed',
+          extractionError: outcome.error ?? '알 수 없는 실패',
+          extractorVersion: outcome.version,
+        });
+      }
+      store.recordSignal({
+        sessionId,
+        type: outcome.status === 'ok' ? 'attachment_extracted' : 'attachment_extraction_failed',
+        payload: {
+          attachmentId: row.id,
+          mime: row.mime,
+          // 추출기 버전은 신호 payload에 남는다 — 버전 축은 5축을 유지한다 (ADR-0011 결정 5)
+          extractorVersion: outcome.version,
+          ...(outcome.status === 'ok'
+            ? { textLength: outcome.text?.length ?? 0 }
+            : { error: outcome.error }),
+        },
+        modelVersion: this.deps.modelVersion,
+        ...versionAxes,
+      });
+    }
   }
 
   /**
@@ -259,6 +454,8 @@ export class IntakeRunner<A> {
   async startClarification(event: IntakeEvent<A>): Promise<void> {
     const session = this.deps.store.findSessionByThreadKey(event.threadKey);
     if (!session || (session.status !== 'intake' && session.status !== 'clarifying')) return;
+    // 자료를 먼저 읽는다 — 읽지 않은 채 질문을 만들면 자료에 있는 것을 되묻게 된다
+    await this.extractPendingAttachments(session.id);
     await this.runClarificationRound(session.id, event, this.sessionLanguageOf(session.id, event));
   }
 
@@ -343,7 +540,7 @@ export class IntakeRunner<A> {
       ? this.languageOf(event)
       : this.sessionLanguageOf(session.id, event);
     if (options.appendUtterance) {
-      store.appendUtterance({
+      const utterance = store.appendUtterance({
         sessionId: session.id,
         authorType: 'requester',
         ...(event.authorId !== undefined ? { authorId: event.authorId } : {}),
@@ -351,24 +548,33 @@ export class IntakeRunner<A> {
         originalText: event.text,
         originalLanguage: language,
       });
+      this.attachUploads(session.id, utterance.id, event);
     }
+    // 판정 전에 자료를 읽는다 — 방금 붙인 것도 이 라운드의 근거가 되어야 한다
+    await this.extractPendingAttachments(session.id);
 
     const versionAxes = this.versionAxesOf(session);
     const context = this.buildConversation(session.id);
-    const completeness = await this.gateway.complete<CompletenessOutput>(COMPLETENESS_V0, {
-      ...context,
+    const completeness = await this.gateway.complete<CompletenessV1Output>(COMPLETENESS_V1, {
+      request: context.request,
+      conversation: context.conversation,
+      attachments: context.attachments,
       teamLanguage: this.teamLanguage,
       requiredSlots: TEMP_REQUIRED_SLOTS,
     });
 
     // LLM 슬롯 판정을 세션 슬롯 상태로 반영 — 승격 트리거 (F2c, US-10).
     // 판정 근거를 value로 영속해 슬롯 단위 확인 카드(F3)의 표시 텍스트로 쓴다.
+    // 첨부에서 읽은 값은 출처를 함께 남긴다 — 요청자가 말한 적 없는 값이라 확인 화면이
+    // 어디서 왔는지 보여줘야 「맞아요 / 아니에요」가 판단 가능한 물음이 된다 (ADR-0011 결정 8).
     for (const slot of completeness.output.slots) {
+      const attachmentId = this.attachmentIdOf(slot.evidence, context);
       store.setSlotState({
         sessionId: session.id,
         slotKey: slot.slotKey,
         state: slot.verdict,
         value: slot.rationale,
+        ...(attachmentId ? { evidenceAttachmentId: attachmentId } : {}),
       });
     }
     const rule = runRuleLayer({
@@ -502,7 +708,10 @@ export class IntakeRunner<A> {
     if (unfilled.length === 0) return 'deliver';
 
     const result = await this.gateway.complete<PromotionOutput>(PROMOTION_V0, {
-      ...context,
+      request: context.request,
+      conversation: context.conversation,
+      // promotion은 본문이 바뀌지 않았다 — 첨부는 컨텍스트만 늘린다 (ADR-0011 결정 12)
+      attachments: context.attachments,
       teamLanguage: this.teamLanguage,
       unfilledSlots: unfilled.map((slot) => ({
         key: slot.key,
@@ -644,13 +853,15 @@ export class IntakeRunner<A> {
     const stateBySlot = new Map(
       store.listSlotStates(sessionId).map((slot) => [slot.slotKey, slot.state]),
     );
-    const result = await this.gateway.complete<ClarificationOutput>(CLARIFICATION_V1, {
+    const result = await this.gateway.complete<ClarificationOutput>(CLARIFICATION_V2, {
       request,
       requesterLanguage: language,
       requiredSlots: TEMP_REQUIRED_SLOTS.map((slot) => ({
         ...slot,
         state: stateBySlot.get(slot.key) === 'filled' ? 'filled' : 'unfilled',
       })),
+      // 자료를 함께 준다 — 이미 답이 있는 것을 되물으면 첨부가 왕복을 늘리는 셈이 된다
+      attachments: this.buildConversation(sessionId).attachments,
     });
 
     for (const question of result.output.questions) {
@@ -700,7 +911,7 @@ export class IntakeRunner<A> {
   private async deliverDocument(
     sessionId: string,
     event: IntakeEvent<A>,
-    completeness: CompletenessOutput,
+    completeness: CompletenessV1Output,
     context: ConversationContext,
     options: { conditional: boolean } = { conditional: false },
   ): Promise<void> {
@@ -725,11 +936,13 @@ export class IntakeRunner<A> {
           `${slot.slotKey} 확정 필요`,
       }));
 
-    const result = await this.gateway.complete<RequirementsOutput>(REQUIREMENTS_V0, {
+    const result = await this.gateway.complete<RequirementsOutput>(REQUIREMENTS_V1, {
       request: context.request,
       teamLanguage: this.teamLanguage,
       clarifications: context.conversation,
       promotedSlots: promotedSlots.map(({ slotKey, question }) => ({ key: slotKey, question })),
+      // 자료에서 확정된 것은 문서 문장으로 흡수된다 — 첨부를 지워도 구현 가능해야 한다 (원칙 7)
+      attachments: context.attachments,
     });
     const doc = assembleRequirementsDocument({
       output: result.output,
@@ -790,7 +1003,12 @@ export class IntakeRunner<A> {
     };
   }
 
-  /** 전사에서 요청 원문과 Q/A 쌍을 조립한다 — 게이트웨이 호출은 무상태이므로 매번 저장소에서 만든다 (F14). */
+  /**
+   * 전사에서 요청 원문·Q/A 쌍·첨부를 조립한다 — 게이트웨이 호출은 무상태이므로 매번 저장소에서
+   * 만든다 (F14). 첨부는 **발화와 구분되어** 실린다: 추출 텍스트를 요청자 발화에 이어 붙이면
+   * 판정이 그것을 요청자가 한 말로 오귀속해 출처 추적이 성립하지 않는다 (ADR-0011 결정 8).
+   * 읽지 못한 첨부는 빠진다 — 실패 사실은 화면과 신호에 남고, 판정에 빈 텍스트를 넣지 않는다.
+   */
   private buildConversation(sessionId: string): ConversationContext {
     const utterances = this.deps.store.listUtterances(sessionId);
     const request = utterances.find((u) => u.authorType === 'requester')?.originalText ?? '';
@@ -804,6 +1022,24 @@ export class IntakeRunner<A> {
         pendingQuestion = null;
       }
     }
-    return { request, conversation };
+    const attachments: AttachmentContext[] = [];
+    const attachmentIdByRef = new Map<string, string>();
+    for (const row of this.deps.store.listAttachments(sessionId)) {
+      if (row.extractionStatus !== 'ok' || !row.extractedText) continue;
+      // 짧은 참조로 오간다 — 모델에게 UUID를 옮겨 적게 하면 그 자체가 오류원이 된다
+      const ref = `A${String(attachments.length + 1)}`;
+      attachments.push({ ref, filename: row.filename, text: row.extractedText });
+      attachmentIdByRef.set(ref, row.id);
+    }
+    return { request, conversation, attachments, attachmentIdByRef };
+  }
+
+  /** 판정이 가리킨 첨부 참조를 실제 id로 되돌린다. 알 수 없는 참조는 근거 없음으로 취급한다. */
+  private attachmentIdOf(
+    evidence: { source: 'conversation' | 'attachment'; attachmentRef?: string },
+    context: ConversationContext,
+  ): string | undefined {
+    if (evidence.source !== 'attachment' || !evidence.attachmentRef) return undefined;
+    return context.attachmentIdByRef.get(evidence.attachmentRef);
   }
 }

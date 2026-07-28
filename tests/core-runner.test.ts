@@ -1,12 +1,23 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { ExtractorRegistry } from '../src/extract/registry';
+import { textExtractor } from '../src/extract/text';
+import type { Extractor } from '../src/extract/types';
 import type { BackendRequest, BackendResponse, LlmBackend } from '../src/gateway/backend';
 import { createDefaultRegistry } from '../src/prompts/catalog';
-import type { CompletenessOutput } from '../src/prompts/completeness-v0';
+import { AttachmentStore } from '../src/store/attachment-store';
+import type { SlotTriState } from '../src/prompts/completeness-v0';
+import type { CompletenessV1Output } from '../src/prompts/completeness-v1';
 import type { PromotionOutput } from '../src/prompts/promotion-v0';
 import type { RequirementsOutput } from '../src/prompts/requirements-v0';
 import {
+  DEFAULT_ATTACHMENT_LIMITS,
   detectRequesterLanguage,
   IntakeRunner,
+  UploadRejectedError,
+  type AttachmentLimits,
   type ChannelPort,
   type ClarificationRoundPayload,
 } from '../src/runner/core-runner';
@@ -64,31 +75,53 @@ const clarificationResponse = JSON.stringify({
   ],
 });
 
+/**
+ * 판정 슬롯 픽스처 (completeness@0.2.0) — attachmentRef를 주면 첨부 유래,
+ * 없으면 대화 유래다. 출처는 확인 화면의 표시와 F13 판독의 근거가 된다 (ADR-0011 결정 8).
+ */
+function slot(slotKey: string, verdict: SlotTriState, rationale: string, attachmentRef?: string) {
+  return {
+    slotKey,
+    verdict,
+    rationale,
+    evidence: attachmentRef
+      ? { source: 'attachment' as const, attachmentRef }
+      : { source: 'conversation' as const },
+  };
+}
+
 /** 전 슬롯 해소(충족 2 + 승격 1), 임계치 이상 — 정제 완료로 이끄는 판정. */
 const refinedCompletenessResponse = JSON.stringify({
   slots: [
-    { slotKey: 'target-user', verdict: 'filled', rationale: '「영업팀 매니저」라고 확답' },
-    { slotKey: 'purpose', verdict: 'filled', rationale: '수작업 집계 제거라고 답함' },
-    {
-      slotKey: 'data-source',
-      verdict: 'promoted',
-      rationale: '요청자가 「모르겠어요 — 개발팀이 정해 주세요」를 택함',
-    },
+    slot('target-user', 'filled', '「영업팀 매니저」라고 확답'),
+    slot('purpose', 'filled', '수작업 집계 제거라고 답함'),
+    slot('data-source', 'promoted', '요청자가 「모르겠어요 — 개발팀이 정해 주세요」를 택함'),
   ],
   remainingAmbiguities: [],
   rubric: { score: 90, rationale: '핵심 슬롯 모두 해소' },
-} satisfies CompletenessOutput);
+} satisfies CompletenessV1Output);
+
+/** 첨부에서 대상 사용자를 읽어낸 판정 — 출처가 슬롯에 남는다 (F2c). */
+const attachmentEvidenceResponse = JSON.stringify({
+  slots: [
+    slot('target-user', 'filled', '올려주신 기획서에 대상 사용자가 적혀 있음', 'A1'),
+    slot('purpose', 'filled', '수작업 집계 제거라고 답함'),
+    slot('data-source', 'promoted', '요청자가 「모르겠어요」를 택함'),
+  ],
+  remainingAmbiguities: [],
+  rubric: { score: 90, rationale: '핵심 슬롯 모두 해소' },
+} satisfies CompletenessV1Output);
 
 /** purpose가 여전히 미충족 — 미정제로 이끄는 판정. */
 const unrefinedCompletenessResponse = JSON.stringify({
   slots: [
-    { slotKey: 'target-user', verdict: 'filled', rationale: '「영업팀 매니저」라고 확답' },
-    { slotKey: 'purpose', verdict: 'unfilled', rationale: '어떤 문제를 푸는지 답이 없음' },
-    { slotKey: 'data-source', verdict: 'unfilled', rationale: '데이터 출처 답이 없음' },
+    slot('target-user', 'filled', '「영업팀 매니저」라고 확답'),
+    slot('purpose', 'unfilled', '어떤 문제를 푸는지 답이 없음'),
+    slot('data-source', 'unfilled', '데이터 출처 답이 없음'),
   ],
   remainingAmbiguities: ['해결하려는 문제가 불명'],
   rubric: { score: 35, rationale: '핵심이 비어 있음' },
-} satisfies CompletenessOutput);
+} satisfies CompletenessV1Output);
 
 /** 상한 도달 시점의 승격 판정 — 남은 미충족 슬롯이 전부 담당자 몫으로 넘어간다 (F2c ①②). */
 const promotableResponse = JSON.stringify({
@@ -128,24 +161,24 @@ const blockingPromotionResponse = JSON.stringify({
 /** 슬롯은 전부 해소됐지만 루브릭이 임계치 미달 — 룰 층은 통과하는데 미정제인 판정. */
 const lowScoreCompletenessResponse = JSON.stringify({
   slots: [
-    { slotKey: 'target-user', verdict: 'filled', rationale: '「영업팀 매니저」라고 확답' },
-    { slotKey: 'purpose', verdict: 'filled', rationale: '수작업 집계 제거라고 답함' },
-    { slotKey: 'data-source', verdict: 'filled', rationale: 'CRM이라고 답함' },
+    slot('target-user', 'filled', '「영업팀 매니저」라고 확답'),
+    slot('purpose', 'filled', '수작업 집계 제거라고 답함'),
+    slot('data-source', 'filled', 'CRM이라고 답함'),
   ],
   remainingAmbiguities: ['어느 기간 단위로 보는지'],
   rubric: { score: 60, rationale: '슬롯은 찼지만 해석이 갈라진다' },
-} satisfies CompletenessOutput);
+} satisfies CompletenessV1Output);
 
 /** 전 문항 「모르겠다」 — 전 슬롯 승격으로 룰 층을 통과하는 판정 (#28 S-5). */
 const fullyPromotedCompletenessResponse = JSON.stringify({
   slots: [
-    { slotKey: 'target-user', verdict: 'promoted', rationale: '요청자가 「모르겠어요」를 택함' },
-    { slotKey: 'purpose', verdict: 'promoted', rationale: '요청자가 「모르겠어요」를 택함' },
-    { slotKey: 'data-source', verdict: 'promoted', rationale: '요청자가 「모르겠어요」를 택함' },
+    slot('target-user', 'promoted', '요청자가 「모르겠어요」를 택함'),
+    slot('purpose', 'promoted', '요청자가 「모르겠어요」를 택함'),
+    slot('data-source', 'promoted', '요청자가 「모르겠어요」를 택함'),
   ],
   remainingAmbiguities: [],
   rubric: { score: 85, rationale: '전 항목이 담당자 몫으로 정리됨' },
-} satisfies CompletenessOutput);
+} satisfies CompletenessV1Output);
 
 const requirementsResponse = JSON.stringify({
   problem: '영업 실적을 정리해 볼 수단이 없어 매니저가 수작업으로 집계한다',
@@ -176,7 +209,14 @@ afterEach(() => {
   store = undefined;
 });
 
-function makeRunner(responses: string[], options?: { maxRounds?: number }) {
+function makeRunner(
+  responses: string[],
+  options?: {
+    maxRounds?: number;
+    attachments?: { store: AttachmentStore; extractors: ExtractorRegistry };
+    limits?: Partial<AttachmentLimits>;
+  },
+) {
   store = SessionStore.open(':memory:');
   const port = new FakePort();
   const backend = new ScriptedBackend(responses);
@@ -188,8 +228,40 @@ function makeRunner(responses: string[], options?: { maxRounds?: number }) {
     port,
     teamLanguage: 'ko',
     ...(options?.maxRounds !== undefined ? { maxRounds: options.maxRounds } : {}),
+    ...(options?.attachments
+      ? { attachmentStore: options.attachments.store, extractors: options.attachments.extractors }
+      : {}),
+    ...(options?.limits ? { limits: { ...DEFAULT_ATTACHMENT_LIMITS, ...options.limits } } : {}),
   });
   return { runner, port, backend, store };
+}
+
+/** 원본 저장소와 등록된 추출기를 붙인 러너 — 첨부를 다루는 구성 (F1-Attach). */
+function makeAttachmentRunner(
+  responses: string[],
+  options?: { maxRounds?: number; limits?: Partial<AttachmentLimits>; extractor?: Extractor },
+) {
+  const blobs = new AttachmentStore(mkdtempSync(join(tmpdir(), 'pm-jude-core-attach-')));
+  const extractors = new ExtractorRegistry();
+  extractors.register(options?.extractor ?? textExtractor);
+  const made = makeRunner(responses, {
+    ...(options?.maxRounds !== undefined ? { maxRounds: options.maxRounds } : {}),
+    ...(options?.limits ? { limits: options.limits } : {}),
+    attachments: { store: blobs, extractors },
+  });
+  /** 파일을 저장소에 넣고 스테이징까지 마친다 — 어댑터(#49)가 할 일의 최소 재현. */
+  const stage = (filename: string, text: string, mime = 'text/plain') => {
+    const bytes = Buffer.from(text, 'utf8');
+    const stored = blobs.put(bytes);
+    return made.store.stageUpload({
+      filename,
+      mime,
+      bytes: bytes.length,
+      sha256: stored.sha256,
+      storageRef: stored.storageRef,
+    });
+  };
+  return { ...made, blobs, stage };
 }
 
 const intake = {
@@ -735,5 +807,206 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
     expect(
       store.exportSessions()[0]?.utterances.filter((u) => u.originalText === '추가로요'),
     ).toEqual([]);
+  });
+});
+
+describe('코어 러너 — 자료 첨부 (F1-Attach, ADR-0011)', () => {
+  it('첨부는 요청자 발화에 붙고, 질문 생성 전에 읽힌다', async () => {
+    const { runner, backend, store, stage } = makeAttachmentRunner([clarificationResponse]);
+    const uploadId = stage('기획서.txt', '대상 사용자: 영업팀 매니저');
+
+    const { sessionId } = await runner.handleIntake({ ...intake, uploadIds: [uploadId] });
+
+    const attachments = store.listAttachments(sessionId);
+    expect(attachments).toHaveLength(1);
+    expect(attachments[0]).toMatchObject({
+      filename: '기획서.txt',
+      extractionStatus: 'ok',
+      extractedText: '대상 사용자: 영업팀 매니저',
+      extractorVersion: 'text@0.1.0',
+    });
+    // 첨부는 첫 요청자 발화에 매달린다 — 첨부 시점이 전사 순서로 남는다
+    const utterances = store.listUtterances(sessionId);
+    expect(attachments[0]?.utteranceId).toBe(utterances[0]?.id);
+    // 질문 생성 호출이 자료를 이미 들고 있다
+    const clarificationInput = backend.requests[0]?.input as { attachments?: unknown[] };
+    expect(clarificationInput.attachments).toEqual([
+      { ref: 'A1', filename: '기획서.txt', text: '대상 사용자: 영업팀 매니저' },
+    ]);
+  });
+
+  it('추출 텍스트는 발화와 구분되어 판정에 실린다 — 요청자가 한 말로 섞이지 않는다', async () => {
+    const { runner, backend, stage } = makeAttachmentRunner([
+      clarificationResponse,
+      refinedCompletenessResponse,
+      requirementsResponse,
+    ]);
+    const uploadId = stage('메모.txt', '월별 매출 추이가 필요함');
+    await runner.handleIntake({ ...intake, uploadIds: [uploadId] });
+
+    await runner.handleReply({ ...intake, text: '영업팀 매니저요' });
+
+    const completenessInput = backend.requests[1]?.input as {
+      conversation: Array<{ answer: string }>;
+      attachments: Array<{ ref: string; text: string }>;
+    };
+    expect(completenessInput.attachments).toEqual([
+      { ref: 'A1', filename: '메모.txt', text: '월별 매출 추이가 필요함' },
+    ]);
+    // 자료 내용이 대화 answer로 섞여 들어가지 않는다
+    expect(JSON.stringify(completenessInput.conversation)).not.toContain('월별 매출 추이가 필요함');
+    // ref → id 매핑은 내부용이라 LLM 입력에 실리지 않는다
+    expect(JSON.stringify(backend.requests[1]?.input)).not.toContain('attachmentIdByRef');
+  });
+
+  it('첨부에서 읽은 슬롯 값은 출처가 함께 기록된다 (결정 8 — 확인 화면의 근거)', async () => {
+    const { runner, store, stage } = makeAttachmentRunner([
+      clarificationResponse,
+      attachmentEvidenceResponse,
+      requirementsResponse,
+    ]);
+    const uploadId = stage('기획서.txt', '대상 사용자: 영업팀 매니저');
+    const { sessionId } = await runner.handleIntake({ ...intake, uploadIds: [uploadId] });
+
+    await runner.handleReply({ ...intake, text: '수작업 집계를 없애고 싶어요' });
+
+    const attachmentId = store.listAttachments(sessionId)[0]?.id;
+    const slots = store.listSlotStates(sessionId);
+    expect(slots.find((s) => s.slotKey === 'target-user')).toMatchObject({
+      state: 'filled',
+      evidenceAttachmentId: attachmentId,
+    });
+    // 대화에서 나온 값에는 첨부 출처가 붙지 않는다
+    expect(slots.find((s) => s.slotKey === 'purpose')?.evidenceAttachmentId).toBeNull();
+  });
+
+  it('읽지 못한 자료는 라운드를 죽이지 않고 사유와 함께 남는다 (P-U3)', async () => {
+    const { runner, port, store, stage } = makeAttachmentRunner([clarificationResponse]);
+    const uploadId = stage('빈파일.txt', '   ');
+
+    const { sessionId } = await runner.handleIntake({ ...intake, uploadIds: [uploadId] });
+
+    expect(store.listAttachments(sessionId)[0]).toMatchObject({
+      extractionStatus: 'failed',
+      extractionError: '내용이 비어 있다',
+      extractedText: null,
+    });
+    // 질문은 그대로 나갔다 — 자료를 못 읽었다고 여정이 멈추지 않는다
+    expect(port.posted[1]?.text).toContain('이 대시보드는 주로 누가 보게 되나요?');
+    expect(store.getSession(sessionId)?.status).toBe('clarifying');
+  });
+
+  it('추출 성공·실패가 신호로 남고 추출기 버전이 payload에 실린다 (결정 5 — 축은 5축 유지)', async () => {
+    const { runner, store, stage } = makeAttachmentRunner([clarificationResponse]);
+    const good = stage('본문.txt', '대상 사용자: 영업팀');
+    const bad = stage('빈파일.txt', '  ');
+
+    const { sessionId } = await runner.handleIntake({ ...intake, uploadIds: [good, bad] });
+
+    const types = store.listSignals(sessionId).map((s) => s.type);
+    expect(types.filter((t) => t === 'attachment_uploaded')).toHaveLength(2);
+    expect(types).toContain('attachment_extracted');
+    expect(types).toContain('attachment_extraction_failed');
+    const extracted = store
+      .listSignals(sessionId)
+      .find((s) => s.type === 'attachment_extracted')?.payload;
+    expect(extracted).toMatchObject({
+      extractorVersion: 'text@0.1.0',
+      textLength: '대상 사용자: 영업팀'.length,
+    });
+  });
+
+  it('답변에 자료를 더 붙여도 왕복 상한을 소비하지 않는다 (§6 계약)', async () => {
+    const { runner, store, stage } = makeAttachmentRunner([
+      clarificationResponse,
+      unrefinedCompletenessResponse,
+      clarificationResponse,
+    ]);
+    const first = stage('a.txt', '첫 자료');
+    const { sessionId } = await runner.handleIntake({ ...intake, uploadIds: [first] });
+    const roundsAfterIntake = store.getSession(sessionId)?.roundCount;
+
+    const second = stage('b.txt', '두 번째 자료');
+    await runner.handleReply({ ...intake, text: '이것도 참고해 주세요', uploadIds: [second] });
+
+    // 라운드는 답변 때문에 하나 늘 뿐, 첨부가 따로 라운드를 만들지 않는다
+    expect(store.getSession(sessionId)?.roundCount).toBe((roundsAfterIntake ?? 0) + 1);
+    expect(store.listAttachments(sessionId)).toHaveLength(2);
+  });
+
+  it('세션당 첨부 개수 상한을 넘기면 거부한다', async () => {
+    const { runner, store, stage } = makeAttachmentRunner([clarificationResponse], {
+      limits: { maxPerSession: 1 },
+    });
+    const first = stage('a.txt', '첫 자료');
+    const second = stage('b.txt', '두 번째 자료');
+
+    const { sessionId } = await runner.handleIntake({ ...intake, uploadIds: [first] });
+
+    await expect(
+      runner.handleReply({ ...intake, text: '하나 더요', uploadIds: [second] }),
+    ).rejects.toBeInstanceOf(UploadRejectedError);
+    expect(store.listAttachments(sessionId)).toHaveLength(1);
+  });
+
+  it('세션 텍스트 총량을 넘는 자료는 추출하지 않고 사유를 남긴다 — 조용히 자르지 않는다', async () => {
+    const { runner, store, stage } = makeAttachmentRunner([clarificationResponse], {
+      limits: { maxSessionTextChars: 10 },
+    });
+    const small = stage('작은.txt', '짧은자료');
+    const big = stage('큰.txt', 'x'.repeat(50));
+
+    const { sessionId } = await runner.handleIntake({ ...intake, uploadIds: [small, big] });
+
+    const attachments = store.listAttachments(sessionId);
+    expect(attachments[0]).toMatchObject({ extractionStatus: 'ok' });
+    expect(attachments[1]).toMatchObject({
+      extractionStatus: 'failed',
+      extractionError: '이 요청에 담을 수 있는 자료 분량을 넘었다',
+    });
+  });
+
+  it('업로드 검증은 형식과 크기를 업로드 시점에 거른다 (P-U1 — 제출 후에 알게 하지 않는다)', () => {
+    const { runner } = makeAttachmentRunner([], { limits: { maxBytesPerFile: 100 } });
+
+    expect(() => runner.validateUpload({ mime: 'text/plain', bytes: 50 })).not.toThrow();
+    expect(() => runner.validateUpload({ mime: 'application/zip', bytes: 50 })).toThrow(
+      UploadRejectedError,
+    );
+    expect(() => runner.validateUpload({ mime: 'text/plain', bytes: 500 })).toThrow(
+      UploadRejectedError,
+    );
+    expect(runner.supportedUploadMimes()).toContain('text/plain');
+  });
+
+  it('첨부를 다루지 못하는 구성은 업로드를 받아 놓고 버리지 않고 거부한다', async () => {
+    const { runner } = makeRunner([clarificationResponse]);
+
+    expect(runner.attachmentsEnabled).toBe(false);
+    await expect(
+      runner.handleIntake({ ...intake, uploadIds: ['some-upload'] }),
+    ).rejects.toBeInstanceOf(UploadRejectedError);
+  });
+
+  it('이미 읽은 자료는 다음 라운드에서 다시 읽지 않는다', async () => {
+    let calls = 0;
+    const counting: Extractor = {
+      version: 'counting@0.1.0',
+      mimes: ['text/plain'],
+      extract(input) {
+        calls++;
+        return Promise.resolve({ status: 'ok', text: input.bytes.toString('utf8') });
+      },
+    };
+    const { runner, stage } = makeAttachmentRunner(
+      [clarificationResponse, unrefinedCompletenessResponse, clarificationResponse],
+      { extractor: counting },
+    );
+    const uploadId = stage('a.txt', '자료 본문');
+    await runner.handleIntake({ ...intake, uploadIds: [uploadId] });
+
+    await runner.handleReply({ ...intake, text: '영업팀 매니저요' });
+
+    expect(calls).toBe(1);
   });
 });

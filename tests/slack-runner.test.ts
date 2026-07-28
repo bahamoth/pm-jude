@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { BackendRequest, BackendResponse, LlmBackend } from '../src/gateway/backend';
 import { createDefaultRegistry } from '../src/prompts/catalog';
+import { slot } from './slot-fixture';
 import { SlackIntakeRunner, type SlackPostedMessage } from '../src/runner/slack-runner';
 import { SessionStore } from '../src/store/session-store';
 
@@ -58,9 +59,9 @@ const clarificationResponse = JSON.stringify({
 /** purpose가 여전히 미충족 — 미정제로 이끄는 판정. */
 const unrefinedCompletenessResponse = JSON.stringify({
   slots: [
-    { slotKey: 'target-user', verdict: 'filled', rationale: '「영업팀 매니저」라고 확답' },
-    { slotKey: 'purpose', verdict: 'unfilled', rationale: '어떤 문제를 푸는지 답이 없음' },
-    { slotKey: 'data-source', verdict: 'unfilled', rationale: '데이터 출처 답이 없음' },
+    slot('target-user', 'filled', '「영업팀 매니저」라고 확답'),
+    slot('purpose', 'unfilled', '어떤 문제를 푸는지 답이 없음'),
+    slot('data-source', 'unfilled', '데이터 출처 답이 없음'),
   ],
   remainingAmbiguities: ['해결하려는 문제가 불명'],
   rubric: { score: 35, rationale: '핵심이 비어 있음' },
