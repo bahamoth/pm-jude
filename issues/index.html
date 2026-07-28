@@ -1307,6 +1307,11 @@
         "author": "claude",
         "date": "2026-07-28",
         "body": "코드 완료 — 브랜치 docs/attachment-canon (머지 대기).\n\nMIME→추출기 레지스트리 + 4군(텍스트·OOXML·PDF·이미지). 미등록 MIME은 조용한 실패가 아니라 예외다 — best-effort로 아무 파일이나 긁으면 쓰레기 추출물이 판정을 오염시키고 실패 원인을 추출 결함과 프롬프트 결함으로 가를 수 없게 된다(F13 전제).\n\n빈 결과를 성공으로 통과시키지 않는다: 스캔본 PDF·내용 없는 docx·바이너리가 섞인 텍스트는 전부 사유를 단 실패다. OOXML 3종은 zip+XML이라 하나로 다루되 표의 행·셀 경계는 지킨다 — 셀이 한 줄로 뭉개지면 어느 컬럼의 값인지가 사라진다.\n\n**ADR-0011 결정 3을 보정했다**: 「원본 블록으로 모델에 전달되지 않는다」는 파이프라인 호출의 규율이고, 이미지가 모델에 닿는 지점은 추출 호출 하나다. 그 예외 없이는 이미지 지원이 성립하지 않으며, 예외는 게이트웨이 안에 갇힌다.\n\n의존성 2건 추가: fflate(zip), unpdf(PDF 텍스트 레이어)."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-28",
+        "body": "이미지 추출 경로 실호출 검증 완료.\n\n**Agent SDK는 Claude Code CLI의 래퍼다** — `sdk.mjs`에 `pathToClaudeCodeExecutable`·`--input-format`·`stream-json`이 그대로 들어 있고, SDK가 CLI를 서브프로세스로 띄워 같은 프로토콜로 통신한다. `claude -p`와 SDK는 대안 관계가 아니라 같은 경로의 두 층이다(F14가 둘을 병기한 것은 인터페이스 선택이지 전송 방식의 차이가 아니다). CLI 직접 호출은 `--input-format stream-json` + `--output-format stream-json` + `--verbose` 세 플래그가 함께 필요하다.\n\n우리 코드(gateway + AgentSdkBackend + createImageExtractor)를 그대로 돌린 결과:\n- 단색 PNG → `status: failed`, 「옮길 문자나 도표 내용이 없음」 — readable=false가 실패로 옮겨지는 경로 확인\n- 막대그래프 PNG → `status: ok`, 세 막대의 색과 상대 높이를 정확히 서술\n\n`attachment-extraction@0.1.0` 사용량 로그가 함께 찍혀 버전 참조·스키마 검증·비용 로깅도 확인됐다. 검증 스크립트는 실 API 호출이라 tests/에 넣지 않는다 — 재현은 `createImageExtractor`에 AgentSdkBackend를 물려 PNG 하나를 넣으면 된다."
       }
     ]
   },
