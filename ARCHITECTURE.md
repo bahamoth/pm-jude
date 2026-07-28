@@ -2,7 +2,7 @@
 
 > **EN** — Visualises and concretises the logical boundaries of PRD §7: system diagram, request lifecycle state machine, representative sequences (happy path, promotion, duplicate merge), data model ERD, component ownership, and the technology decisions settled for Phase 0 versus those still open. The mermaid blocks here are canonical; `docs/architecture.html` mirrors them.
 
-> 성격: [PRD v1.4](PRD.md) §7의 논리 경계를 시각화·구체화한 문서. "어떻게"의 상세는 개발팀 재량이며, Phase 0 착수에 필요한 결정만 확정 상태로 담는다([ADR](docs/adr/) 참조). 나머지 기술 선택은 「결정 대기」로 남긴다. 브라우저 조감은 [docs/architecture.html](docs/architecture.html) — 이 문서 mermaid 블록의 렌더링이며, 블록 수정 시 `node scripts/check-arch-sync.mjs --write`로 동기화한다. 용어는 [CONTEXT.md](CONTEXT.md), 데이터 모델 상세는 [docs/data-model.md](docs/data-model.md).
+> 성격: [PRD v1.5](PRD.md) §7의 논리 경계를 시각화·구체화한 문서. "어떻게"의 상세는 개발팀 재량이며, Phase 0 착수에 필요한 결정만 확정 상태로 담는다([ADR](docs/adr/) 참조). 나머지 기술 선택은 「결정 대기」로 남긴다. 브라우저 조감은 [docs/architecture.html](docs/architecture.html) — 이 문서 mermaid 블록의 렌더링이며, 블록 수정 시 `node scripts/check-arch-sync.mjs --write`로 동기화한다. 용어는 [CONTEXT.md](CONTEXT.md), 데이터 모델 상세는 [docs/data-model.md](docs/data-model.md).
 
 ## 시스템 구성도
 
@@ -22,6 +22,7 @@ graph TB
 
     subgraph CORE["채널 비의존 코어"]
         INTAKE["인테이크 API<br/>F1"]
+        EXTRACT["첨부 추출기<br/>MIME별 레지스트리 · 원본 불변<br/>F1-Attach"]
         SM["상태 머신<br/>+ 게이트 라우터 · SLA 스케줄러<br/>F5 · 원칙 2"]
         CLARIFY["명확화 엔진<br/>질문 생성 · 2층 판정 · 승격 판정<br/>F2b/c"]
         SEARCH["컨텍스트 검색기<br/>Linear · 문서 · 종결 세션 인덱스<br/>F2a"]
@@ -54,6 +55,9 @@ graph TB
     WEB_S --> WEB_A
     SLACK_A --> INTAKE
     WEB_A --> INTAKE
+    INTAKE --> EXTRACT
+    EXTRACT -- "이미지 서술" --> IFACE
+    EXTRACT --> STORE
     INTAKE --> SM
     SM --> CLARIFY
     SM --> DOCGEN
@@ -212,6 +216,8 @@ erDiagram
     session ||--o{ session_requester : "1~N명"
     requester ||--o{ session_requester : "참여"
     session ||--o{ utterance : "원문 전사 상시 보존"
+    utterance ||--o{ attachment : "발화에 붙는 자료 (F1-Attach)"
+    attachment ||--o{ slot_state : "첨부 유래 슬롯의 근거"
     session ||--o{ slot_state : "슬롯 3상태"
     session ||--o{ requirements_doc : "vN"
     requirements_doc ||--o{ mockup : "vN 매핑 (UI 요청만)"
@@ -239,10 +245,20 @@ erDiagram
         string preferred_language
         string timezone
     }
+    attachment {
+        string id PK
+        string utterance_id FK
+        string mime
+        string sha256 "원본 불변"
+        string extracted_text "재생성 가능한 캐시"
+        string extraction_status
+        string extractor_version
+    }
     slot_state {
         string slot_key PK
         string state "filled/unfilled/promoted"
         bool confirmed_by_requester
+        string evidence_attachment_id
         string open_issue_assignee
     }
     gate_item {
@@ -271,6 +287,7 @@ erDiagram
 | 컴포넌트 | 책임 | 관련 기능 | 도입 Phase |
 |---|---|---|---|
 | 인테이크 API | 채널 무관 수신, 세션·프로필 생성, 즉시 확인 | F1 | 1 (PoC 축소판은 0) |
+| 첨부 추출기 | MIME별 추출, 원본 불변 보관, 추출 캐시 갱신, 상한 검사 | F1-Attach | 0 |
 | 상태 머신 | 단계 전이 결정, 하드 제약 강제, 게이트 라우팅·SLA 스케줄링 | 원칙 2·5, F5 | 1 |
 | 명확화 엔진 | 표적 질문 생성, 2층 완결성 판정, 승격 판정 | F2b/c/e | 0 (프롬프트) → 1 (전체) |
 | 컨텍스트 검색기 | Linear·문서·종결 세션 인덱스, 경계 툴콜 루프, 중복 후보 | F2a | 1 |

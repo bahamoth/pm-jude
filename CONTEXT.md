@@ -2,7 +2,7 @@
 
 비개발자 스테이크홀더의 모호한 요청을 인테이크하고, 개발자가 곧바로 구현에 착수할 수 있는 완결된 요구사항으로 정제하는 AI PM 인테이크 레이어. 이 문서는 프로젝트 전체가 따르는 정본 용어집이다 — 이슈 제목, 코드 식별자, 문서, 커밋 메시지에서 아래 용어를 그대로 쓴다.
 
-정본 출처: PRD v1.4.1. 개요·원칙은 [PRD.md](PRD.md)에, 나머지 섹션은 [docs/prd/](docs/prd/)에 분할되어 있다(목차: PRD.md). 용어 충돌 시 이 문서가 우선하며, PRD 개정 시 이 문서를 함께 갱신한다. 정의만으로 부족한 용어에는 원문 위치를 병기한다.
+정본 출처: PRD v1.5. 개요·원칙은 [PRD.md](PRD.md)에, 나머지 섹션은 [docs/prd/](docs/prd/)에 분할되어 있다(목차: PRD.md). 용어 충돌 시 이 문서가 우선하며, PRD 개정 시 이 문서를 함께 갱신한다. 정의만으로 부족한 용어에는 원문 위치를 병기한다.
 
 > **EN** — PM Jude is an AI intake layer: it takes a non-developer stakeholder's vague request and refines it into requirements a developer can build from. This file is the project's canonical glossary — use these terms verbatim in issue titles, code identifiers, documents and commit messages. Each entry gives the Korean definition first and the English one after it; the two are equally binding. Where a term is contested, this file wins over the PRD, and revising the PRD means revising this file in the same change.
 >
@@ -159,6 +159,12 @@ _Avoid_: 반영, 동기화 / sync, apply
 요청자 언어 그대로의 대화 기록. 옵션이 아니라 상시 보존 대상이며 Linear 이슈에 첨부된다.
 **EN** — The conversation as it happened, in the requester's own language. Retained always, not optionally, and attached to the Linear issue.
 
+**첨부 자료(Attachment)**:
+요청자가 발화에 붙여 올린 파일. 명확화 입력이며 추출 텍스트가 슬롯을 채우는 근거가 된다. 원본은 불변 보존되고, 문서에서의 지위는 원문 전사와 같다 — 확정된 것은 문서 문장으로 흡수되고 파일 자체는 참고용으로 동봉된다.
+**EN** — A file the requester attaches to an utterance. It is clarification input: its extracted text can fill a slot. The uploaded original is preserved immutably, and in the requirements document it holds the same position as the original transcript — whatever it settles becomes prose in the document, and the file travels as reference material rather than as the basis for implementation.
+_Avoid_: 파일, 업로드, 자료(단독) / file, upload, document (bare)
+원문: [ADR-0011](docs/adr/0011-attachment-as-clarification-input.md)
+
 **슬롯 단위 확인(Slot-level Confirmation)**:
 요청자 확인을 산문 번역본이 아니라 구조화 슬롯 값 단위로, 요청자 언어로 수행하는 것. 번역 무결성 장치.
 **EN** — Confirming with the requester on structured slot values in their own language, rather than on a prose translation. A guard on translation integrity: translation is a lossy transform performed by a probabilistic component, and neither side can verify it.
@@ -194,6 +200,12 @@ _Avoid_: 추적, 태깅 / tracking, tagging
 **채널 어댑터(Channel Adapter)**:
 코어를 특정 표면(웹/Slack, 향후 Teams/이메일)에 연결하는 탈부착 모듈. 모든 어댑터는 동일한 코어 API만 호출한다.
 **EN** — A detachable module connecting the core to one surface: web, Slack, later Teams or email. Every adapter calls the same core API and nothing else.
+
+**추출(Extraction)**:
+첨부 자료를 명확화 입력으로 쓸 수 있는 텍스트로 환원하는 것. MIME별 추출기가 담당하며 이미지는 등록된 추출 프롬프트로 서술 텍스트가 된다. 결과는 추출기 버전을 단 재생성 가능한 캐시이지 원본의 대체물이 아니다.
+**EN** — Reducing an attachment to text that can serve as clarification input. A per-MIME extractor does the work, and images go through a registered extraction prompt that yields descriptive text. The result is a regenerable cache stamped with its extractor version, never a replacement for the original.
+_Avoid_: 파싱, 변환, OCR(일반 의미) / parsing, conversion, OCR (generic)
+원문: [ADR-0011](docs/adr/0011-attachment-as-clarification-input.md)
 
 **LLM 게이트웨이(LLM Gateway)**:
 얇은 프로바이더 추상화 + 폭주 방지 상한. 표준 인터페이스는 `complete(promptVersion, input) → structuredOutput`. 게이트웨이 외부는 백엔드 종류를 모른다.
