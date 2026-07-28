@@ -650,6 +650,62 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
     expect(completions()).toEqual([1, 2]);
   });
 
+  it('문서가 게시마다 구조체로 영속된다 — 정정은 새 버전 행 (#53)', async () => {
+    const { runner, store } = makeRunner([
+      clarificationResponse,
+      refinedCompletenessResponse,
+      requirementsResponse,
+      refinedCompletenessResponse, // 정정 재판정 → 여전히 정제
+      requirementsResponse, // 문서 v2
+    ]);
+    await runner.handleIntake(intake);
+    await runner.handleReply({ ...intake, text: '영업팀 매니저요. 수작업 집계 제거요.' });
+    const session = store.findSessionByThreadKey('web:thread-1');
+
+    const afterFirst = store.listRequirementsDocs(session!.id);
+    expect(afterFirst.map((doc) => doc.version)).toEqual([1]);
+    // 게시 텍스트는 전달 표면이고 정본은 구조체다 — 역파싱 없이 그대로 읽을 수 있어야 한다
+    expect(afterFirst[0]?.content).toMatchObject({
+      problem: '영업 실적을 정리해 볼 수단이 없어 매니저가 수작업으로 집계한다',
+      users: ['영업팀 매니저'],
+    });
+    // 승격 슬롯의 오픈이슈 합류(코드 강제)가 영속본에도 반영된다
+    expect(
+      (afterFirst[0]?.content as { openIssues: Array<{ slotKey: string }> }).openIssues.map(
+        (issue) => issue.slotKey,
+      ),
+    ).toContain('data-source');
+
+    await runner.confirmSlot({ ...intake, text: '사실 경영진 보고용이에요' }, 'purpose', false);
+    expect(store.listRequirementsDocs(session!.id).map((doc) => doc.version)).toEqual([1, 2]);
+  });
+
+  it('레거시 세션(신호만 있는 문서 이력)의 재생성도 버전을 이어 센다 (#53 정합)', async () => {
+    const { runner, store } = makeRunner([
+      clarificationResponse,
+      refinedCompletenessResponse,
+      requirementsResponse,
+    ]);
+    await runner.handleIntake(intake);
+    // #53 이전 세션의 흔적 재현 — 문서 행 없이 document_delivered 신호만 존재
+    const session = store.findSessionByThreadKey('web:thread-1');
+    store.recordSignal({
+      sessionId: session!.id,
+      type: 'document_delivered',
+      payload: { version: 1, openIssueCount: 0, conditional: false },
+      promptVersionId: session!.promptVersionId,
+      modelVersion: session!.modelVersion,
+      thresholdVersionId: session!.thresholdVersionId,
+      slotSchemaVersionId: session!.slotSchemaVersionId,
+    });
+
+    await runner.handleReply({ ...intake, text: '영업팀 매니저요. 수작업 집계 제거요.' });
+
+    // 파생 버전(신호 1건)과 정합 — 새 문서는 v1이 아니라 v2로 이어진다
+    expect(store.listRequirementsDocs(session!.id).map((doc) => doc.version)).toEqual([2]);
+    expect(runner.documentVersionOf(session!.id)).toBe(2);
+  });
+
   it('전면 승격 문서는 확인할 슬롯이 없으므로 게시 시점이 종착이다 (G-11, #28 S-5)', async () => {
     const { runner, store } = makeRunner([
       clarificationResponse,

@@ -16,6 +16,8 @@ export interface TraceSummary {
   signalTypeCounts: Record<string, number>;
   /** 첨부 추출 현황 (F1-Attach) — 실패가 쌓이면 추출기를 고칠 신호다 (F13). */
   attachmentCounts: Record<'total' | 'ok' | 'failed' | 'pending', number>;
+  /** 영속된 requirements 문서 버전 수 (#53) — 정정 재생성이 쌓이면 버전이 는다 (G-11). */
+  documentCount: number;
 }
 
 export interface TraceData {
@@ -78,6 +80,13 @@ export interface TraceData {
       payload: unknown;
       occurredAt: string;
     }>;
+    /** 영속된 문서 버전 (#53) — 게시 텍스트가 아니라 정본 구조체. */
+    documents: Array<{
+      version: number;
+      content: unknown;
+      backInjectedFrom: string | null;
+      createdAt: string;
+    }>;
   }>;
 }
 
@@ -104,10 +113,11 @@ export function buildTraceData(
     slotStateCounts: { filled: 0, unfilled: 0, promoted: 0 },
     signalTypeCounts: {},
     attachmentCounts: { total: 0, ok: 0, failed: 0, pending: 0 },
+    documentCount: 0,
   };
 
   const sessions = exported.map(
-    ({ session, requesters, utterances, attachments, slotStates, signals }) => {
+    ({ session, requesters, utterances, attachments, slotStates, signals, documents }) => {
       count(summary.statusCounts, session.status);
       if (session.terminalState) count(summary.terminalCounts, session.terminalState);
       count(summary.channelCounts, session.originChannel);
@@ -119,6 +129,7 @@ export function buildTraceData(
         summary.attachmentCounts.total += 1;
         count(summary.attachmentCounts, attachment.extractionStatus);
       }
+      summary.documentCount += documents.length;
 
       return {
         id: session.id,
@@ -160,6 +171,7 @@ export function buildTraceData(
           payload: signal.payload,
           occurredAt: signal.occurredAt,
         })),
+        documents,
       };
     },
   );

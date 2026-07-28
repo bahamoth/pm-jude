@@ -285,11 +285,16 @@ describe('웹 어댑터 HTTP 계약 smoke', () => {
         session: { status: string };
         processing: boolean;
         documentVersion: number;
+        document: { version: number; content: { problem: string; users: string[] } } | null;
       }>(await fetch(`${baseUrl}/api/sessions/${intake.sessionId}`));
       return !d.processing && d.session.status === 'documented' ? d : null;
     });
     expect(documented.session.status).toBe('documented');
     expect(documented.documentVersion).toBe(1); // 문서 vN 노출 (G-11)
+    // 문서 구조체가 API로 그대로 내려온다 — 화면은 게시 텍스트 역파싱이 아니라 이걸 쓴다 (#53)
+    expect(documented.document?.version).toBe(1);
+    expect(documented.document?.content.problem).toBeTruthy();
+    expect(documented.document?.content.users.length).toBeGreaterThan(0);
 
     // documented의 일반 답변은 409 — 정정은 슬롯 확인 경로만 (§6)
     const directReply = await fetch(`${baseUrl}/api/sessions/${intake.sessionId}/replies`, {
@@ -330,11 +335,13 @@ describe('웹 어댑터 HTTP 계약 smoke', () => {
         session: { status: string };
         processing: boolean;
         documentVersion: number;
+        document: { version: number } | null;
       }>(await fetch(`${baseUrl}/api/sessions/${intake.sessionId}`));
       return !d.processing && d.session.status === 'documented' ? d : null;
     });
     expect(store.getSession(intake.sessionId)?.roundCount).toBe(roundBefore); // 상한 미산입
     expect(regenerated.documentVersion).toBe(2); // 정정 재생성은 v2 (G-11)
+    expect(regenerated.document?.version).toBe(2); // 최신 버전 구조체가 내려온다 (#53)
 
     // 요약 목록 (#29 로컬 목록의 서버측 짝) — 미존재 ID는 조용히 걸러진다
     const summaries = await json<{

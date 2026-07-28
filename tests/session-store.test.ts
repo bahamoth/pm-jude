@@ -572,3 +572,64 @@ describe('채널 스레드 매핑과 상태 전이 (#8 Slack 러너 지원)', ()
     expect(closed?.closedAt).not.toBeNull();
   });
 });
+
+describe('requirements_doc 영속 (#53)', () => {
+  const content = {
+    problem: '영업 실적을 정리해 볼 수단이 없다',
+    users: ['영업팀 매니저'],
+    scope: { inScope: ['월별 매출 추이 조회'], outOfScope: [] },
+    stories: [
+      {
+        story: '영업팀 매니저로서, 월별 매출 추이를 확인하고 싶다',
+        acceptanceCriteria: [
+          {
+            ears: 'When 기간을 선택하면, the system shall 월별 합계를 표시한다',
+            gwt: { given: '매출 데이터가 있을 때', when: '기간을 선택하면', then: '합계가 표시된다' },
+          },
+        ],
+      },
+    ],
+    dataSources: ['CRM'],
+    openIssues: [],
+  };
+
+  it('문서 구조체가 버전과 함께 영속되고 버전 오름차순으로 조회된다', () => {
+    const { store, versionAxes } = makeStore();
+    const session = store.createSession({ originChannel: 'web', ...versionAxes });
+
+    store.appendRequirementsDoc({ sessionId: session.id, version: 1, content });
+    store.appendRequirementsDoc({
+      sessionId: session.id,
+      version: 2,
+      content: { ...content, problem: '정정된 문제 정의' },
+    });
+
+    const docs = store.listRequirementsDocs(session.id);
+    expect(docs.map((doc) => doc.version)).toEqual([1, 2]);
+    expect(docs[0]?.content).toMatchObject({ problem: '영업 실적을 정리해 볼 수단이 없다' });
+    expect(docs[1]?.content).toMatchObject({ problem: '정정된 문제 정의' });
+    expect(docs[0]?.backInjectedFrom).toBeNull(); // 역주입(F4)은 Phase 2 — 그 전까지 null
+    expect(docs[0]?.createdAt).toBeTruthy();
+  });
+
+  it('같은 세션의 같은 버전은 거부된다 — 버전은 게시 이력이지 덮어쓰기가 아니다 (G-11)', () => {
+    const { store, versionAxes } = makeStore();
+    const session = store.createSession({ originChannel: 'web', ...versionAxes });
+    store.appendRequirementsDoc({ sessionId: session.id, version: 1, content });
+
+    expect(() =>
+      store.appendRequirementsDoc({ sessionId: session.id, version: 1, content }),
+    ).toThrow();
+  });
+
+  it('익명화 export에 문서 버전·구조체가 실린다 — 골든셋·trace의 입력 (F12)', () => {
+    const { store, versionAxes } = makeStore();
+    const session = store.createSession({ originChannel: 'web', ...versionAxes });
+    store.appendRequirementsDoc({ sessionId: session.id, version: 1, content });
+
+    const exported = store.exportSessions()[0];
+    expect(exported?.documents).toHaveLength(1);
+    expect(exported?.documents[0]).toMatchObject({ version: 1 });
+    expect(exported?.documents[0]?.content).toMatchObject({ problem: content.problem });
+  });
+});

@@ -401,6 +401,7 @@ export class SessionStore {
     }>;
     slotStates: Array<typeof schema.slotState.$inferSelect>;
     signals: Array<Omit<typeof schema.signal.$inferSelect, 'id'>>;
+    documents: Array<Omit<typeof schema.requirementsDoc.$inferSelect, 'id' | 'sessionId'>>;
   }> {
     return this.db
       .select()
@@ -441,6 +442,9 @@ export class SessionStore {
           ),
           slotStates: this.listSlotStates(session.id),
           signals: this.listSignals(session.id).map(({ id: _id, ...rest }) => rest),
+          documents: this.listRequirementsDocs(session.id).map(
+            ({ id: _id, sessionId: _sessionId, ...rest }) => rest,
+          ),
         };
       });
   }
@@ -491,6 +495,36 @@ export class SessionStore {
       .from(schema.slotState)
       .where(eq(schema.slotState.sessionId, sessionId))
       .orderBy(schema.slotState.slotKey)
+      .all();
+  }
+
+  /**
+   * requirements 문서 버전 영속 (#53, G-11) — 게시마다 구조체를 vN과 함께 남긴다.
+   * append-only: 같은 (세션, 버전) 재기록은 unique 제약이 거부한다. 정정은 새 버전이다.
+   */
+  appendRequirementsDoc(input: {
+    sessionId: string;
+    version: number;
+    content: unknown;
+  }): typeof schema.requirementsDoc.$inferSelect {
+    const row = {
+      id: randomUUID(),
+      sessionId: input.sessionId,
+      version: input.version,
+      content: input.content,
+      createdAt: now(),
+    };
+    this.db.insert(schema.requirementsDoc).values(row).run();
+    return { ...row, backInjectedFrom: null };
+  }
+
+  /** 세션의 문서 버전 전부 — 버전 오름차순. 화면·역주입(F4)·골든셋의 정본 구조체. */
+  listRequirementsDocs(sessionId: string): Array<typeof schema.requirementsDoc.$inferSelect> {
+    return this.db
+      .select()
+      .from(schema.requirementsDoc)
+      .where(eq(schema.requirementsDoc.sessionId, sessionId))
+      .orderBy(schema.requirementsDoc.version)
       .all();
   }
 

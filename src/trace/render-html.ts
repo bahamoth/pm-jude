@@ -130,7 +130,8 @@ document.getElementById('summary').innerHTML =
   stat('신호', dist(s.signalTypeCounts)) +
   stat('첨부', s.attachmentCounts.total === 0 ? '—' :
     'ok ' + s.attachmentCounts.ok + ' · failed ' + s.attachmentCounts.failed +
-    ' · pending ' + s.attachmentCounts.pending, '총 ' + s.attachmentCounts.total + '건');
+    ' · pending ' + s.attachmentCounts.pending, '총 ' + s.attachmentCounts.total + '건') +
+  stat('문서', s.documentCount === 0 ? '—' : s.documentCount + '건', '영속된 버전 수 (#53)');
 
 const root = document.getElementById('sessions');
 if (!DATA.sessions.length) {
@@ -176,6 +177,14 @@ for (const sess of DATA.sessions) {
           '<td>' + (sl.evidenceAttachmentId ? '첨부' : '대화') + '</td>' +
           '<td>' + esc(sl.openIssueAssignee ?? '—') + '</td></tr>').join('') || '<tr><td colspan="6">—</td></tr>') +
       '</table></div>' +
+      (sess.documents.length
+        ? '<div><div class="sect">requirements 문서 (#53 — 정본 구조체)</div><table><tr><th>vN</th><th>생성</th><th>content</th></tr>' +
+          sess.documents.map((doc) =>
+            '<tr><td class="mono">v' + doc.version + '</td>' +
+            '<td class="mono">' + esc(doc.createdAt) + '</td>' +
+            '<td class="mono">' + esc(JSON.stringify(doc.content)).slice(0, 400) + '</td></tr>').join('') +
+          '</table></div>'
+        : '') +
       '<div><div class="sect">신호 (F11)</div><table><tr><th>type</th><th>payload</th><th>occurred</th></tr>' +
         (sess.signals.map((sg) =>
           '<tr><td class="mono">' + esc(sg.type) + '</td>' +

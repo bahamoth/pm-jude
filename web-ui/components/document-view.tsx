@@ -1,22 +1,21 @@
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { parseDocumentText } from '@/lib/document';
+import type { DocLine } from '@/lib/document';
 import { t, type Lang } from '@/lib/i18n';
 
 interface Props {
   lang: Lang;
-  text: string;
+  /** 표시 라인 — 저장 구조체(정본) 또는 레거시 텍스트 파서가 만든다 (#53, lib/document). */
+  lines: DocLine[];
   /** 문서 vN — 슬롯 정정 재생성마다 올라간다 (G-11). */
   version: number;
   /** 전 슬롯이 승격으로 통과한 문서인지 — 정직한 구분 표시 (G-11, #28 S-5). */
   fullyPromoted: boolean;
 }
 
-// requirements 문서 열람 (US-9·10) — 코어가 게시한 문서 텍스트를 구조대로 표시한다.
-export function DocumentView({ lang, text, version, fullyPromoted }: Props) {
-  const lines = parseDocumentText(text);
-
+// requirements 문서 열람 (US-9·10) — 문서를 구조대로 표시한다.
+export function DocumentView({ lang, lines, version, fullyPromoted }: Props) {
   return (
     <Card>
       <CardHeader className="flex-row items-center gap-3">

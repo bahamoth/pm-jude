@@ -29,6 +29,13 @@
       "when": 1785203010706,
       "tag": "0003_attachment-storage",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1785222199765,
+      "tag": "0004_requirements-doc",
+      "breakpoints": true
     }
   ]
 }
