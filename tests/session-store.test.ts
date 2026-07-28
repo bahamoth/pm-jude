@@ -317,6 +317,223 @@ describe('세션 저장소', () => {
   });
 });
 
+describe('첨부 자료 (F1-Attach, ADR-0011)', () => {
+  /** 업로드 하나를 승격하고 그 첨부 행을 돌려준다 — 테스트마다 배열을 벗기지 않기 위해. */
+  function promoteOne(
+    store: SessionStore,
+    input: { sessionId: string; utteranceId: string; uploadId: string },
+  ) {
+    const [row] = store.promoteUploads({
+      sessionId: input.sessionId,
+      utteranceId: input.utteranceId,
+      uploadIds: [input.uploadId],
+    });
+    if (!row) throw new Error('첨부 승격 결과가 비어 있다');
+    return row;
+  }
+
+  /** 요청자 발화 하나와 그 발화에 붙일 스테이징 업로드를 준비한다. */
+  function makeSessionWithUpload() {
+    const { store, versionAxes } = makeStore();
+    const session = store.createSession({ originChannel: 'web', ...versionAxes });
+    const utterance = store.appendUtterance({
+      sessionId: session.id,
+      authorType: 'requester',
+      channel: 'web',
+      originalText: '이 기획서대로 만들어 주세요',
+      originalLanguage: 'ko',
+    });
+    const uploadId = store.stageUpload({
+      filename: '기획서.docx',
+      mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      bytes: 2048,
+      sha256: 'a'.repeat(64),
+      storageRef: `aa/${'a'.repeat(64)}`,
+    });
+    return { store, versionAxes, session, utterance, uploadId };
+  }
+
+  it('업로드는 스테이징을 거쳐 발화의 첨부로 승격되고, 스테이징 행은 사라진다', () => {
+    const { store, session, utterance, uploadId } = makeSessionWithUpload();
+
+    expect(store.getStagedUpload(uploadId)).not.toBeNull();
+    const created = store.promoteUploads({
+      sessionId: session.id,
+      utteranceId: utterance.id,
+      uploadIds: [uploadId],
+    });
+
+    expect(created).toHaveLength(1);
+    expect(created[0]).toMatchObject({
+      utteranceId: utterance.id,
+      filename: '기획서.docx',
+      bytes: 2048,
+      extractionStatus: 'pending',
+      extractedText: null,
+    });
+    expect(store.getStagedUpload(uploadId)).toBeNull();
+    expect(store.listAttachments(session.id)).toHaveLength(1);
+  });
+
+  it('알 수 없는 업로드가 섞이면 전부 거부한다 — 일부만 조용히 빠지지 않는다', () => {
+    const { store, session, utterance, uploadId } = makeSessionWithUpload();
+
+    expect(() =>
+      store.promoteUploads({
+        sessionId: session.id,
+        utteranceId: utterance.id,
+        uploadIds: [uploadId, 'no-such-upload'],
+      }),
+    ).toThrow(/알 수 없는 업로드/);
+
+    expect(store.listAttachments(session.id)).toHaveLength(0);
+    expect(store.getStagedUpload(uploadId)).not.toBeNull(); // 롤백되어 다시 쓸 수 있다
+  });
+
+  it('추출 결과는 갱신되지만 원본은 우회 SQL로도 삭제·수정할 수 없다 (ADR-0011 — DB 트리거)', () => {
+    const dbPath = join(mkdtempSync(join(tmpdir(), 'pm-jude-attach-')), 'store.db');
+    const store = SessionStore.open(dbPath);
+    openedStores.push(store);
+    const versionAxes = registerVersionAxes(store);
+    const session = store.createSession({ originChannel: 'web', ...versionAxes });
+    const utterance = store.appendUtterance({
+      sessionId: session.id,
+      authorType: 'requester',
+      channel: 'web',
+      originalText: '자료 첨부합니다',
+      originalLanguage: 'ko',
+    });
+    const uploadId = store.stageUpload({
+      filename: 'spec.pdf',
+      mime: 'application/pdf',
+      bytes: 1024,
+      sha256: 'b'.repeat(64),
+      storageRef: `bb/${'b'.repeat(64)}`,
+    });
+    const row = promoteOne(store, {
+      sessionId: session.id,
+      utteranceId: utterance.id,
+      uploadId,
+    });
+
+    // 추출은 갱신 경로다 — 추출기가 좋아지면 과거 세션에도 소급된다
+    store.setExtraction({
+      id: row.id,
+      status: 'ok',
+      extractedText: '문제: 주간 매출 확인',
+      extractorVersion: 'pdf-text@0.1.0',
+    });
+    expect(store.getAttachment(row.id)).toMatchObject({
+      extractionStatus: 'ok',
+      extractedText: '문제: 주간 매출 확인',
+      extractorVersion: 'pdf-text@0.1.0',
+    });
+    store.setExtraction({
+      id: row.id,
+      status: 'ok',
+      extractedText: '재추출 결과',
+      extractorVersion: 'pdf-text@0.2.0',
+    });
+    expect(store.getAttachment(row.id)?.extractedText).toBe('재추출 결과');
+
+    const raw = new Database(dbPath);
+    try {
+      expect(() => raw.prepare('DELETE FROM attachment').run()).toThrow(/immutable/);
+      expect(() => raw.prepare(`UPDATE attachment SET sha256 = 'tampered'`).run()).toThrow(
+        /immutable/,
+      );
+      expect(() => raw.prepare(`UPDATE attachment SET filename = '다른이름.pdf'`).run()).toThrow(
+        /immutable/,
+      );
+    } finally {
+      raw.close();
+    }
+    expect(store.getAttachment(row.id)).toMatchObject({
+      filename: 'spec.pdf',
+      sha256: 'b'.repeat(64),
+    });
+  });
+
+  it('슬롯 값의 근거로 첨부를 가리킬 수 있다 (F2c — 출처 표시의 전제)', () => {
+    const { store, session, utterance, uploadId } = makeSessionWithUpload();
+    const attachment = promoteOne(store, {
+      sessionId: session.id,
+      utteranceId: utterance.id,
+      uploadId,
+    });
+
+    store.setSlotState({
+      sessionId: session.id,
+      slotKey: 'target-user',
+      state: 'filled',
+      value: '영업팀 매니저',
+      evidenceAttachmentId: attachment.id,
+    });
+
+    expect(store.listSlotStates(session.id)[0]).toMatchObject({
+      state: 'filled',
+      evidenceAttachmentId: attachment.id,
+      evidenceUtteranceId: null,
+    });
+  });
+
+  it('등록되지 않은 첨부를 슬롯 근거로 가리킬 수 없다 (FK 강제)', () => {
+    const { store, session } = makeSessionWithUpload();
+
+    expect(() =>
+      store.setSlotState({
+        sessionId: session.id,
+        slotKey: 'target-user',
+        state: 'filled',
+        evidenceAttachmentId: 'no-such-attachment',
+      }),
+    ).toThrow(/FOREIGN KEY/);
+  });
+
+  it('참조되지 않은 채 오래된 업로드는 메타가 정리된다', () => {
+    const { store, uploadId } = makeSessionWithUpload();
+
+    expect(store.purgeStagedUploads('2000-01-01T00:00:00.000Z')).toBe(0);
+    expect(store.getStagedUpload(uploadId)).not.toBeNull();
+
+    expect(store.purgeStagedUploads(new Date(Date.now() + 60_000).toISOString())).toBe(1);
+    expect(store.getStagedUpload(uploadId)).toBeNull();
+  });
+
+  it('세션 export의 첨부는 추출 결과만 담고 파일명·원본 주소는 빼놓는다', () => {
+    const { store, session, utterance, uploadId } = makeSessionWithUpload();
+    const attachment = promoteOne(store, {
+      sessionId: session.id,
+      utteranceId: utterance.id,
+      uploadId,
+    });
+    store.setExtraction({
+      id: attachment.id,
+      status: 'ok',
+      extractedText: '대상 사용자: 영업팀 매니저',
+      extractorVersion: 'ooxml@0.1.0',
+    });
+
+    const exported = store.exportSessions();
+
+    expect(exported[0]?.attachments).toEqual([
+      {
+        utteranceSeq: 1,
+        mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        bytes: 2048,
+        extractedText: '대상 사용자: 영업팀 매니저',
+        extractionStatus: 'ok',
+        extractionError: null,
+        extractorVersion: 'ooxml@0.1.0',
+        createdAt: attachment.createdAt,
+      },
+    ]);
+    const dump = JSON.stringify(exported);
+    expect(dump).not.toContain('기획서.docx');
+    expect(dump).not.toContain('a'.repeat(64));
+  });
+});
+
 describe('채널 스레드 매핑과 상태 전이 (#8 Slack 러너 지원)', () => {
   it('채널 스레드 키로 세션을 찾을 수 있다 — 재시작 후에도 스레드가 세션에 이어진다', () => {
     const { store, versionAxes } = makeStore();

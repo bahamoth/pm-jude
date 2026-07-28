@@ -103,6 +103,59 @@ export const utterance = sqliteTable(
   (table) => [unique().on(table.sessionId, table.seq)],
 );
 
+/**
+ * 참조되기 전의 업로드 (F1-Attach) — 인테이크 시점에는 세션이 아직 없으므로 파일을 먼저 받고
+ * 발화 제출이 uploadId로 참조한다. 참조되면 attachment로 승격하고 이 행은 사라진다.
+ * 미참조 행은 TTL로 정리한다 — 원본 파일은 남긴다(불변 규율, 보존 정책은 PRD §12-20).
+ */
+export const stagedUpload = sqliteTable('staged_upload', {
+  id: text('id').primaryKey(),
+  filename: text('filename').notNull(),
+  mime: text('mime').notNull(),
+  bytes: integer('bytes').notNull(),
+  sha256: text('sha256').notNull(),
+  storageRef: text('storage_ref').notNull(),
+  createdAt: text('created_at').notNull(),
+});
+
+/**
+ * 첨부 자료 (F1-Attach, ADR-0011) — 발화에 붙는다. 첨부만 단독으로 존재하는 행은 없다.
+ * 원본(sha256·storage_ref)은 불변이고 추출 텍스트만 갱신된다 — 추출기 개선이 과거 세션에도
+ * 소급 가능해야 하므로(재추출 전제) 원문 전사의 불변 규율을 그대로 적용하지 않는다.
+ */
+export const attachment = sqliteTable(
+  'attachment',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => session.id),
+    /** 첨부가 붙은 요청자 발화 — 첨부 시점이 전사 순서로 남는다. */
+    utteranceId: text('utterance_id')
+      .notNull()
+      .references(() => utterance.id),
+    filename: text('filename').notNull(),
+    /** 추출기 선택 키. 미등록 MIME은 업로드 시점에 거부되므로 여기 도달하지 않는다. */
+    mime: text('mime').notNull(),
+    bytes: integer('bytes').notNull(),
+    /** 원본 주소. 같은 파일의 재업로드는 저장 1회. */
+    sha256: text('sha256').notNull(),
+    storageRef: text('storage_ref').notNull(),
+    /** 추출 결과 — 이 테이블에서 유일하게 갱신 가능한 내용 필드. */
+    extractedText: text('extracted_text'),
+    extractionStatus: text('extraction_status', { enum: ['pending', 'ok', 'failed'] })
+      .notNull()
+      .default('pending'),
+    /** 실패 사유(암호화·손상·빈 텍스트 레이어 등) — 요청자 고지의 근거. */
+    extractionError: text('extraction_error'),
+    /** 추출 시점의 추출기 버전. 버전 축은 5축을 유지하고 이 값은 메타로만 남는다 (ADR-0011). */
+    extractorVersion: text('extractor_version'),
+    createdAt: text('created_at').notNull(),
+    extractedAt: text('extracted_at'),
+  },
+  (table) => [index('attachment_session_idx').on(table.sessionId)],
+);
+
 export const slotState = sqliteTable(
   'slot_state',
   {
@@ -117,6 +170,8 @@ export const slotState = sqliteTable(
       .notNull()
       .default(false),
     evidenceUtteranceId: text('evidence_utterance_id').references(() => utterance.id),
+    /** 값의 근거 첨부 — 요청자가 말한 적 없는 값의 출처 표시와 추출 결함 판독의 근거 (F2c). */
+    evidenceAttachmentId: text('evidence_attachment_id').references(() => attachment.id),
     openIssueAssignee: text('open_issue_assignee'),
   },
   (table) => [primaryKey({ columns: [table.sessionId, table.slotKey] })],
