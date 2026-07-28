@@ -584,7 +584,11 @@ describe('requirements_doc 영속 (#53)', () => {
         acceptanceCriteria: [
           {
             ears: 'When 기간을 선택하면, the system shall 월별 합계를 표시한다',
-            gwt: { given: '매출 데이터가 있을 때', when: '기간을 선택하면', then: '합계가 표시된다' },
+            gwt: {
+              given: '매출 데이터가 있을 때',
+              when: '기간을 선택하면',
+              then: '합계가 표시된다',
+            },
           },
         ],
       },
