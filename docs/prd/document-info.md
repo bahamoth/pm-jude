@@ -1,12 +1,13 @@
 ## 1. 문서 정보
 
-> **EN** — PRD §1 — version, revision history, intended audience. Currently v1.6, approved for build. Read the v1.6 entry for why the retrospective baseline was abandoned in favor of the system's own accumulated data, and the v1.4 entry for why the completeness schema is derived from measured re-question data rather than requirements-engineering literature.
+> **EN** — PRD §1 — version, revision history, intended audience. Currently v1.7, approved for build. Read the v1.7 entry for the design-system selection stage added to the mockup loop, the v1.6 entry for why the retrospective baseline was abandoned in favor of the system's own accumulated data, and the v1.4 entry for why the completeness schema is derived from measured re-question data rather than requirements-engineering literature.
 
 - **제품명**: **PM Jude** *(v1.3에서 확정. 유래: Product Manager의 약어 PM이 Paul McCartney의 이니셜과 같다는 데서 착안한 "Hey Jude" 언어유희. 이전 임시 코드명 Gatekeeper를 대체하며, 문서 내 역할 서술의 "게이트키퍼"는 보통명사로 유지)*
-- **버전**: v1.6 (확정 / Approved for build)
+- **버전**: v1.7 (확정 / Approved for build)
 - **상태**: Phase 0(파이프라인 PoC) 진행 중 — 소급 베이스라인 갈래는 폐기(ADR-0012)
 - **작성일**: 2026-07-23 (최초) / **개정일**: 2026-07-28
 - **변경 이력**:
+  - **v1.7** — 2026-07-28 — **목업 반복에 디자인 시스템 선정 단계 신설**(F4, 보드 #54). 운영자 지시 — 목업을 요청자와 반복해 UI 기획을 확정하고 디자인 시스템까지 선정한다. ① F4 그레이스케일 규정을 **레이아웃 반복 단계 한정**으로 개정 — 수렴 후 선정 단계에서만 테마 변형 허용, 목업 HTML은 구조 층/테마 토큰 층 분리로 테마 교체에 재생성이 없다. ② **테마 레지스트리** 신설 — 내장 프리셋 + 외부 등록(디자인 토큰 JSON·CSS), 조직 표준은 코드 수정 없이 파일 등록으로 흡수. ③ 선정 결과는 역주입 시 **「확정된 시각 방향」**으로 requirements에 기록 — 스택 강제가 아니라 요청자 확인을 거친 시각 언어의 기록(§3 "어떻게 비움" 경계 유지), 위임(개발팀 몫) 1클릭 포함. ④ 선정 없는 승인 불가를 수용기준으로 승격. Phase 2 예정이던 목업 서비스 + 역주입기를 Phase 0 웹 표면에서 앞당겨 구현. 상태 머신은 documented 이후 mockup 상태가 추가된 것 외 변경 없음.
   - **v1.6** — 2026-07-28 — **측정 체계 전환: 소급 베이스라인 폐기**([ADR-0012](../adr/0012-prospective-self-measurement.md)). 운영자 판정 — 조직에 PM 직군이 없고 Linear 이슈는 개발자만 작성하므로, 요청자↔개발자 명확화 대화가 아카이브에 없다. 개선 지표로 쓸 백데이터는 없는 것으로 간주한다. ① §9 소급 아카이브 분석 폐기 — 중단 기준 (c)의 입력을 런타임 슬롯 승격률로 교체, ② §10 도입 전 대비 감소율 지표 폐기(자체 규칙 「베이스라인 없는 지표는 채택하지 않는다」 적용) — 개선 판정은 버전 간 추이(vN 대비 vN+1), 채택 판단은 선행 지표, 전향 대조(provenance 유무)는 선택 편향을 명시하고 방향 신호로만, ③ F2e 최초 슬롯 목록의 근거를 소급 분류표에서 **개발자 엘리시테이션 시드**로 교체(F11 신호 기반 갱신 규칙은 유지), ④ §2.1 전제 검증을 사전 실측에서 상시 런타임 관측으로 이동. 상태 머신과 기능 요구사항의 실행 경로는 변경 없음.
   - **v1.5** — 2026-07-28 — **자료 첨부 신설**(F1-Attach). 요청자가 발화에 자료를 붙일 수 있게 하고, 첨부를 참조물이 아니라 **명확화 입력**으로 규정했다 — 추출 텍스트가 질문 생성·완결성 판정에 실리고 슬롯을 채운다. 그 귀결로 ① F2c에 **슬롯 근거의 출처** 개념 추가(첨부 유래 값은 출처를 기록·표시하며, F13은 추출 결함을 프롬프트 결함과 구분해 분류), ② F3에 **첨부 유래 확정 사항의 흡수** 추가(문서만으로 구현 가능한 상태 유지 — F4 역주입과 같은 규율), ③ F11 신호에 추출 실패·첨부 유래 슬롯 정정 추가, ④ §12에 첨부 상한 3종과 보존 기간 등재. 모델에 닿는 경로를 텍스트 하나로 고정해 게이트웨이 계약과 F14 Exit 기준을 보존했다([ADR-0011](../adr/0011-attachment-as-clarification-input.md)). 상태 머신은 변경 없음.
   - **v1.4.1** — 2026-07-26 — 정합성 개정(요구사항 의미 변경 없음). ① §13의 "v1.1 정의 유지" 참조 6종을 인라인 정의로 복원, ② §12-17의 하네스 선택을 닫힌 항목으로 이동(ADR-0005 기확정 반영), ③ 부록 A 평가 도구 후보를 F12와 일치(braintrust 제거), ④ §7 구조화 호출 표제를 핵심 5종 + 보조 2종으로 교정, ⑤ §1 문서 성격의 자기 지시를 분할 구조(PRD.md + docs/prd/)에 맞게 갱신.
