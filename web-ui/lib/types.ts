@@ -13,7 +13,7 @@ export interface Reply {
 }
 
 /** 코어 러너가 세션에 부여하는 상태 집합 (src/runner/core-runner.ts). */
-export type SessionStatus = 'intake' | 'clarifying' | 'documented' | 'closed';
+export type SessionStatus = 'intake' | 'clarifying' | 'documented' | 'mockup' | 'closed';
 
 /** 재시도할 미완 라운드의 종류 — 질문 생성이 죽었는지, 판정이 죽었는지 (G-10). */
 export type PendingRound = 'clarification' | 'judgement' | null;
@@ -101,6 +101,42 @@ export interface DocumentContent {
   openIssues: Array<{ slotKey: string; question: string; assignee: string | null }>;
 }
 
+/** 목업 요약 (F4 #54) — 세션 조회에 실린다. 상세는 목업 상태 조회로. */
+export interface MockupSummary {
+  latestVersion: number;
+  docVersion: number;
+  convergence: 'iterating' | 'approved' | 'escalated' | string;
+  selectedTheme: string | null;
+  themeDelegated: boolean;
+}
+
+/** 디자인 시스템 선정 후보 — 테마 레지스트리(내장 + 외부 등록)에서 온다 (F4). */
+export interface ThemeCandidate {
+  id: string;
+  name: string;
+  description: string;
+}
+
+/** 목업 반복 상태 (GET /api/sessions/:id/mockup) — 화면 복원의 근거. */
+export interface MockupState extends MockupSummary {
+  iterationsUsed: number;
+  iterationBudget: number;
+  versions: Array<{
+    version: number;
+    docVersion: number;
+    summary: string | null;
+    createdAt: string;
+  }>;
+  themes: ThemeCandidate[];
+  annotations: Array<{
+    mockupVersion: number | null;
+    text: string;
+    elementRef: string | null;
+    createdAt: string;
+  }>;
+  processing: boolean;
+}
+
 export interface SessionDetail {
   latestQuestions: ReplyQuestion[] | null;
   /** 최신 명확화 라운드의 식별자 — 답변 제출이 동반해야 한다 (G-10 라운드 정합). */
@@ -131,6 +167,8 @@ export interface SessionDetail {
   /** 올린 자료와 읽힘 여부 — 읽지 못한 자료도 사유와 함께 남는다 (F1-Attach). */
   attachments: AttachmentView[];
   uploads: UploadPolicy;
+  /** 목업 요약 (F4 #54) — null이면 목업 없는 세션 (비 UI 또는 목업 전). */
+  mockup: MockupSummary | null;
 }
 
 export interface SessionSummary {

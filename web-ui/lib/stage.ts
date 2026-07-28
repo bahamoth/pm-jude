@@ -11,7 +11,7 @@ export const JOURNEY_STEPS = [
   { index: 5, labelKey: 'journey.5', pending: true },
 ] as const satisfies ReadonlyArray<{ index: number; labelKey: Key; pending?: boolean }>;
 
-/** 현재 여정 단계 (1~5). 보류는 ②에 머무는 상태로 취급한다. */
+/** 현재 여정 단계 (1~5). 보류는 ②에, 목업 반복은 ③(문서 확정) 위에서 돈다 (F4 #54). */
 export function journeyStep(status: SessionStatus): number {
   switch (status) {
     case 'intake':
@@ -19,6 +19,8 @@ export function journeyStep(status: SessionStatus): number {
     case 'clarifying':
       return 2;
     case 'documented':
+      return 3;
+    case 'mockup':
       return 3;
     case 'closed':
       return 2;
@@ -39,6 +41,8 @@ export function statusChip(status: SessionStatus, terminalState: string | null):
       return { labelKey: 'chip.clarifying', tone: 'action' };
     case 'documented':
       return { labelKey: 'chip.documented', tone: 'action' };
+    case 'mockup':
+      return { labelKey: 'chip.mockup', tone: 'action' };
     case 'closed':
       return terminalState === 'on_hold_insufficient_info'
         ? { labelKey: 'chip.onHold', tone: 'hold' }

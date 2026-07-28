@@ -10,6 +10,7 @@ import { DocumentView } from '@/components/document-view';
 import { HoldCard } from '@/components/hold-card';
 import { Jude, type JudeHandle } from '@/components/jude';
 import { JourneyStepper } from '@/components/journey-stepper';
+import { MockupPanel } from '@/components/mockup-panel';
 import { QuestionWizard } from '@/components/question-wizard';
 import { RetryCard } from '@/components/retry-card';
 import { RoundContext } from '@/components/round-context';
@@ -20,7 +21,16 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { confirmSlotOk, correctSlot, getSession, retryRound, sendReply } from '@/lib/api';
+import {
+  approveMockup,
+  confirmSlotOk,
+  correctSlot,
+  getSession,
+  retryRound,
+  selectMockupTheme,
+  sendMockupComments,
+  sendReply,
+} from '@/lib/api';
 import { documentLinesFromContent, parseDocumentText } from '@/lib/document';
 import type { UploadedFile } from '@/lib/types';
 import { rememberSession } from '@/lib/local-sessions';
@@ -99,8 +109,9 @@ export default function SessionPage() {
       await kick();
       await watchThenRefetch();
     } catch (e) {
-      // 스테일 라운드(G-10)는 오류가 아니라 다른 탭이 앞서간 것 — 최신 질문을 가져온다
-      const stale = e instanceof ApiError && e.code === 'stale_round';
+      // 스테일 라운드·스테일 목업 판(G-10 정합)은 오류가 아니라 다른 탭이 앞서간 것 — 최신을 가져온다
+      const stale =
+        e instanceof ApiError && (e.code === 'stale_round' || e.code === 'stale_mockup');
       setError(
         stale
           ? t(lang, 'retry.staleRound')
@@ -252,6 +263,50 @@ export default function SessionPage() {
             />
           </div>
         )
+      ) : session.status === 'mockup' ? (
+        <div className="grid gap-4">
+          <MockupPanel
+            key={`${String(detail.mockup?.latestVersion)}-${String(detail.mockup?.selectedTheme)}-${String(detail.mockup?.themeDelegated)}`}
+            lang={lang}
+            sessionId={sessionId}
+            submitting={busy || failed}
+            onComment={(version, comments) =>
+              void act(() => sendMockupComments(sessionId, version, comments))
+            }
+            onSelectTheme={(selection) => {
+              // 선정은 동기 200 (LLM 없음) — 감시 없이 재조회로 충분하다
+              setError(null);
+              void selectMockupTheme(sessionId, selection)
+                .then(() => refetch())
+                .catch((e: unknown) =>
+                  setError(e instanceof Error ? e.message : t(lang, 'session.actionFailed')),
+                );
+            }}
+            onApprove={() => void act(() => approveMockup(sessionId))}
+          />
+          {/* 목업을 보다 슬롯 값의 오류를 발견할 수 있다 — 정정 진입점 유지 (#51, US-16) */}
+          <SlotReview
+            lang={lang}
+            slots={slotStates}
+            attachments={attachments}
+            submitting={busy || failed}
+            onConfirm={(slotKey) =>
+              void confirmSlotOk(sessionId, slotKey)
+                .then(() => refetch())
+                .catch((e) =>
+                  setError(e instanceof Error ? e.message : t(lang, 'session.confirmFailed')),
+                )
+            }
+            onCorrect={(slotKey, text) => void act(() => correctSlot(sessionId, slotKey, text))}
+          />
+          <DocumentView
+            lang={lang}
+            lines={docLines}
+            version={storedDocument?.version ?? documentVersion}
+            fullyPromoted={fullyPromoted(slotStates)}
+          />
+          <AttachmentList lang={lang} sessionId={sessionId} attachments={attachments} />
+        </div>
       ) : session.status === 'documented' ? (
         <div className="grid gap-4">
           <SlotReview
