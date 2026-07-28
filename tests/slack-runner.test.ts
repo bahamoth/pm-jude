@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { BackendRequest, BackendResponse, LlmBackend } from '../src/gateway/backend';
 import { createDefaultRegistry } from '../src/prompts/catalog';
-import { slot } from './slot-fixture';
+import { refinedCompletenessResponse, requirementsResponse, slot } from './slot-fixture';
 import { SlackIntakeRunner, type SlackPostedMessage } from '../src/runner/slack-runner';
 import { SessionStore } from '../src/store/session-store';
 
@@ -54,40 +54,6 @@ const clarificationResponse = JSON.stringify({
       dontKnowPath: { label: '모르겠어요 — 개발팀이 정해 주세요' },
     },
   ],
-});
-
-/** 전 슬롯 해소 — 정제 완료로 이끄는 판정 (#52 documented 가드 시나리오용). */
-const refinedCompletenessResponse = JSON.stringify({
-  slots: [
-    slot('target-user', 'filled', '「영업팀 매니저」라고 확답'),
-    slot('purpose', 'filled', '수작업 집계 제거라고 답함'),
-    slot('data-source', 'promoted', '요청자가 「모르겠어요」를 택함'),
-  ],
-  remainingAmbiguities: [],
-  rubric: { score: 90, rationale: '핵심 슬롯 모두 해소' },
-});
-
-const requirementsResponse = JSON.stringify({
-  problem: '영업 실적을 정리해 볼 수단이 없어 매니저가 수작업으로 집계한다',
-  users: ['영업팀 매니저'],
-  scope: { inScope: ['월별 매출 추이 조회'], outOfScope: [] },
-  stories: [
-    {
-      story: '영업팀 매니저로서, 월별 매출 추이를 확인하고 싶다',
-      acceptanceCriteria: [
-        {
-          ears: 'When 매니저가 기간을 선택하면, the system shall 월별 매출 합계를 표시한다',
-          gwt: {
-            given: '매출 데이터가 존재할 때',
-            when: '기간을 선택하면',
-            then: '월별 합계가 표시된다',
-          },
-        },
-      ],
-    },
-  ],
-  dataSources: [],
-  openIssues: [],
 });
 
 /** purpose가 여전히 미충족 — 미정제로 이끄는 판정. */

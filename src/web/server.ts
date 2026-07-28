@@ -409,7 +409,9 @@ export function createWebServer(deps: WebServerDeps): Server {
       sendJson(res, 404, { error: '세션 없음' });
       return;
     }
-    // documented의 일반 답변은 막는다 — 정정은 슬롯 확인 경로(§6)만 (Spec 리뷰 6)
+    // documented의 일반 답변은 막는다 — 정정은 슬롯 확인 경로(§6)만 (Spec 리뷰 6).
+    // 코어에도 채널 무관 가드가 있다(#52) — 이 409는 UI가 열지 않는 직접 API 호출에
+    // 대한 계약 방어라 발화·신호를 남기지 않고, 전달 채널의 실사용 답글은 코어가 받는다.
     if (session.status === 'documented') {
       sendJson(res, 409, {
         error: '문서가 완성된 요청이에요 — 항목별 확인·정정으로 고칠 수 있어요.',
@@ -598,7 +600,7 @@ export function createWebServer(deps: WebServerDeps): Server {
        * 저장 행이 없는 레거시 세션은 null — 클라이언트가 발화 텍스트 파서로 폴백한다.
        */
       document: (() => {
-        const latest = store.listRequirementsDocs(sessionId).at(-1);
+        const latest = store.latestRequirementsDoc(sessionId);
         return latest ? { version: latest.version, content: latest.content } : null;
       })(),
       /** 현재 문서 버전에서 전 슬롯 확인이 끝났는가 — Phase 0 종착 (G-11). */

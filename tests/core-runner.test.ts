@@ -11,7 +11,6 @@ import { AttachmentStore } from '../src/store/attachment-store';
 import type { SlotTriState } from '../src/prompts/completeness-v0';
 import type { CompletenessV1Output } from '../src/prompts/completeness-v1';
 import type { PromotionOutput } from '../src/prompts/promotion-v0';
-import type { RequirementsOutput } from '../src/prompts/requirements-v0';
 import {
   DEFAULT_ATTACHMENT_LIMITS,
   detectRequesterLanguage,
@@ -22,6 +21,7 @@ import {
   type ClarificationRoundPayload,
 } from '../src/runner/core-runner';
 import { SessionStore } from '../src/store/session-store';
+import { refinedCompletenessResponse, requirementsResponse } from './slot-fixture';
 
 /**
  * 코어 러너 시임 테스트 (#16) — 채널 비의존 파이프라인의 분기 케이스를 여기서 검증한다.
@@ -90,16 +90,7 @@ function slot(slotKey: string, verdict: SlotTriState, rationale: string, attachm
   };
 }
 
-/** 전 슬롯 해소(충족 2 + 승격 1), 임계치 이상 — 정제 완료로 이끄는 판정. */
-const refinedCompletenessResponse = JSON.stringify({
-  slots: [
-    slot('target-user', 'filled', '「영업팀 매니저」라고 확답'),
-    slot('purpose', 'filled', '수작업 집계 제거라고 답함'),
-    slot('data-source', 'promoted', '요청자가 「모르겠어요 — 개발팀이 정해 주세요」를 택함'),
-  ],
-  remainingAmbiguities: [],
-  rubric: { score: 90, rationale: '핵심 슬롯 모두 해소' },
-} satisfies CompletenessV1Output);
+// refinedCompletenessResponse·requirementsResponse는 Slack 심과 공용 — tests/slot-fixture.ts
 
 /** 첨부에서 대상 사용자를 읽어낸 판정 — 출처가 슬롯에 남는다 (F2c). */
 const attachmentEvidenceResponse = JSON.stringify({
@@ -179,29 +170,6 @@ const fullyPromotedCompletenessResponse = JSON.stringify({
   remainingAmbiguities: [],
   rubric: { score: 85, rationale: '전 항목이 담당자 몫으로 정리됨' },
 } satisfies CompletenessV1Output);
-
-const requirementsResponse = JSON.stringify({
-  problem: '영업 실적을 정리해 볼 수단이 없어 매니저가 수작업으로 집계한다',
-  users: ['영업팀 매니저'],
-  scope: { inScope: ['월별 매출 추이 조회'], outOfScope: [] },
-  stories: [
-    {
-      story: '영업팀 매니저로서, 월별 매출 추이를 확인하고 싶다',
-      acceptanceCriteria: [
-        {
-          ears: 'When 매니저가 기간을 선택하면, the system shall 월별 매출 합계를 표시한다',
-          gwt: {
-            given: '매출 데이터가 존재할 때',
-            when: '기간을 선택하면',
-            then: '월별 합계가 표시된다',
-          },
-        },
-      ],
-    },
-  ],
-  dataSources: [],
-  openIssues: [],
-} satisfies RequirementsOutput);
 
 let store: SessionStore | undefined;
 afterEach(() => {

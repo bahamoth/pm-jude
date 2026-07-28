@@ -360,6 +360,12 @@ erDiagram
         string evidence_attachment_id
         string open_issue_assignee
     }
+    requirements_doc {
+        string id PK
+        int version "vN - 정정 재생성마다 증가"
+        json content "정본 구조체"
+        string back_injected_from "역주입 원본 목업 (F4)"
+    }
     gate_item {
         string approver_id
         string routing_basis "수신 사유 표시"
