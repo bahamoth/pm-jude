@@ -6,7 +6,7 @@
 
 1. **버전 귀속 5축** — 모든 신호는 `세션 ID × 프롬프트 버전 × 모델 버전 × 임계치 버전 × 슬롯 스키마 버전`에 묶인다(F11). 세션 생성 시점의 버전을 세션에 고정 기록하고, 신호에는 발생 시점의 버전을 중복 기록한다(세션 중 카나리 전환 대비).
 2. **다중 요청자 최소 모델** — 세션:요청자 = N:M. 중복 병합이 동작하는 순간 1이슈 N요청자가 발생하므로 Phase 1 필수(F8). 역할(요청자/대리 요청자/실사용자)과 구독 여부를 관계에 둔다.
-3. **원문 전사 상시 보존** — 발화는 원문(요청자 언어)과 정규화본(팀 표준 언어)을 함께 저장한다(원칙 7). 원문 삭제 경로는 만들지 않는다.
+3. **원문 전사 상시 보존** — 발화는 원문(요청자 언어)과 정규화본(팀 표준 언어)을 함께 저장한다(원칙 7). 원문 삭제 경로는 만들지 않는다. **첨부 원본도 같은 규율을 따르되, 추출 텍스트는 예외다** — 원본은 불변이고 추출은 추출기 버전을 단 재생성 가능한 캐시다(ADR-0011).
 4. **상태는 상태 머신의 것** — `session.status`의 값 집합과 전이는 코드 상태 머신이 정의한다([ADR-0001](adr/0001-fixed-orchestration.md)). DB는 전이 이력을 기록할 뿐 전이를 판단하지 않는다.
 
 ## 엔티티
@@ -60,6 +60,26 @@
 | normalized_text | text? | 팀 표준 언어 정규화본 |
 | created_at | ts | |
 
+### attachment — 첨부 자료 (F1-Attach)
+
+발화에 붙는다 — 첨부만 단독으로 존재하는 행은 없다. 원본은 불변, 추출 텍스트는 재생성 가능한 캐시다([ADR-0011](adr/0011-attachment-as-clarification-input.md)).
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| id | pk | |
+| session_id | fk | |
+| utterance_id | fk | 첨부가 붙은 요청자 발화. 첨부 시점이 전사 순서로 남는다 |
+| filename | text | 요청자가 올린 이름. 표시·다운로드용 |
+| mime | text | 추출기 선택 키. 미등록 MIME은 업로드 시점 거부 |
+| bytes | int | |
+| sha256 | text | 원본 주소. 같은 파일의 재업로드는 저장 1회 |
+| storage_ref | text | 원본 위치. 삭제·치환 경로 없음(트리거 강제) |
+| extracted_text | text? | 추출 결과. **이 필드만 갱신 가능** — 재추출 전제 |
+| extraction_status | enum | `pending` / `ok` / `failed` |
+| extraction_error | text? | 실패 사유(암호화·손상·빈 텍스트 레이어 등). 요청자 고지의 근거 |
+| extractor_version | text? | 추출 시점의 추출기 버전. 신호 payload에도 실린다 — 버전 축은 5축을 유지한다 |
+| created_at / extracted_at | ts | |
+
 ### slot_state — 슬롯 3상태
 
 | 필드 | 타입 | 설명 |
@@ -70,6 +90,7 @@
 | value | json? | 충족 시 확정 값 |
 | confirmed_by_requester | bool | 슬롯 단위 확인 완료 여부(원칙 7) |
 | evidence_utterance_id | fk? | 값의 근거 발화 |
+| evidence_attachment_id | fk? | 값의 근거 첨부. 요청자가 말한 적 없는 값의 출처 표시와 F13 추출 결함 판독의 근거(F2c) |
 | open_issue_assignee | text? | 승격 시 담당자. 승격 판정 기준은 결정 대기(§12-4) |
 
 ### requirements_doc — 요구사항 문서 버전
@@ -164,3 +185,5 @@ slot_schema_version은 추가로 `slots: json`(슬롯 정의 목록)과 `derived
 | 백로그 재부상 트리거 수치 | 재부상 스케줄러 설정 | §12-14 |
 | 과거 거절 이력 유효기간 | context_ref 필터 | §12-16 |
 | 금칙 모호어 사전 | 룰 층 설정 테이블 | §12-1 |
+| 첨부 상한 3종(파일당 크기·세션 총량·개수) | attachment 업로드 검사값 | §12-19 |
+| 세션·첨부 보존 기간 | attachment.storage_ref 정리 주기 | §12-20 |
