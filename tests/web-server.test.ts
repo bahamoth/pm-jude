@@ -859,9 +859,7 @@ describe('웹 어댑터 — 목업 반복·디자인 시스템 선정 (F4, #54)'
       body: JSON.stringify({ themeId: 'daylight' }),
     });
     expect(themed.status).toBe(200);
-    const preview = await (
-      await fetch(`${baseUrl}/api/sessions/${sessionId}/mockups/2`)
-    ).text();
+    const preview = await (await fetch(`${baseUrl}/api/sessions/${sessionId}/mockups/2`)).text();
     expect(preview).toContain('--pj-accent: #2f6fed'); // daylight 토큰 — 선정 결과가 기본 서빙에 반영
 
     // 승인 → 202 → 역주입 문서 v2 + 목업 approved + 세션 documented

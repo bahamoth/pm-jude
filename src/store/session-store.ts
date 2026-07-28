@@ -437,20 +437,15 @@ export class SessionStore {
         const seqByUtterance = new Map(
           this.listUtterances(session.id).map((utterance) => [utterance.id, utterance.seq]),
         );
-        const mockups = this.listMockups(session.id);
-        const versionByMockupId = new Map(mockups.map((mockup) => [mockup.id, mockup.version]));
         return {
           session,
-          mockups: mockups.map(({ id: _id, sessionId: _sessionId, html, ...rest }) => ({
-            ...rest,
-            htmlBytes: Buffer.byteLength(html, 'utf8'),
-          })),
-          mockupAnnotations: this.listMockupAnnotations(session.id).map((annotation) => ({
-            mockupVersion: versionByMockupId.get(annotation.mockupId) ?? null,
-            text: annotation.text,
-            elementRef: annotation.elementRef,
-            createdAt: annotation.createdAt,
-          })),
+          mockups: this.listMockups(session.id).map(
+            ({ id: _id, sessionId: _sessionId, html, ...rest }) => ({
+              ...rest,
+              htmlBytes: Buffer.byteLength(html, 'utf8'),
+            }),
+          ),
+          mockupAnnotations: this.listMockupAnnotationsWithVersions(session.id),
           attachments: this.listAttachments(session.id).map((row) => ({
             utteranceSeq: seqByUtterance.get(row.utteranceId) ?? null,
             mime: row.mime,
@@ -677,6 +672,27 @@ export class SessionStore {
       .where(eq(schema.mockupAnnotation.sessionId, sessionId))
       .orderBy(schema.mockupAnnotation.createdAt)
       .all();
+  }
+
+  /**
+   * 어노테이션을 목업 버전과 조인한 뷰 — 역주입 입력·상태 조회·export가 같은 조형을 쓴다.
+   * (mockupId는 내부 키라 버전으로 바꿔 내보낸다 — 화면·LLM 입력·골든셋 공용.)
+   */
+  listMockupAnnotationsWithVersions(sessionId: string): Array<{
+    mockupVersion: number | null;
+    text: string;
+    elementRef: string | null;
+    createdAt: string;
+  }> {
+    const versionByMockupId = new Map(
+      this.listMockups(sessionId).map((mockup) => [mockup.id, mockup.version]),
+    );
+    return this.listMockupAnnotations(sessionId).map((annotation) => ({
+      mockupVersion: versionByMockupId.get(annotation.mockupId) ?? null,
+      text: annotation.text,
+      elementRef: annotation.elementRef,
+      createdAt: annotation.createdAt,
+    }));
   }
 
   /** 신호 기록 (F11). 버전 5축은 스키마 NOT NULL + FK로 강제된다. */

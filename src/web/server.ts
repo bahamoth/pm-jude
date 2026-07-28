@@ -175,7 +175,9 @@ function parseUploadIds(body: Record<string, unknown>): string[] {
 }
 
 /** 목업 어노테이션 본문 (F4) — 비어 있지 않은 코멘트 최소 1건. */
-function parseComments(body: Record<string, unknown>): Array<{ text: string; elementRef?: string }> {
+function parseComments(
+  body: Record<string, unknown>,
+): Array<{ text: string; elementRef?: string }> {
   if (!Array.isArray(body.comments) || body.comments.length === 0) {
     throw new BadRequest('comments는 비어 있지 않은 배열이어야 한다');
   }
@@ -734,7 +736,6 @@ export function createWebServer(deps: WebServerDeps): Server {
       sendJson(res, 404, { error: '목업 없음' });
       return;
     }
-    const versionById = new Map(mockups.map((mockup) => [mockup.id, mockup.version]));
     sendJson(res, 200, {
       latestVersion: latest.version,
       docVersion: latest.docVersion,
@@ -750,12 +751,7 @@ export function createWebServer(deps: WebServerDeps): Server {
         createdAt: mockup.createdAt,
       })),
       themes: runner.themeCandidates(),
-      annotations: store.listMockupAnnotations(sessionId).map((annotation) => ({
-        mockupVersion: versionById.get(annotation.mockupId) ?? null,
-        text: annotation.text,
-        elementRef: annotation.elementRef,
-        createdAt: annotation.createdAt,
-      })),
+      annotations: store.listMockupAnnotationsWithVersions(sessionId),
       processing: inFlight.has(sessionId),
     });
   }

@@ -111,7 +111,10 @@ const ko = {
   'mockup.annotationsTitle': '남긴 코멘트',
   'mockup.themeTitle': '분위기를 골라 주세요',
   'mockup.themeLede':
-    '화면 구성이 마음에 드시면, 같은 화면에 입혀 본 분위기 중 하나를 골라 주세요. 고르면 위 화면에 바로 입혀 드려요.',
+    '화면 구성이 마음에 드시면 분위기를 골라 볼 차례예요. 후보를 누르면 위 화면에 바로 입혀 드려요 — 실제 화면으로 비교해 보고 확정해 주세요.',
+  'mockup.themePreviewing': '미리보기: {name}',
+  'mockup.themeCommit': '이 분위기로 할게요',
+  'mockup.themeCurrent': '선택됨',
   'mockup.themeDelegate': '개발팀이 정하는 게 좋겠어요',
   'mockup.themeDelegated': '분위기는 개발팀 몫으로 남겼어요',
   'mockup.approve': '이대로 확정할게요',
@@ -291,7 +294,10 @@ const en: Record<Key, string> = {
   'mockup.annotationsTitle': 'Your comments',
   'mockup.themeTitle': 'Pick a look',
   'mockup.themeLede':
-    "Happy with the layout? Pick one of the looks I've dressed it in — it applies to the screen above right away.",
+    'Happy with the layout? Tap a look and it dresses the screen above right away — compare on the real screen, then confirm one.',
+  'mockup.themePreviewing': 'Previewing: {name}',
+  'mockup.themeCommit': 'Go with this look',
+  'mockup.themeCurrent': 'Selected',
   'mockup.themeDelegate': 'Let the team decide',
   'mockup.themeDelegated': 'Left the look for the team to decide',
   'mockup.approve': 'Confirm it like this',

@@ -4,11 +4,7 @@ import type { MockupOutput } from '../src/prompts/mockup-v0';
 import type { UiClassificationOutput } from '../src/prompts/ui-classification-v0';
 import { createDefaultRegistry } from '../src/prompts/catalog';
 import { ThemeRegistry } from '../src/mockup/theme-registry';
-import {
-  IntakeRunner,
-  type ChannelPort,
-  type RoundPayload,
-} from '../src/runner/core-runner';
+import { IntakeRunner, type ChannelPort, type RoundPayload } from '../src/runner/core-runner';
 import { SessionStore } from '../src/store/session-store';
 import { refinedCompletenessResponse, requirementsResponse } from './slot-fixture';
 
@@ -116,10 +112,7 @@ const intake = {
 const answer = { ...intake, text: '영업팀 매니저요. 수작업 집계를 없애고 싶어요.' };
 
 /** 인테이크 → 답변 → 문서 게시까지 통과시킨다. 이후 응답은 분류·목업 몫. */
-async function reachDocumented(
-  responses: string[],
-  options?: { maxMockupIterations?: number },
-) {
+async function reachDocumented(responses: string[], options?: { maxMockupIterations?: number }) {
   const made = makeRunner(
     [clarificationResponse, refinedCompletenessResponse, requirementsResponse, ...responses],
     options,
@@ -248,10 +241,7 @@ describe('F4 — 어노테이션 반복', () => {
   });
 
   it('mockup 상태의 일반 답변은 재판정 없이 안내로 멈춘다 (#52와 대칭)', async () => {
-    const { runner, store, outcome } = await reachDocumented([
-      uiYesResponse,
-      mockupResponse('v1'),
-    ]);
+    const { runner, store, outcome } = await reachDocumented([uiYesResponse, mockupResponse('v1')]);
 
     const result = await runner.handleReply({ ...answer, text: '그런데 로그인도 바꿔 주세요' });
 
@@ -354,7 +344,9 @@ describe('F4 — 디자인 시스템 선정과 역주입', () => {
     // 역주입 귀속 — 문서 v2는 승인된 목업에서 나왔다 (back_injected_from)
     expect(v2.backInjectedFrom).toBe(store.latestMockup(sessionId)!.id);
     // 확정된 시각 방향은 코드가 보장한다 — 프롬프트 산출물이 아니다 (원칙 2)
-    const content = v2.content as { visualDirection?: { themeId: string | null; delegated: boolean } };
+    const content = v2.content as {
+      visualDirection?: { themeId: string | null; delegated: boolean };
+    };
     expect(content.visualDirection?.themeId).toBe(candidate.id);
     expect(content.visualDirection?.delegated).toBe(false);
 
