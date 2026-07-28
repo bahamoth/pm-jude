@@ -2,7 +2,7 @@
 
 비개발자 스테이크홀더의 모호한 요청을 인테이크하고, 개발자가 곧바로 구현에 착수할 수 있는 완결된 요구사항으로 정제하는 AI PM 인테이크 레이어. 이 문서는 프로젝트 전체가 따르는 정본 용어집이다 — 이슈 제목, 코드 식별자, 문서, 커밋 메시지에서 아래 용어를 그대로 쓴다.
 
-정본 출처: PRD v1.5. 개요·원칙은 [PRD.md](PRD.md)에, 나머지 섹션은 [docs/prd/](docs/prd/)에 분할되어 있다(목차: PRD.md). 용어 충돌 시 이 문서가 우선하며, PRD 개정 시 이 문서를 함께 갱신한다. 정의만으로 부족한 용어에는 원문 위치를 병기한다.
+정본 출처: PRD v1.7. 개요·원칙은 [PRD.md](PRD.md)에, 나머지 섹션은 [docs/prd/](docs/prd/)에 분할되어 있다(목차: PRD.md). 용어 충돌 시 이 문서가 우선하며, PRD 개정 시 이 문서를 함께 갱신한다. 정의만으로 부족한 용어에는 원문 위치를 병기한다.
 
 > **EN** — PM Jude is an AI intake layer: it takes a non-developer stakeholder's vague request and refines it into requirements a developer can build from. This file is the project's canonical glossary — use these terms verbatim in issue titles, code identifiers, documents and commit messages. Each entry gives the Korean definition first and the English one after it; the two are equally binding. Where a term is contested, this file wins over the PRD, and revising the PRD means revising this file in the same change.
 >
@@ -170,9 +170,25 @@ _Avoid_: 파일, 업로드, 자료(단독) / file, upload, document (bare)
 **EN** — Confirming with the requester on structured slot values in their own language, rather than on a prose translation. A guard on translation integrity: translation is a lossy transform performed by a probabilistic component, and neither side can verify it.
 
 **목업(Mockup)**:
-UI 요청에 한해 생성되는 요구 확인용 중간충실도 인터랙티브 HTML 화면. 구현 결과물·코드 기준이 아니며, 코드 형태로는 개발팀에 노출되지 않는다.
-**EN** — A medium-fidelity interactive HTML screen, generated for UI requests only, to confirm what was asked for. Not a deliverable and not an implementation reference; it is never handed to the development team as code.
+UI 요청에 한해 생성되는 요구 확인용 중간충실도 인터랙티브 HTML 화면. 레이아웃 반복 단계는 그레이스케일이고, 수렴 후 디자인 시스템 선정 단계에서만 테마 변형이 입혀진다(v1.7). 구현 결과물·코드 기준이 아니며, 코드 형태로는 개발팀에 노출되지 않는다.
+**EN** — A medium-fidelity interactive HTML screen, generated for UI requests only, to confirm what was asked for. Grayscale during layout iteration; theme variants appear only in the design-system selection stage after convergence (v1.7). Not a deliverable and not an implementation reference; it is never handed to the development team as code.
 _Avoid_: 프로토타입, 시안, 와이어프레임 / prototype, comp, wireframe
+
+**디자인 시스템 선정(Design System Selection)**:
+레이아웃이 수렴한 목업에 테마 레지스트리의 후보를 테마 변형으로 입혀 제시하고, 요청자가 1택하거나 개발팀에 위임하는 목업 반복의 마지막 단계. 선정 없이 승인은 없다.
+**EN** — The final stage of the mockup loop: candidates from the theme registry are shown as theme variants of the converged mockup, and the requester picks one or delegates to the team. No approval without a selection (or delegation).
+_Avoid_: 테마 고르기, 스킨 선택 / theming, skinning
+원문: [§5 F4](docs/prd/functional-requirements.md)
+
+**테마 레지스트리(Theme Registry)**:
+디자인 시스템 선정 후보의 출처 — 내장 프리셋과 외부 등록 테마(디자인 토큰 JSON·CSS 파일)를 같은 인터페이스로 나열한다. 같은 id의 외부 테마가 내장을 덮으므로, 조직 표준은 코드 수정 없이 파일 등록으로 흡수된다.
+**EN** — Where selection candidates come from: built-in presets and externally registered themes (design-token JSON, CSS files) behind one interface. An external theme with the same id overrides a preset, so an organisation standard is absorbed by file registration, never a code change.
+_Avoid_: 테마 목록, 스타일 카탈로그 / theme list, style catalogue
+
+**확정된 시각 방향(Visual Direction)**:
+디자인 시스템 선정의 결과가 역주입 시 requirements 구조체에 기록되는 필드. 구현 스택 강제가 아니라 요청자 확인을 거친 시각 언어의 기록이며, 구현 수단 선택은 개발팀 재량으로 남는다 — "어떻게 비움" 원칙과의 경계가 여기다.
+**EN** — The field the selection result becomes in the requirements structure at back-injection time. It records the visual language the requester confirmed — not a stack mandate; the implementation choice stays with the team. This is the boundary with the "no how in the document" principle.
+_Avoid_: 디자인 스펙, 스타일 가이드(문서 의미) / design spec, style guide (as a document)
 
 ### 아키텍처 · Architecture
 
