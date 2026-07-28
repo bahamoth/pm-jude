@@ -1,10 +1,13 @@
 import type { LlmBackend } from '../gateway/backend';
 import { LlmGateway, type UsageLogger } from '../gateway/gateway';
 import {
+  BACK_INJECTION_V0,
   CLARIFICATION_V2,
   COMPLETENESS_V1,
+  MOCKUP_V0,
   PROMOTION_V0,
   REQUIREMENTS_V1,
+  UI_CLASSIFICATION_V0,
 } from '../prompts/catalog';
 import type { ClarificationOutput } from '../prompts/clarification-v0';
 import {
@@ -14,12 +17,16 @@ import {
 } from '../prompts/completeness-v0';
 import type { CompletenessV1Output } from '../prompts/completeness-v1';
 import type { PromotionOutput } from '../prompts/promotion-v0';
+import type { BackInjectionOutput } from '../prompts/back-injection-v0';
+import type { MockupOutput } from '../prompts/mockup-v0';
+import type { UiClassificationOutput } from '../prompts/ui-classification-v0';
 import {
   assembleRequirementsDocument,
   type RequirementsDocument,
   type RequirementsOutput,
 } from '../prompts/requirements-v0';
 import type { PromptRegistry } from '../prompts/registry';
+import { ThemeRegistry } from '../mockup/theme-registry';
 import type { AttachmentStore } from '../store/attachment-store';
 import type { SessionStore } from '../store/session-store';
 import { UnsupportedMimeError, type ExtractorRegistry } from '../extract/registry';
@@ -77,12 +84,41 @@ export interface ClarificationRoundPayload {
 }
 
 /**
+ * 목업 게시의 구조화 payload (F4, #54) — 어댑터가 목업 URL·버전 표시·테마 선정 UI를
+ * 만드는 근거다. 코어는 URL을 모른다 — 서빙 주소는 어댑터의 몫이다.
+ */
+export interface MockupRoundPayload {
+  kind: 'mockup_ready';
+  version: number;
+  /** 이 판이 시각화한 requirements 문서 버전 (F4 버전 매핑). */
+  docVersion: number;
+  summary: string | null;
+  iterationsUsed: number;
+  iterationBudget: number;
+  /** 디자인 시스템 선정 후보 — 테마 레지스트리(내장 + 외부 등록)에서 나온다. */
+  themeCandidates: Array<{ id: string; name: string; description: string }>;
+}
+
+export type RoundPayload = ClarificationRoundPayload | MockupRoundPayload;
+
+/**
+ * 확정된 시각 방향 (F4 디자인 시스템 선정, #54) — 역주입 시 코드가 requirements 구조체에
+ * 보장하는 필드다. 구현 스택 강제가 아니라 요청자 확인을 거친 시각 언어의 기록이며,
+ * 구현 수단 선택은 개발팀 재량으로 남는다 (「어떻게 비움」 원칙과의 경계).
+ */
+export interface VisualDirection {
+  themeId: string | null;
+  themeName: string | null;
+  delegated: boolean;
+}
+
+/**
  * 코어가 아는 채널의 전부 — 회신 게시용 포트 (채널 어댑터 원칙, ADR-0007).
  * 주소 A는 코어가 해석하지 않고 이벤트에서 포트로 흘려보낸다.
  * 웹·CLI·Slack 어댑터가 각자 구현한다 (SlackPort와 대칭).
  */
 export interface ChannelPort<A> {
-  post(address: A, text: string, payload?: ClarificationRoundPayload): Promise<void>;
+  post(address: A, text: string, payload?: RoundPayload): Promise<void>;
 }
 
 export interface IntakeEvent<A> {
@@ -177,6 +213,19 @@ const MESSAGES = {
       '지금은 정리하기에 정보가 부족해서 보류로 두었어요. 내용을 보태 주시면 이 자리에서 그대로 다시 진행할게요 — 지금까지 답하신 건 남아 있어요.',
     documentedGuide:
       '문서가 완성된 요청이에요 — 항목별 확인·정정으로 고칠 수 있어요. 정정해 주시면 문서를 새 버전으로 다시 정리할게요.',
+    mockupReady:
+      '말씀하신 내용을 화면 초안으로 만들어 봤어요. 눌러 보면서 확인해 주시고, 고칠 곳은 코멘트로 남겨 주세요 — 다음 판에 반영할게요.',
+    mockupUpdated: '코멘트를 반영해 새 판을 만들었어요. 다시 한번 확인해 주세요.',
+    mockupEscalated:
+      '목업 수정을 정해 둔 횟수만큼 다 썼어요. 남기신 코멘트는 모두 기록해서 개발팀 검토로 넘길게요 — 문서의 항목별 확인·정정은 계속 하실 수 있어요.',
+    mockupGuide:
+      '지금은 화면 목업을 확인하는 단계예요 — 목업에 코멘트를 남기시거나, 항목별 확인·정정으로 문서를 고칠 수 있어요.',
+    themeSelected: (name: string) =>
+      `「${name}」 분위기로 기록해 둘게요 — 목업에서 바로 확인해 보실 수 있어요. 이대로 좋으면 최종 확인해 주세요.`,
+    themeDelegated:
+      '분위기 선택은 개발팀 몫으로 남겨 둘게요. 이대로 좋으면 최종 확인해 주세요.',
+    mockupApproved:
+      '확인 감사해요! 목업에서 확정된 내용을 문서에 반영해 새 버전으로 정리했어요. 이제 문서가 기준이 되고, 목업은 참고용이에요.',
   },
   en: {
     ack: "Got it. I'll ask a few questions to pin the request down.",
@@ -186,6 +235,19 @@ const MESSAGES = {
       "There wasn't enough to work with yet, so I've parked this as on-hold. Add a little and I'll pick it up right here — everything you answered is still there.",
     documentedGuide:
       "This request already has its document — you can change it through the item-by-item confirm and correct flow. Send a correction there and I'll rewrite the document as a new version.",
+    mockupReady:
+      "I've turned this into a first screen draft. Click around, and leave comments on anything to fix — I'll fold them into the next round.",
+    mockupUpdated: "I've folded your comments into a new round — please take another look.",
+    mockupEscalated:
+      "We've used up the mockup revision rounds. Every comment you left is recorded and goes to the team for review — the item-by-item confirm and correct flow is still open.",
+    mockupGuide:
+      'This request is at the mockup stage — leave comments on the mockup, or use the item-by-item confirm and correct flow to change the document.',
+    themeSelected: (name: string) =>
+      `I've noted the "${name}" look — you can preview it on the mockup right away. If it all looks right, give it a final confirm.`,
+    themeDelegated:
+      "I'll leave the look for the team to decide. If everything looks right, give it a final confirm.",
+    mockupApproved:
+      "Thanks for confirming! Everything settled on the mockup is now folded into a new version of the document. The document is the reference from here — the mockup stays around only for context.",
   },
 } as const;
 
@@ -210,6 +272,10 @@ export interface IntakeRunnerDeps<A> {
   attachmentStore?: AttachmentStore;
   createExtractors?: (gateway: LlmGateway) => ExtractorRegistry;
   limits?: AttachmentLimits;
+  /** 디자인 시스템 선정 후보의 출처 (F4, #54). 없으면 내장 프리셋. */
+  themes?: ThemeRegistry;
+  /** 목업 재생성 상한 — 수치는 결정 대기 (PRD §12). 기본 3. */
+  maxMockupIterations?: number;
 }
 
 function formatQuestions(output: ClarificationOutput, language: 'ko' | 'en'): string {
@@ -224,7 +290,11 @@ function formatQuestions(output: ClarificationOutput, language: 'ko' | 'en'): st
   return lines.join('\n');
 }
 
-function formatDocument(doc: RequirementsDocument, version: number): string {
+function formatDocument(
+  doc: RequirementsDocument,
+  version: number,
+  visualDirection?: VisualDirection,
+): string {
   const { content } = doc;
   const lines = [
     // 문서 버전은 정정 재생성마다 올라간다 — 정본 ERD requirements_doc vN·역주입(F4)의 전제 (G-11)
@@ -245,6 +315,16 @@ function formatDocument(doc: RequirementsDocument, version: number): string {
     }
   }
   lines.push(`*데이터 소스* — ${content.dataSources.join(', ') || '미확정 (오픈이슈 참조)'}`);
+  if (visualDirection) {
+    // 요청자 확인을 거친 시각 언어의 기록 — 구현 수단 선택은 개발팀 재량 (F4 선정)
+    lines.push(
+      `*확정된 시각 방향* — ${
+        visualDirection.delegated
+          ? '개발팀 위임'
+          : (visualDirection.themeName ?? visualDirection.themeId ?? '미기록')
+      }`,
+    );
+  }
   if (content.openIssues.length) {
     lines.push('*오픈이슈* (요청자가 답할 수 없어 승격됨 — 담당자 확인 필요)');
     for (const issue of content.openIssues) {
@@ -267,6 +347,8 @@ export class IntakeRunner<A> {
   private readonly maxRounds: number;
   private readonly limits: AttachmentLimits;
   private readonly extractors: ExtractorRegistry | undefined;
+  private readonly themes: ThemeRegistry;
+  private readonly maxMockupIterations: number;
 
   constructor(private readonly deps: IntakeRunnerDeps<A>) {
     this.gateway = new LlmGateway({
@@ -279,6 +361,8 @@ export class IntakeRunner<A> {
     this.limits = deps.limits ?? DEFAULT_ATTACHMENT_LIMITS;
     // 추출기는 러너의 게이트웨이를 쓴다 — 이미지 추출도 같은 폭주 상한 아래 놓인다
     this.extractors = deps.createExtractors?.(this.gateway);
+    this.themes = deps.themes ?? ThemeRegistry.withBuiltins();
+    this.maxMockupIterations = deps.maxMockupIterations ?? 3;
   }
 
   /** 첨부를 다룰 수 있는 구성인가 — 어댑터가 업로드 표면을 열지 판단하는 근거. */
@@ -553,10 +637,11 @@ export class IntakeRunner<A> {
       : this.sessionLanguageOf(session.id, event);
 
     // 문서가 게시된 세션의 일반 답변은 재판정 경로가 아니다 (#52) — 수정은 슬롯 확인·정정
-    // (confirmSlot)만 연다. 웹은 서버가 409로 막지만 채널 무관 최종 가드는 코어 몫이다:
+    // (confirmSlot)만 연다. mockup 단계도 같다: 목업 코멘트는 annotateMockup 경로가 받는다.
+    // 웹은 서버가 409로 막지만 채널 무관 최종 가드는 코어 몫이다:
     // 스레드 답글 하나가 문서를 조용히 다시 만들거나 왕복 예산을 먹는 경로를 차단하고,
     // 발화는 보존하되(원칙 7) 침묵 대신 정정 경로를 안내한다(원칙 5).
-    if (session.status === 'documented' && !options.correction) {
+    if ((session.status === 'documented' || session.status === 'mockup') && !options.correction) {
       if (options.appendUtterance) {
         const utterance = store.appendUtterance({
           sessionId: session.id,
@@ -568,12 +653,16 @@ export class IntakeRunner<A> {
         });
         this.attachUploads(session.id, utterance.id, event);
       }
-      await this.deps.port.post(event.address, MESSAGES[language].documentedGuide);
+      const guide =
+        session.status === 'mockup'
+          ? MESSAGES[language].mockupGuide
+          : MESSAGES[language].documentedGuide;
+      await this.deps.port.post(event.address, guide);
       store.appendUtterance({
         sessionId: session.id,
         authorType: 'agent',
         channel: event.channel,
-        originalText: MESSAGES[language].documentedGuide,
+        originalText: guide,
         originalLanguage: language,
       });
       store.recordSignal({
@@ -688,9 +777,11 @@ export class IntakeRunner<A> {
   }
 
   /**
-   * 슬롯 단위 요청자 확인 (F3, 원칙 7). documented 세션에서만 —
-   * 맞아요: confirmedByRequester 기록. 아니에요: 해당 슬롯을 미충족으로 되돌리고
-   * event.text(정정 내용)를 재판정에 태운다. 정정 자체는 왕복 상한에 산입되지 않는다(#30).
+   * 슬롯 단위 요청자 확인 (F3, 원칙 7). documented·mockup 세션에서 —
+   * 목업을 보다가 슬롯 값의 오류를 발견하는 일은 실재하므로 목업 단계에서도 정정
+   * 진입점을 유지한다(#51, #54 US-16). 맞아요: confirmedByRequester 기록.
+   * 아니에요: 해당 슬롯을 미충족으로 되돌리고 event.text(정정 내용)를 재판정에 태운다.
+   * 정정 자체는 왕복 상한에 산입되지 않는다(#30).
    */
   async confirmSlot(
     event: IntakeEvent<A>,
@@ -699,7 +790,7 @@ export class IntakeRunner<A> {
   ): Promise<ReplyOutcome | null> {
     const { store } = this.deps;
     const session = store.findSessionByThreadKey(event.threadKey);
-    if (!session || session.status !== 'documented') return null;
+    if (!session || (session.status !== 'documented' && session.status !== 'mockup')) return null;
     const row = store.listSlotStates(session.id).find((slot) => slot.slotKey === slotKey);
     if (!row) return null;
 
@@ -1030,6 +1121,354 @@ export class IntakeRunner<A> {
     });
     // 확인할 슬롯이 없는 문서(전면 승격)는 게시 시점이 곧 종착이다 (G-11)
     this.recordCompletion(sessionId, versionAxes);
+    // UI 요청이면 목업 단계가 이어진다 (F4, #54) — 전이는 이 코드가 결정한다 (ADR-0001)
+    await this.enterMockupStage(sessionId, event, versionAxes, version);
+  }
+
+  /**
+   * 문서 게시 뒤의 목업 단계 진입 판정 (F4 전제 조건, #54).
+   * UI 분류는 문서가 처음 게시될 때 1회만 — 정정 재생성은 재분류하지 않는다.
+   * 이미 목업이 있으면(정정으로 문서만 vN+1이 된 경우) 재생성 없이 상태만 되돌린다:
+   * 다음 재생성이 새 문서 버전에 매핑된다. 에스컬레이션된 루프는 다시 열지 않는다.
+   */
+  private async enterMockupStage(
+    sessionId: string,
+    event: IntakeEvent<A>,
+    versionAxes: SignalVersionAxes,
+    docVersion: number,
+  ): Promise<void> {
+    const { store } = this.deps;
+    const session = store.getSession(sessionId);
+    if (!session) return;
+
+    let isUi = session.isUiRequest;
+    if (isUi === null) {
+      const { request } = this.buildConversation(sessionId);
+      const result = await this.gateway.complete<UiClassificationOutput>(UI_CLASSIFICATION_V0, {
+        request,
+        document: store.latestRequirementsDoc(sessionId)?.content ?? null,
+        teamLanguage: this.teamLanguage,
+      });
+      isUi = result.output.isUiRequest;
+      store.updateSessionState(sessionId, { isUiRequest: isUi });
+      store.recordSignal({
+        sessionId,
+        type: 'ui_classified',
+        payload: { isUiRequest: isUi, rationale: result.output.rationale },
+        modelVersion: this.deps.modelVersion,
+        ...versionAxes,
+      });
+    }
+    if (!isUi) return;
+
+    const existing = store.latestMockup(sessionId);
+    if (existing?.convergence === 'escalated' || existing?.convergence === 'approved') return;
+    if (!existing) {
+      await this.generateMockup(sessionId, event, docVersion, { trigger: 'initial' });
+    }
+    store.updateSessionState(sessionId, { status: 'mockup' });
+  }
+
+  /**
+   * 목업 생성·재생성 (F4) — 구조 층 HTML을 게이트웨이 구조화 호출로 산출하고 vN으로
+   * 영속·게시한다. 테마·워터마크는 여기 없다 — 서빙 렌더러(코드)가 입힌다 (원칙 2).
+   */
+  private async generateMockup(
+    sessionId: string,
+    event: IntakeEvent<A>,
+    docVersion: number,
+    options: {
+      trigger: 'initial' | 'annotation';
+      previousHtml?: string;
+      annotations?: Array<{ text: string; elementRef: string | null }>;
+    },
+  ): Promise<void> {
+    const { store } = this.deps;
+    const session = store.getSession(sessionId);
+    if (!session) throw new Error(`세션 조회 실패: ${sessionId}`);
+    const language = this.sessionLanguageOf(sessionId, event);
+    const { request } = this.buildConversation(sessionId);
+
+    const result = await this.gateway.complete<MockupOutput>(MOCKUP_V0, {
+      request,
+      document: store.latestRequirementsDoc(sessionId)?.content ?? null,
+      requesterLanguage: language,
+      ...(options.previousHtml !== undefined ? { previousHtml: options.previousHtml } : {}),
+      ...(options.annotations?.length ? { annotations: options.annotations } : {}),
+    });
+    const version = (store.latestMockup(sessionId)?.version ?? 0) + 1;
+    const row = store.appendMockup({
+      sessionId,
+      version,
+      docVersion,
+      html: result.output.html,
+      summary: result.output.summary,
+    });
+
+    const text = version === 1 ? MESSAGES[language].mockupReady : MESSAGES[language].mockupUpdated;
+    await this.deps.port.post(event.address, text, {
+      kind: 'mockup_ready',
+      version: row.version,
+      docVersion: row.docVersion,
+      summary: row.summary,
+      iterationsUsed: this.mockupIterationsUsed(sessionId),
+      iterationBudget: this.maxMockupIterations,
+      themeCandidates: this.themeCandidates(),
+    });
+    store.appendUtterance({
+      sessionId,
+      authorType: 'agent',
+      channel: event.channel,
+      originalText: text,
+      originalLanguage: language,
+    });
+    store.recordSignal({
+      sessionId,
+      type: 'mockup_generated',
+      payload: { version, docVersion, trigger: options.trigger, summary: result.output.summary },
+      modelVersion: this.deps.modelVersion,
+      ...this.versionAxesOf(session),
+    });
+  }
+
+  /**
+   * 목업 어노테이션 접수 (F4) — mockup 세션에서만. 코멘트를 영속·전사 보존(원칙 7)하고,
+   * 반복 예산이 남았으면 vN+1을 재생성한다. 상한 도달이면 재생성 없이 미수렴 표기와 사유
+   * 회신으로 루프를 닫는다(원칙 5) — 코멘트 자체는 기록되어 판독 큐(F13) 몫으로 남는다.
+   */
+  async annotateMockup(
+    event: IntakeEvent<A>,
+    comments: Array<{ text: string; elementRef?: string }>,
+  ): Promise<ReplyOutcome | null> {
+    const { store } = this.deps;
+    const session = store.findSessionByThreadKey(event.threadKey);
+    if (!session || session.status !== 'mockup') return null;
+    const current = store.latestMockup(session.id);
+    if (!current || comments.length === 0) return null;
+    const language = this.sessionLanguageOf(session.id, event);
+    const versionAxes = this.versionAxesOf(session);
+
+    // 어노테이션도 요청자 발화다 — 원문 전사 상시 보존 (원칙 7)
+    store.appendUtterance({
+      sessionId: session.id,
+      authorType: 'requester',
+      ...(event.authorId !== undefined ? { authorId: event.authorId } : {}),
+      channel: event.channel,
+      originalText: comments
+        .map((comment) =>
+          comment.elementRef ? `[${comment.elementRef}] ${comment.text}` : comment.text,
+        )
+        .join('\n'),
+      originalLanguage: language,
+    });
+    store.addMockupAnnotations({ sessionId: session.id, mockupId: current.id, comments });
+    store.recordSignal({
+      sessionId: session.id,
+      type: 'mockup_annotated',
+      payload: { version: current.version, count: comments.length },
+      modelVersion: this.deps.modelVersion,
+      ...versionAxes,
+    });
+
+    if (this.mockupIterationsUsed(session.id) >= this.maxMockupIterations) {
+      store.updateMockup(current.id, { convergence: 'escalated' });
+      const text = MESSAGES[language].mockupEscalated;
+      await this.deps.port.post(event.address, text);
+      store.appendUtterance({
+        sessionId: session.id,
+        authorType: 'agent',
+        channel: event.channel,
+        originalText: text,
+        originalLanguage: language,
+      });
+      store.updateSessionState(session.id, { status: 'documented' });
+      store.recordSignal({
+        sessionId: session.id,
+        type: 'mockup_escalated',
+        payload: {
+          iterationsUsed: this.mockupIterationsUsed(session.id),
+          budget: this.maxMockupIterations,
+        },
+        modelVersion: this.deps.modelVersion,
+        ...versionAxes,
+      });
+      return this.outcomeOf(session.id);
+    }
+
+    const annotations = store
+      .listMockupAnnotations(session.id)
+      .filter((annotation) => annotation.mockupId === current.id)
+      .map((annotation) => ({ text: annotation.text, elementRef: annotation.elementRef }));
+    await this.generateMockup(session.id, event, this.documentVersionOf(session.id), {
+      trigger: 'annotation',
+      previousHtml: current.html,
+      annotations,
+    });
+    return this.outcomeOf(session.id);
+  }
+
+  /** 지금까지 소모한 재생성 횟수 — v1은 반복이 아니다 (F4 반복 상한). */
+  mockupIterationsUsed(sessionId: string): number {
+    return Math.max(0, this.deps.store.listMockups(sessionId).length - 1);
+  }
+
+  /** 디자인 시스템 선정 후보 — 어댑터 표시용 (테마 상세는 서빙 렌더러가 안다). */
+  themeCandidates(): Array<{ id: string; name: string; description: string }> {
+    return this.themes
+      .list()
+      .map(({ id, name, description }) => ({ id, name, description }));
+  }
+
+  /**
+   * 디자인 시스템 선정 (F4, #54) — 레이아웃이 수렴한 목업에 요청자가 테마 하나를 고르거나
+   * 「개발팀이 정하는 게 좋겠다」로 위임한다(승격과 같은 정신 — 답할 수 없는 선택을 강요하지
+   * 않는다). LLM 호출이 없다: 테마는 서빙 렌더러가 토큰 교체로 입힌다.
+   */
+  async selectMockupTheme(
+    event: IntakeEvent<A>,
+    selection: { themeId: string } | { delegated: true },
+  ): Promise<ReplyOutcome | null> {
+    const { store } = this.deps;
+    const session = store.findSessionByThreadKey(event.threadKey);
+    if (!session || session.status !== 'mockup') return null;
+    const current = store.latestMockup(session.id);
+    if (!current || current.convergence !== 'iterating') return null;
+    const language = this.sessionLanguageOf(session.id, event);
+
+    let text: string;
+    if ('themeId' in selection) {
+      const theme = this.themes.get(selection.themeId);
+      if (!theme) return null; // 후보 밖의 id — 기록하지 않는다
+      store.updateMockup(current.id, { selectedTheme: theme.id, themeDelegated: false });
+      text = MESSAGES[language].themeSelected(theme.name);
+    } else {
+      store.updateMockup(current.id, { selectedTheme: null, themeDelegated: true });
+      text = MESSAGES[language].themeDelegated;
+    }
+    await this.deps.port.post(event.address, text);
+    store.appendUtterance({
+      sessionId: session.id,
+      authorType: 'agent',
+      channel: event.channel,
+      originalText: text,
+      originalLanguage: language,
+    });
+    store.recordSignal({
+      sessionId: session.id,
+      type: 'design_system_selected',
+      payload: {
+        mockupVersion: current.version,
+        themeId: 'themeId' in selection ? selection.themeId : null,
+        delegated: !('themeId' in selection),
+      },
+      modelVersion: this.deps.modelVersion,
+      ...this.versionAxesOf(session),
+    });
+    return this.outcomeOf(session.id);
+  }
+
+  /**
+   * 목업 최종 승인 → 역주입 (F4, 원칙 7) — 어노테이션에서 확정된 사항과 확정된 시각 방향을
+   * requirements vN+1로 흡수한다. 흡수 후 목업은 폐기 가능해야 한다: 목업에만 존재하는 확정
+   * 사항이 남으면 그 정보는 공식적으로 아무 데도 없다 (F6은 목업을 「구현 기준 아님」으로 보낸다).
+   * 시각 방향 미결정 승인은 없다 — 선정 또는 위임이 먼저다.
+   */
+  async approveMockup(event: IntakeEvent<A>): Promise<ReplyOutcome | null> {
+    const { store } = this.deps;
+    const session = store.findSessionByThreadKey(event.threadKey);
+    if (!session || session.status !== 'mockup') return null;
+    const current = store.latestMockup(session.id);
+    if (!current || current.convergence !== 'iterating') return null;
+    if (!current.selectedTheme && !current.themeDelegated) return null;
+
+    const language = this.sessionLanguageOf(session.id, event);
+    const versionAxes = this.versionAxesOf(session);
+    const { request } = this.buildConversation(session.id);
+    const versionByMockupId = new Map(
+      store.listMockups(session.id).map((mockup) => [mockup.id, mockup.version]),
+    );
+    const annotations = store.listMockupAnnotations(session.id).map((annotation) => ({
+      text: annotation.text,
+      elementRef: annotation.elementRef,
+      mockupVersion: versionByMockupId.get(annotation.mockupId) ?? null,
+    }));
+    const theme = current.selectedTheme ? this.themes.get(current.selectedTheme) : undefined;
+    const visualDirection: VisualDirection = {
+      themeId: current.selectedTheme,
+      themeName: theme?.name ?? null,
+      delegated: current.themeDelegated,
+    };
+
+    const result = await this.gateway.complete<BackInjectionOutput>(BACK_INJECTION_V0, {
+      request,
+      teamLanguage: this.teamLanguage,
+      document: store.latestRequirementsDoc(session.id)?.content ?? null,
+      annotations,
+      // 시각 방향은 참고로만 준다 — 문서 필드 보장은 아래 코드 몫 (원칙 2)
+      visualDirection: { themeName: visualDirection.themeName, delegated: visualDirection.delegated },
+    });
+
+    // 승격 슬롯 오픈이슈 합류·원문 전사 첨부는 역주입에서도 코드가 보장한다 (원칙 2)
+    const promotedSlots = store
+      .listSlotStates(session.id)
+      .filter((slot) => slot.state === 'promoted')
+      .map((slot) => ({
+        slotKey: slot.slotKey,
+        openIssueAssignee: slot.openIssueAssignee,
+        question: nonEmptyText(slot.value) ?? `${slot.slotKey} 확정 필요`,
+      }));
+    const doc = assembleRequirementsDocument({
+      output: result.output,
+      promotedSlots,
+      utterances: store.listUtterances(session.id).map((utterance) => ({
+        seq: utterance.seq,
+        authorType: utterance.authorType,
+        originalText: utterance.originalText,
+        originalLanguage: utterance.originalLanguage,
+      })),
+    });
+    const version = this.documentVersionOf(session.id) + 1;
+
+    await this.deps.port.post(event.address, MESSAGES[language].mockupApproved);
+    const text = formatDocument(doc, version, visualDirection);
+    await this.deps.port.post(event.address, text);
+    store.appendUtterance({
+      sessionId: session.id,
+      authorType: 'agent',
+      channel: event.channel,
+      originalText: text,
+      originalLanguage: this.teamLanguage,
+    });
+    store.updateMockup(current.id, { convergence: 'approved' });
+    store.updateSessionState(session.id, { status: 'documented' });
+    // 확정된 시각 방향은 문서 구조체에 코드가 합류시킨다 — 프롬프트 산출물이 아니다 (원칙 2)
+    store.appendRequirementsDoc({
+      sessionId: session.id,
+      version,
+      content: { ...doc.content, visualDirection },
+      backInjectedFrom: current.id,
+    });
+    store.recordSignal({
+      sessionId: session.id,
+      type: 'mockup_approved',
+      payload: { mockupVersion: current.version, docVersion: version },
+      modelVersion: this.deps.modelVersion,
+      ...versionAxes,
+    });
+    store.recordSignal({
+      sessionId: session.id,
+      type: 'document_delivered',
+      payload: {
+        version,
+        openIssueCount: doc.content.openIssues.length,
+        conditional: false,
+        backInjected: true,
+      },
+      modelVersion: this.deps.modelVersion,
+      ...versionAxes,
+    });
+    this.recordCompletion(session.id, versionAxes);
+    return this.outcomeOf(session.id);
   }
 
   /**

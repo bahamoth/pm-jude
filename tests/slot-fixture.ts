@@ -1,6 +1,7 @@
 import type { SlotTriState } from '../src/prompts/completeness-v0';
 import type { CompletenessV1Output } from '../src/prompts/completeness-v1';
 import type { RequirementsOutput } from '../src/prompts/requirements-v0';
+import type { UiClassificationOutput } from '../src/prompts/ui-classification-v0';
 
 /**
  * 완결성 판정 슬롯 픽스처 (completeness@0.2.0) — attachmentRef를 주면 첨부 유래,
@@ -32,6 +33,15 @@ export const refinedCompletenessResponse = JSON.stringify({
   remainingAmbiguities: [],
   rubric: { score: 90, rationale: '핵심 슬롯 모두 해소' },
 } satisfies CompletenessV1Output);
+
+/**
+ * 비 UI 분류 판정 (F4 전제, #54) — 문서 첫 게시 뒤에 1회 호출된다. 목업 단계와 무관한
+ * 기존 심 테스트는 이 응답을 문서 응답 뒤에 실어 목업 생략 경로를 탄다.
+ */
+export const nonUiClassificationResponse = JSON.stringify({
+  isUiRequest: false,
+  rationale: '리포트성 요청 — 화면 변화가 없다',
+} satisfies UiClassificationOutput);
 
 /** requirements 생성 판정 — 정제 완료 후 문서 조립의 입력. 코어·Slack 심 공용. */
 export const requirementsResponse = JSON.stringify({

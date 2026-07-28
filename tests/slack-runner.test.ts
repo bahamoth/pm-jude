@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { BackendRequest, BackendResponse, LlmBackend } from '../src/gateway/backend';
 import { createDefaultRegistry } from '../src/prompts/catalog';
-import { refinedCompletenessResponse, requirementsResponse, slot } from './slot-fixture';
+import {
+  nonUiClassificationResponse,
+  refinedCompletenessResponse,
+  requirementsResponse,
+  slot,
+} from './slot-fixture';
 import { SlackIntakeRunner, type SlackPostedMessage } from '../src/runner/slack-runner';
 import { SessionStore } from '../src/store/session-store';
 
@@ -156,6 +161,7 @@ describe('Slack 어댑터 배선', () => {
       clarificationResponse,
       refinedCompletenessResponse,
       requirementsResponse,
+      nonUiClassificationResponse, // 문서 뒤 UI 분류 — 비 UI라 목업 생략 (#54)
       // 이후 스크립트 없음 — 답글이 재판정을 돌리면 ScriptedBackend가 던진다
     ]);
     await runner.handleMention(mention);

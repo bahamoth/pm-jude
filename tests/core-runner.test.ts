@@ -21,7 +21,11 @@ import {
   type ClarificationRoundPayload,
 } from '../src/runner/core-runner';
 import { SessionStore } from '../src/store/session-store';
-import { refinedCompletenessResponse, requirementsResponse } from './slot-fixture';
+import {
+  nonUiClassificationResponse,
+  refinedCompletenessResponse,
+  requirementsResponse,
+} from './slot-fixture';
 
 /**
  * 코어 러너 시임 테스트 (#16) — 채널 비의존 파이프라인의 분기 케이스를 여기서 검증한다.
@@ -331,6 +335,7 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
       clarificationResponse,
       refinedCompletenessResponse,
       requirementsResponse,
+      nonUiClassificationResponse, // 문서 뒤 UI 분류 — 비 UI라 목업 생략 (#54)
     ]);
     await runner.handleIntake(intake);
 
@@ -389,6 +394,7 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
         unrefinedCompletenessResponse, // 상한 도달 시점에 purpose·data-source 미충족
         promotableResponse, // 승격 판정 — 둘 다 담당자 몫
         requirementsResponse,
+        nonUiClassificationResponse, // 문서 뒤 UI 분류 — 비 UI라 목업 생략 (#54)
       ],
       { maxRounds: 1 },
     );
@@ -425,6 +431,7 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
         clarificationResponse,
         lowScoreCompletenessResponse, // 룰 층 통과, 루브릭 미달 → 미정제
         requirementsResponse,
+        nonUiClassificationResponse, // 문서 뒤 UI 분류 — 비 UI라 목업 생략 (#54)
       ],
       { maxRounds: 1 },
     );
@@ -434,7 +441,8 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
 
     // 「정보 부족」이 아니므로 보류가 아니다 — 남은 것은 해석 모호성이고 왕복은 끝났다
     expect(result?.status).toBe('documented');
-    expect(backend.requests).toHaveLength(3); // 승격 판정 호출은 없다 (승격시킬 슬롯이 없다)
+    // 승격 판정 호출은 없다 (승격시킬 슬롯이 없다) — 4번째는 문서 뒤 UI 분류 (#54)
+    expect(backend.requests).toHaveLength(4);
     const signals = store.exportSessions()[0]?.signals ?? [];
     expect(signals.some((signal) => signal.type === 'promotion_judged')).toBe(false);
     expect(signals.some((signal) => signal.type === 'session_on_hold')).toBe(false);
@@ -521,6 +529,7 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
       clarificationResponse,
       refinedCompletenessResponse,
       requirementsResponse,
+      nonUiClassificationResponse, // 문서 뒤 UI 분류 — 비 UI라 목업 생략 (#54)
       refinedCompletenessResponse, // 정정 재판정 → 여전히 정제
       requirementsResponse, // 문서 v2
     ]);
@@ -565,6 +574,7 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
       clarificationResponse,
       refinedCompletenessResponse,
       requirementsResponse,
+      nonUiClassificationResponse, // 문서 뒤 UI 분류 — 비 UI라 목업 생략 (#54)
     ]);
     await runner.handleIntake(intake);
     await runner.handleReply({ ...intake, text: '영업팀 매니저요. 수작업 집계 제거요.' });
@@ -594,6 +604,7 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
       clarificationResponse,
       refinedCompletenessResponse,
       requirementsResponse,
+      nonUiClassificationResponse, // 문서 뒤 UI 분류 — 비 UI라 목업 생략 (#54)
       refinedCompletenessResponse, // 정정 재판정 → 여전히 정제
       requirementsResponse, // 문서 v2
     ]);
@@ -623,6 +634,7 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
       clarificationResponse,
       refinedCompletenessResponse,
       requirementsResponse,
+      nonUiClassificationResponse, // 문서 뒤 UI 분류 — 비 UI라 목업 생략 (#54)
       refinedCompletenessResponse, // 정정 재판정 → 여전히 정제
       requirementsResponse, // 문서 v2
     ]);
@@ -653,6 +665,7 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
       clarificationResponse,
       refinedCompletenessResponse,
       requirementsResponse,
+      nonUiClassificationResponse, // 문서 뒤 UI 분류 — 비 UI라 목업 생략 (#54)
     ]);
     await runner.handleIntake(intake);
     // #53 이전 세션의 흔적 재현 — 문서 행 없이 document_delivered 신호만 존재
@@ -679,6 +692,7 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
       clarificationResponse,
       fullyPromotedCompletenessResponse,
       requirementsResponse,
+      nonUiClassificationResponse, // 문서 뒤 UI 분류 — 비 UI라 목업 생략 (#54)
     ]);
     await runner.handleIntake(intake);
 
@@ -703,6 +717,7 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
         clarificationResponse,
         refinedCompletenessResponse,
         requirementsResponse,
+        nonUiClassificationResponse, // 문서 뒤 UI 분류 — 비 UI라 목업 생략 (#54)
         unrefinedCompletenessResponse, // 정정 재판정 → 미정제
         clarificationResponse, // 되물음 라운드 (상한 미산입)
       ],
@@ -730,6 +745,7 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
       clarificationResponse,
       refinedCompletenessResponse,
       requirementsResponse,
+      nonUiClassificationResponse, // 문서 뒤 UI 분류 — 비 UI라 목업 생략 (#54)
       // 이후 스크립트 없음 — 가드가 뚫려 LLM이 호출되면 ScriptedBackend가 던진다
     ]);
     await runner.handleIntake(intake);
@@ -898,6 +914,7 @@ describe('코어 러너 — 자료 첨부 (F1-Attach, ADR-0011)', () => {
       clarificationResponse,
       refinedCompletenessResponse,
       requirementsResponse,
+      nonUiClassificationResponse, // 문서 뒤 UI 분류 — 비 UI라 목업 생략 (#54)
     ]);
     const uploadId = stage('메모.txt', '월별 매출 추이가 필요함');
     await runner.handleIntake({ ...intake, uploadIds: [uploadId] });
@@ -922,6 +939,7 @@ describe('코어 러너 — 자료 첨부 (F1-Attach, ADR-0011)', () => {
       clarificationResponse,
       attachmentEvidenceResponse,
       requirementsResponse,
+      nonUiClassificationResponse, // 문서 뒤 UI 분류 — 비 UI라 목업 생략 (#54)
     ]);
     const uploadId = stage('기획서.txt', '대상 사용자: 영업팀 매니저');
     const { sessionId } = await runner.handleIntake({ ...intake, uploadIds: [uploadId] });

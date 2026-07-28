@@ -200,6 +200,63 @@ export const requirementsDoc = sqliteTable(
   (table) => [unique().on(table.sessionId, table.version)],
 );
 
+/**
+ * 목업 (F4, #54) — requirements vN을 시각화한 중간충실도 인터랙티브 HTML의 버전 행.
+ * html은 구조 층(--pj-* 테마 토큰 소비, 그레이스케일 기본값)이고 테마·워터마크는 서빙 시점에
+ * 코드가 입힌다 — 테마 교체에 LLM 재생성이 없다. 버전 행은 append-only이고, 반복 루프의
+ * 수렴·테마 선정만 최신 행에 갱신된다(이력은 신호가 진다).
+ */
+export const mockup = sqliteTable(
+  'mockup',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => session.id),
+    /** 목업 vN (F4 버전 매핑). */
+    version: integer('version').notNull(),
+    /** 이 판이 시각화한 requirements 문서 버전 — 문서 vN ↔ 목업 vN 매핑의 실체. */
+    docVersion: integer('doc_version').notNull(),
+    /** 구조 층 self-contained HTML. 개발팀 전달 금지 — URL·이미지 형태만 (F4 하드 제약). */
+    html: text('html').notNull(),
+    /** 이 판에 반영된 것의 요약 — 요청자 회신과 trace 표시용. */
+    summary: text('summary'),
+    /** 반복 루프 상태 — iterating에서 approved(승인·역주입) 또는 escalated(상한 초과)로. */
+    convergence: text('convergence', { enum: ['iterating', 'approved', 'escalated'] })
+      .notNull()
+      .default('iterating'),
+    /** 선정된 디자인 시스템 테마 id. 위임이면 null + themeDelegated. */
+    selectedTheme: text('selected_theme'),
+    /** 「개발팀이 정하는 게 좋겠다」 — 승격과 같은 정신의 1클릭 위임 (F4 선정). */
+    themeDelegated: integer('theme_delegated', { mode: 'boolean' }).notNull().default(false),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [unique().on(table.sessionId, table.version)],
+);
+
+/**
+ * 목업 어노테이션 (F4) — 요청자가 목업 위에 남긴 정정 요청·코멘트. 역주입의 원료이며
+ * 승인 시 확정 사항이 requirements vN+1 문장으로 흡수된다. 원문은 발화로도 보존된다(원칙 7).
+ */
+export const mockupAnnotation = sqliteTable(
+  'mockup_annotation',
+  {
+    id: text('id').primaryKey(),
+    mockupId: text('mockup_id')
+      .notNull()
+      .references(() => mockup.id),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => session.id),
+    /** 요청자 언어 그대로의 코멘트 원문. */
+    text: text('text').notNull(),
+    /** 목업 안의 대상 요소 참조 (선택) — Phase 0 텍스트 어노테이션의 최소 앵커. */
+    elementRef: text('element_ref'),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [index('mockup_annotation_session_idx').on(table.sessionId)],
+);
+
 export const signal = sqliteTable(
   'signal',
   {
