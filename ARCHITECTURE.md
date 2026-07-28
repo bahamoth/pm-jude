@@ -312,7 +312,7 @@ erDiagram
 | 세션 저장소 | SQLite (Phase 1 Postgres 전환 전제) | [ADR-0006](docs/adr/0006-phase0-sqlite.md) |
 | 오케스트레이션 | 코드 상태 머신 + 단계 내 구조화 LLM 호출 | [ADR-0001](docs/adr/0001-fixed-orchestration.md) |
 | 우회 측정 | provenance 스캔 자동 집계 | [ADR-0003](docs/adr/0003-provenance-bypass-metric.md) |
-| 베이스라인 | 소급 아카이브 분석 | [ADR-0004](docs/adr/0004-retrospective-baseline.md) |
+| 베이스라인 | 소급 분석 폐기 — 자기 세션 데이터 전향 측정 | [ADR-0012](docs/adr/0012-prospective-self-measurement.md) |
 | 문서 원칙 | requirements 단일 진실 원천 + 역주입 + 원문 보존 | [ADR-0002](docs/adr/0002-doc-single-source-of-truth.md) |
 
 ## 결정 대기 항목

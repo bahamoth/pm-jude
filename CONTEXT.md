@@ -262,10 +262,10 @@ provenance 없는 기능 요청 이슈 수 / 전체 기능 요청 이슈 수. �
 **EN** — Adoption signals that move before the problem is confirmed: session drop-off, reuse rate, requester time spent. Judgement is made on these, not on the lagging ones.
 
 **베이스라인(Baseline)**:
-감소율 지표의 분모가 되는 도입 전 기준 수치. 소급 아카이브 분석으로 산출한다.
-**EN** — The pre-adoption figure that every reduction metric divides by. Produced by retrospective archive analysis.
+지표 판정의 기준 수치. 도입 전 측정은 v1.6에서 폐기(ADR-0012) — 초기 운영 구간의 자기 세션 데이터가 기준선이 되고, 개선은 버전 간 추이(vN 대비 vN+1)로 판정한다.
+**EN** — The reference figure metrics are judged against. Pre-adoption measurement was abandoned in v1.6 (ADR-0012) — the system's own early sessions become the baseline, and improvement is judged version-over-version.
 
 **소급 아카이브 분석(Retrospective Archive Analysis)**:
-최근 6~12개월 Linear 아카이브에서 재질문·reopen·스펙 편집을 추출해 베이스라인과 재질문 유형 분류표를 산출하는 Phase 0 작업(ADR-0004).
-**EN** — The Phase 0 exercise of mining 6–12 months of Linear archive for re-questions, reopens and spec edits, producing both the baseline and the re-question taxonomy (ADR-0004).
+최근 6~12개월 Linear 아카이브에서 재질문·reopen·스펙 편집을 추출해 베이스라인과 재질문 유형 분류표를 산출하려던 Phase 0 작업(ADR-0004). ADR-0012로 폐기 — 이 조직은 Linear 이슈를 개발자가 작성해 요청자↔개발자 명확화 대화가 아카이브에 없다. 도구(`pnpm retro`)는 코드로 잔존.
+**EN** — The Phase 0 exercise of mining 6–12 months of Linear archive for re-questions, reopens and spec edits (ADR-0004). Abandoned by ADR-0012 — issues here are authored by developers, so the requester–developer dialogue never reached the archive. The tooling (`pnpm retro`) remains as code.
 원문: [§9](docs/prd/scope-and-milestones.md)

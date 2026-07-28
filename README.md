@@ -41,7 +41,7 @@ Working:
 - `requirements` document generation, slot-level confirmation in the requester's language
 - On-hold for insufficient info, resumable at any time
 - Session trace viewer over transcripts, slot states, signals and version axes
-- Retrospective Linear archive analysis (baseline and re-question taxonomy)
+- Retrospective Linear archive analysis tooling (`pnpm retro`) — no run planned, abandoned by ADR-0012
 
 Not built yet:
 
