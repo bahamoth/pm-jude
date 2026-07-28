@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.12.0](https://github.com/bahamoth/pm-jude/compare/v0.11.0...v0.12.0) (2026-07-28)
+
+
+### Features
+
+* [#53](https://github.com/bahamoth/pm-jude/issues/53) — requirements 문서 구조체 영속 (requirements_doc) ([d9f15e8](https://github.com/bahamoth/pm-jude/commit/d9f15e85ee89772028502db3ad3e7d8b50f8c99f))
+* pnpm demo — 남에게 보여주기 위한 빌드 UI 구성 ([c1e7af3](https://github.com/bahamoth/pm-jude/commit/c1e7af347325ad34528953bf14ea17ffee18d810))
+
+
+### Bug Fixes
+
+* [#51](https://github.com/bahamoth/pm-jude/issues/51) — 완주 후에도 슬롯 정정 진입점 유지 ([0a905b1](https://github.com/bahamoth/pm-jude/commit/0a905b1bbab2924daa09fb4f171d49bd06fd1df5))
+* [#52](https://github.com/bahamoth/pm-jude/issues/52) — documented 세션 일반 답변의 채널 무관 코어 가드 ([6b124f9](https://github.com/bahamoth/pm-jude/commit/6b124f9dcb9f318a613edbaaf204385ea5428e64))
+* /code-review 2축 리뷰 반영 — 하드 1건·스펙 2건·스멜 3건 ([09cc2e4](https://github.com/bahamoth/pm-jude/commit/09cc2e4de0b3f71b103b3f4e16958cc3335b0299))
+
 ## [0.11.0](https://github.com/bahamoth/pm-jude/compare/v0.10.0...v0.11.0) (2026-07-28)
 
 
