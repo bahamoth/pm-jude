@@ -759,7 +759,7 @@
   {
     "id": 24,
     "title": "요청자 여정 UX 설계 확정 — wayfinder 맵",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "wayfinder:map"
     ],
@@ -768,9 +768,15 @@
     "parent": null,
     "blockedBy": [],
     "created": "2026-07-26",
-    "updated": "2026-07-26",
+    "updated": "2026-07-28",
     "body": "## Destination\n\ndocs/ux/requester-journey.md의 vNext 확정 — 검토(스트레스 테스트·프로토타입·리서치) 반영과 오픈 질문 5건(Q1~Q5)의 결정이 문서에 흡수되고 운영자 승인을 받은 상태. 프론트 스택 재검토(Next 유지/교체, AI 코딩 적합성 기준) 결정을 포함한다. 구현(갭 G-1~G-8 실행)은 이 맵의 범위 밖 — 설계 승인 후 별도 지시로 이어진다.\n\n## Notes\n\n- 정본: ARCHITECTURE.md §상태 머신, docs/prd/functional-requirements.md(F1~F8), CONTEXT.md 용어. 설계 대상: docs/ux/requester-journey.md (#23).\n- 스킬: 그릴링 티켓 = /grilling·/domain-modeling, 프로토타입 티켓 = /prototype, 리서치 티켓 = /research.\n- 운영자 상수: 검증된 디자인 시스템(shadcn 계열)·객관식 마법사·대기 UX 상시. 단 프레임워크 자체는 이 맵에서 재검토(#25) — 판단 기준은 AI 코딩 적합성 (운영자, 2026-07-26).\n- 보드 쓰기는 main 직행(워크플로우 규칙 6). HITL 티켓은 운영자와의 실문답으로만 해소 — 에이전트가 운영자 답을 대신하지 않는다.\n\n## Decisions so far\n\n- [리서치 — 유사 제품의 인테이크·대기·재개 UX 관례 조사](#27) — 관례 5축 정리 + 설계 수정 발견 M-1~M-9(내 차례 신호·「언제」 명시·localStorage 취약·카운트형 진행·재개 트리거). 산출물 docs/research/intake-ux-conventions.md(research/intake-ux-conventions)\n- [리서치 — AI 코딩에 적합한 프론트 스택 조사](#26) — 권고: Next.js 16 유지 + 클라이언트 SPA 사용 계약 명문화(ADR-0008 추인), 차선 Vite(전환 비용 앱 셸 수준). 산출물 docs/research/frontend-stack-ai-coding.md(research/frontend-stack)\n- [프론트 스택 확정 — Next.js 유지](#25) — 운영자 결정: Next 16 유지 + 클라이언트 SPA 사용 계약 명문화(rsc:false, 서버 기능 금지 — ADR-0008 추인). PR #21 머지 완료. Vite 전환은 마찰 실측 시 재론\n- [세션 접근 모델 결정 (Q1)](#29) — 브라우저 로컬 목록 + 딥링크, 서버 목록 없음, 개인화는 Phase 1\n- [상태 머신 상호작용 규칙 결정 (Q2·Q5)](#30) — 보류 재개는 입력=자동 재개(코어 전이 구현), 슬롯 확인 되물음은 상한 미산입\n- [접수 즉시성 구현 방식 결정 (Q3)](#31) — 범위 제한 SSE: 연결은 서버 처리 구간에만(라운드당 수초~2분), 무응답 구간 연결 없음, 저장소가 진실 원천, Phase 1 장기 대기는 채널 알림\n- [Phase 1 자리 노출 수위 결정 (Q4)](#32) — 5단계 스테퍼 노출 + 준비 중 표기\n- [설계 스트레스 테스트](#28) — 발견 9건(S-1~S-9): 승격 판정 단계 부재·문서 vN 부재(정본 어긋남), 스테일 라운드 제출·오류 화면 계약·전면 「모르겠다」·Phase 0 종착·폭주 상한(엣지), 동적 대기 추정 과설계, 보존 기간 오픈 질문 — vNext(#34)로 반영\n- [프로토타입 — 핵심 화면 3종](#33) — 목적 소멸 종결: #35 실구현(스테퍼·슬롯 확인·보류 재개)이 선착지. 운영자 반응은 실구현 표면에서 수집\n\n## Not yet specified\n\n- Slack 복귀 시 채널 등가(P-U6)의 검증 방법 — 설계 확정 후 구체화\n- 다국어 chrome(G-8)의 설계 상세 — 언어 결정 시점·번역 자원\n\n## Out of scope\n\n- 게이트·역보고(Phase 1) UX 상세 설계 — 자리만 확보(운영자 결정 2026-07-26), 게이트 구현 지시 때 별도 맵\n- 갭 G-1~G-8의 구현 실행 — 설계 vNext 승인 후 별도 지시\n- Slack 어댑터 운영 — #8 후순위 유지(ADR-0007)",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-28",
+        "body": "Destination 도달 — 맵 종결.\n\nrequester-journey.md vNext가 확정돼 main에 있고(#34, PR #30), 오픈 질문 Q1~Q5는 §8에 결정으로 기록됐다(#29~#32). 프론트 스택은 Next.js 유지로 확정(#25, ADR-0008 추인). 하위 티켓 전부 종결.\n\n맵 범위 밖으로 넘긴 것: 갭 구현은 #35(G-1~G-7)·#44(G-9~G-11)·#45~#50(G-12)에서 각각 해소됐고, 남은 G-8(chrome 다국어)은 이연 상태다. 「Not yet specified」의 두 항목 — Slack 채널 등가(P-U6) 검증 방법과 G-8 설계 상세 — 은 별도 지시 때 새 맵으로 다룬다."
+      }
+    ]
   },
   {
     "id": 25,
@@ -964,7 +970,7 @@
   {
     "id": 34,
     "title": "설계 vNext 반영·운영자 승인",
-    "state": "open",
+    "state": "closed",
     "labels": [],
     "type": "task",
     "assignee": "claude",
@@ -979,13 +985,18 @@
       33
     ],
     "created": "2026-07-26",
-    "updated": "2026-07-26",
+    "updated": "2026-07-28",
     "body": "## Question\n\n닫힌 결정 전부를 docs/ux/requester-journey.md vNext로 반영하고(오픈 질문 §8 해소, 갭 표 갱신, 스택 결정 반영) 운영자 승인을 받는다 — 이 맵의 목적지 도달 티켓. 승인 후 구현은 별도 지시.",
     "comments": [
       {
         "author": "claude",
         "date": "2026-07-27",
         "body": "vNext 반영 완료 — PR #30 (rebase 머지 대기). 구성: ① 리서치 산출물 2건(docs/research/ — #26·#27) 체리픽 착지(그간 미머지 사이드 브랜치에만 존재) ② requester-journey.md에 #28 발견 S-1~S-9 흡수 — §4 매핑 표에 승격 판정·라운드 실패 행, §5.5 문서 vN·전면 승격 표시·Phase 0 종착(완주 = 문서+전 슬롯 확인), §6 계약 4행(동시성·라운드 정합·실패 복구·폭주 상한), §7 갭 G-9~G-11 신설(승인 후 구현 지시 대상), §9 오픈 질문 O-1(보존 기간)·O-2(폭주 상한 수치). Q1~Q5는 #35에서 이미 반영·구현됨을 확인. **남은 단계: 운영자 승인** — 승인 시 이 티켓과 맵 #24 종결, G-9~G-11 구현 지시가 후속. O-1·O-2는 승인 시점에 함께 결정하거나 PRD §12로 넘길 수 있다."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-28",
+        "body": "PR #30 머지 완료 (2026-07-26) — 종결 처리 누락 정정. requester-journey.md vNext와 docs/research/ 2건이 main에 있다."
       }
     ]
   },
@@ -1073,7 +1084,7 @@
   {
     "id": 38,
     "title": "Jude 페르소나·캐릭터 정본",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
@@ -1082,7 +1093,7 @@
     "parent": null,
     "blockedBy": [],
     "created": "2026-07-27",
-    "updated": "2026-07-27",
+    "updated": "2026-07-28",
     "body": "운영자 지시 (2026-07-27): PM Jude에 페르소나와 캐릭터를 만든다. 이름은 「Hey Jude」에서 왔고 PM은 Paul McCartney의 이니셜이기도 하다는 유래를 갖지만, **음악 모티프는 쓰지 않는다** — 유래는 산문 한 줄로만 남긴다.\n\n## 결정 (grilling 세션)\n- Jude = **제품의 얼굴**. 요청자에게 말을 거는 인격 (저장소 개발용 서브에이전트가 아니다)\n- 목소리가 닿는 범위 = **요청자 대면 표면만**. clarification 프롬프트 + UI 카피. completeness(내부 판정) 무변경, requirements(개발자 문서) 중립 유지\n- 톤 = **1인칭 동료**. 「모르겠어요」 경로를 Jude가 대신 짊어지는 약속으로 제시\n- 조형 축 = **듣는 존재**. 말풍선과 얼굴이 같은 도형, 눈은 있고 입은 없다. 콧수염은 닫는 중괄호 `}`를 90° 돌린 것\n- IP 경계 = 실존 인물 초상·이름 미사용, 비틀즈 저작물 인용·모방 없음\n\n## 산출물\n- `docs/persona/jude.md` (en) + `docs/persona/jude.ko.md` (ko) — T1 이중언어\n  - 정체성 / 이름 유래와 IP 경계 / 목소리 규칙(해도 되는 것·하면 안 되는 것) / 적용 표면 매트릭스 / 캐릭터 시트 / 상태별 표정 사양\n- `web-ui/public/jude.svg` — 콧수염 포함, 28px 이상용\n- `web-ui/public/jude-mark.svg` — 파비콘용 단순형(장식·눈썹·콧수염 없음)\n- `docs/adr/0010-persona-scope.md` — 왜 requirements 문서에는 목소리를 넣지 않는가\n- `CONTEXT.md` 용어 추가 — 페르소나(Persona) / 목소리 규칙(Voice Rules)\n\n## 확정 수치\n콧수염 폭 1.20 / 좌우 위치 0.00 / 인중 간격 0.20 / 굵기 1.80. 눈·콧수염 중심 x=16.5. 영어 3인칭 대명사 `they`.\n\n프로토타입: 스크래치패드 `jude-rig.html`",
     "comments": [
       {
@@ -1094,13 +1105,18 @@
         "author": "claude",
         "date": "2026-07-27",
         "body": "정정 — 영어 3인칭 대명사를 they/them → **he/him**으로 확정(운영자 지시). 티켓 본문의 「they」는 최초 제안 기록으로 남긴다. 근거: 콧수염·이름(Jude)·유래(Paul McCartney)가 모두 남성으로 읽히고, 그림과 어긋나는 대명사는 중립으로 얻는 것보다 잃는 게 크다. 최초에 they를 제안한 근거(요청자 전원을 상대하는 내부 도구 얼굴에 성별 고정 실익 없음)는 이보다 약했다."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-28",
+        "body": "PR #31 머지 완료 (2026-07-27) — 종결 처리 누락 정정. docs/persona/jude.md(+.ko.md), ADR-0010, jude.svg, CONTEXT.md 용어 3건 확인."
       }
     ]
   },
   {
     "id": 39,
     "title": "이중언어 문서 정책 — 3단계 티어링",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
@@ -1111,20 +1127,25 @@
       38
     ],
     "created": "2026-07-27",
-    "updated": "2026-07-27",
+    "updated": "2026-07-28",
     "body": "운영자 지시 (2026-07-27): 협업자가 영어권이므로 모든 영역에서 영어·한국어를 동시 지원한다.\n\n## 반박과 결정\n전면 이중화는 지금 25,000단어 번역 + 모든 PR이 두 언어를 맞추는 영구 부채다. 실제로 유지되는 건 티어가 규칙으로 박힌 경우뿐이므로 **3단계 티어링**으로 간다.\n\n- **T1** 양쪽 정본·같은 커밋 갱신 강제: `README.md`/`README.ko.md`, `docs/persona/jude.md`/`.ko.md`, `CONTEXT.md`(한 파일 병기)\n- **T2** 한국어 본문 + 상단 영어 요약 블록: `PRD.md`, `docs/prd/*`(7), `ARCHITECTURE.md`, `docs/adr/*`(10) — 총 19개\n- **T3** 작성 언어 그대로: `docs/research/*`, `docs/ux/*`, `docs/phase0-plan.md`, `docs/data-model.md`, `web-ui/README.md`\n\n`AGENTS.md`·`docs/agents/*`는 독자가 에이전트와 두 협업자뿐이라 **영어 단일 유지**(T1 제외).\n\n## 산출물\n- `docs/adr/0009-bilingual-documentation-tiers.md`\n- `docs/agents/bilingual.md` (영어) — 티어 판별 규칙, 짝 파일 명명(`X.md` en / `X.ko.md` ko), 같은 커밋 규칙, T2 요약 블록 형식\n- `AGENTS.md`에 한 줄 연결\n- T2 19개 파일에 영어 요약 블록 부착\n- `CONTEXT.md` 병기화\n- `scripts/check-bilingual-sync.mjs` — T1 짝 파일 헤딩 구조 대조. **CI에는 붙이지 않음**(선례 `check-arch-sync.mjs`도 수동 스크립트)\n- `CONTEXT.md` 용어 추가 — 이중언어 티어(Bilingual Tier)",
     "comments": [
       {
         "author": "claude",
         "date": "2026-07-27",
         "body": "코드 완료 — PR #31. ADR-0009, docs/agents/bilingual.md, AGENTS.md 연결, T2 영어 요약 18개 파일, CONTEXT.md 전 용어 병기, scripts/check-bilingual-sync.mjs(CI 미부착). 「이중언어 티어」는 CONTEXT.md에 넣지 않았다 — 제품 도메인이 아니라 저장소 문서 프로세스 용어라 bilingual.md에만 정의한다(용어집은 구현·프로세스 세부를 담지 않는다)."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-28",
+        "body": "PR #31 머지 완료 — 종결 처리 누락 정정. ADR-0009, docs/agents/bilingual.md, scripts/check-bilingual-sync.mjs 확인."
       }
     ]
   },
   {
     "id": 40,
     "title": "README 이중언어 신설",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
@@ -1136,20 +1157,25 @@
       39
     ],
     "created": "2026-07-27",
-    "updated": "2026-07-27",
+    "updated": "2026-07-28",
     "body": "루트에 README가 없다(있는 건 `web-ui/README.md`뿐). 제품 소개형으로 신설한다.\n\n## 구성\nJude 아바타 헤더 / 한 문단 정체성 / 이름의 유래 / 무엇을 하는가(인테이크→명확화→문서→게이트) / 빠른 시작(`pnpm dev`, `PMJUDE_FAKE_BACKEND=1`) / 문서 지도 / 현재 상태(Phase 0 PoC — 구현된 것과 아직 없는 것)\n\n## 산출물\n- `README.md` (영어, GitHub 진입) + `README.ko.md` (한국어) — T1\n- `src/web/dev-site.ts`의 `ALLOWED_ROOT_FILES`에 두 파일 등록 (로컬 허브에서 열람 가능하게)",
     "comments": [
       {
         "author": "claude",
         "date": "2026-07-27",
         "body": "코드 완료 — PR #31. README.md(영어 진입) + README.ko.md, dev-site ALLOWED_ROOT_FILES·허브 링크 등록. 로컬 허브에서 200 확인, src/ 경로 차단 유지 확인."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-28",
+        "body": "PR #31 머지 완료 — 종결 처리 누락 정정. README.md / README.ko.md T1 짝 확인."
       }
     ]
   },
   {
     "id": 41,
     "title": "UI 카피 전환 + i18n 사전 모듈",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
@@ -1160,20 +1186,25 @@
       38
     ],
     "created": "2026-07-27",
-    "updated": "2026-07-27",
+    "updated": "2026-07-28",
     "body": "UI 크롬 문자열이 한국어 하드코딩이고 `<html lang=\"ko\">` 고정이다. 인테이크 폼에는 이미 ko/en 라디오가 있고 `preferredLanguage`(BCP 47)로 저장되지만 화면 문구에는 연결돼 있지 않다.\n\n## 방침\n- `web-ui/lib/i18n.ts` — 평면 키-값 사전 ko/en 두 벌 + 작은 훅. **라이브러리 무추가** (next-intl은 미들웨어·서버 경계를 쓰므로 ADR-0008의 전면 클라이언트 SPA 계약과 충돌)\n- 언어 결정 순서: 세션의 `preferredLanguage` → 인테이크 폼 선택값 → 브라우저 설정\n- `<html lang>` 동적화\n- 모든 요청자 대면 카피를 페르소나 목소리(1인칭 동료)로 재작성 — 두 언어 모두\n\n## 범위\n`web-ui/` 요청자 대면 화면 전부: intake-form, ack-card, waiting-card, question-wizard, slot-review, document-view, hold-card, transcript, journey-stepper, round-context, app/page.tsx, app/s/[id]/page.tsx\n\n## 범위 밖\n운영자 표면(`issues/index.html`, trace 뷰어, dev-site, architecture.html)의 영어화",
     "comments": [
       {
         "author": "claude",
         "date": "2026-07-27",
         "body": "코드 완료 — PR #31. web-ui/lib/i18n.ts 사전 모듈(라이브러리 무추가, useSyncExternalStore로 프리렌더 정합). 요청자 대면 화면 전부와 stage.ts 라벨을 키로 전환, 코어 러너의 요청자 회신 문구도 Jude의 목소리로. 언어 결정: 세션 요청자 언어(전사의 originalLanguage) → 인테이크 선택값 → 브라우저. <html lang> 동기화. Chrome에서 영어 전환 실확인."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-28",
+        "body": "PR #31 머지 완료 — 종결 처리 누락 정정. web-ui/lib/i18n.ts 확인 (자료 첨부 카피 15키가 이후 #50에서 추가됨)."
       }
     ]
   },
   {
     "id": 42,
     "title": "Jude 아바타 컴포넌트 — 상태 반응 리그",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
@@ -1184,20 +1215,25 @@
       38
     ],
     "created": "2026-07-27",
-    "updated": "2026-07-27",
+    "updated": "2026-07-28",
     "body": "운영자 지시 (2026-07-27): 정적 SVG가 아니라 상태에 반응하는 아바타 컴포넌트까지 이번 PR에 포함한다.\n\n## 구조 (프로토타입에서 확립)\nCSS 키프레임을 쓰지 않는다. **rAF 한 바퀴**로 매 프레임 `포즈 + 리듬 + 이벤트 임펄스`를 합산해 출력한다. 채널이 따로 놀지 않게 하는 것이 이 구조의 목적.\n\n- **반응 시계**와 **재생 시계** 분리 — 이벤트 응답 지연과 루프 템포는 별개 축\n- **주의 대상(attention)** — 소리의 출처(입력창) > 커서 > 두리번거림. 눈·고개·장식이 같은 한 점을 본다\n- 이벤트: 호버(고개 듦·눈썹·전구 점등 지속) / 클릭(눌림 스프링·2회 깜빡) / 커서 급이동(놀람) / 타이핑 한 글자(끄덕임 + 음파) / 상태 전환(반동 + 깜빡)\n- 장식은 **원인이 있을 때만** — 주기 점멸 금지. `rPulse`(캐릭터 자체 행동) + `flash`(사용자 이벤트)를 `max()`로 합산\n\n## 상태 7종 (세션 상태 머신과 1:1)\nidle / listening / thinking / asking / resolved / onhold / failed\n\n## 산출물\n- `web-ui/components/jude.tsx` — `<Jude state={...} source={...} />`\n- 세션 상태 머신 → 아바타 상태 매핑, 화면들에 배치\n- favicon을 `jude-mark.svg`로 (Next `metadata.icons`, 기본 `app/favicon.ico` 제거)\n- `prefers-reduced-motion` 대응, `IntersectionObserver`로 화면 밖 정지\n- 단위 테스트: 상태 매핑·reduced-motion 분기\n\n## 확정 수치\n반응 속도 1.35 / 재생 속도 1.00 / 콧수염 1.20·0.00·0.20·1.80",
     "comments": [
       {
         "author": "claude",
         "date": "2026-07-27",
         "body": "코드 완료 — PR #31. lib/jude-geometry.ts(지오메트리·상태 매핑) / lib/jude-rig.ts(단일 rAF 리그) / components/jude.tsx. 표정 7종이 세션 상태와 1:1. 반응과 재생을 별도 시계로 분리했고 장식은 원인 구동(주기 점멸 없음). 파비콘을 jude-mark.svg로 교체, app/favicon.ico 제거. 정적 SVG와 컴포넌트 지오메트리 일치를 테스트로 강제. Chrome에서 타이핑→음파·끄덕임, 제출→물음표 전환 실확인."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-28",
+        "body": "PR #31 머지 완료 — 종결 처리 누락 정정. lib/jude-geometry.ts · lib/jude-rig.ts · components/jude.tsx 확인."
       }
     ]
   },
   {
     "id": 43,
     "title": "clarification@0.2.0 — 페르소나 반영",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
@@ -1208,13 +1244,18 @@
       38
     ],
     "created": "2026-07-27",
-    "updated": "2026-07-27",
+    "updated": "2026-07-28",
     "body": "`clarification@0.1.0`의 출력 중 `question` / `exampleOptions` / `dontKnowPath.label`은 요청자가 그대로 읽는 문장이다. 여기에 Jude의 목소리 규칙을 반영한다.\n\n## 방침\n- `src/prompts/clarification-v1.ts` 신설 → `clarification@0.2.0`, `regressionPassed: false`\n- **v0 파일·등록은 유지** — 레지스트리가 버전 재등록을 막고(`DuplicatePromptVersionError`), 과거 세션이 v0에 귀속돼 있다\n- `catalog.ts`에 `CLARIFICATION_V1` 추가 → `core-runner.ts:448` 참조 전환\n- `tests/clarification-prompt.test.ts` 확장\n\n## 넣지 않는 것\n`completeness`(내부 판정)와 `requirements`(개발자 문서)는 무변경. 근거는 ADR-0010.",
     "comments": [
       {
         "author": "claude",
         "date": "2026-07-27",
         "body": "코드 완료 — PR #31. src/prompts/clarification-v1.ts → clarification@0.2.0, catalog에 CLARIFICATION_V1 추가, core-runner·fake-backend 참조 전환. v0은 등록 유지(버전 불변·과거 세션 귀속). 목소리 규칙 5건을 테스트로 고정. regressionPassed는 false — F12 회귀 몫."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-28",
+        "body": "PR #31 머지 완료 — 종결 처리 누락 정정. clarification@0.2.0이 카탈로그에 등록돼 있다 (현행은 #48의 clarification@0.3.0이며 0.2.0은 버전 불변 규율에 따라 등록 유지)."
       }
     ]
   },
