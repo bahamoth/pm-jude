@@ -396,7 +396,7 @@
   {
     "id": 9,
     "title": "소급 아카이브 분석 — 재질문 유형 분류표 + 베이스라인",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-human"
     ],
@@ -405,13 +405,18 @@
     "parent": null,
     "blockedBy": [],
     "created": "2026-07-25",
-    "updated": "2026-07-25",
+    "updated": "2026-07-28",
     "body": "## 목표\n최근 6~12개월 Linear 아카이브에서 개발자의 명확화성 코멘트·reopen·스펙 편집을 추출.\n\n## 인간 개입 필요\nLinear API 토큰·대상 팀 선정은 운영자 작업. 분류 자체는 LLM 보조 + 운영자 검수.\n\n## 수용기준\n- (a) 재질문 빈도 베이스라인 — §10 감소율 지표의 분모\n- (b) 재질문 유형 분류표 — 유형별 빈도 포함\n- 요청자 해소 가능/불가 구분 포함 (§2.1 전제 검증 — 중단 기준 (c)의 입력)\n\n## 참조\nADR-0004, PRD §9",
     "comments": [
       {
         "author": "claude",
         "date": "2026-07-26",
         "body": "도구 완료 — 실데이터 실행만 남음. `src/analysis/` 3모듈 + `pnpm retro` CLI. ① **extract**: Linear GraphQL(주입 fetch로 무네트워크 테스트)에서 이슈·코멘트·reopen(completed→미완료 전이)·스펙 편집(updatedDescription) 추출, 페이지네이션, 코멘트 절단 시 경고(침묵 절단 방지). ② **classify**: requestion-classification@0.1.0 프롬프트(분석 전용 레지스트리 — 런타임 카탈로그와 분리)로 재질문 탐지·kebab 유형 키·해소 가능/불가(resolvable/unresolvable/unclear) 판정, 중간 JSON에 저장해 **운영자 검수·수정 가능**. ③ **report**: 결정론적 집계로 베이스라인(재질문 발생 이슈 비율·이슈당 재질문 수·reopen·스펙 편집)과 유형 분류표(빈도 내림차순, 해소 구분), 해소 불가 비율(§2.1 전제 검증)을 마크다운으로 — 수치는 LLM이 아니라 코드가 낸다. 시임 테스트 9건. **남은 운영자 단계**: ① Linear 개인 API 키 발급, `.env`에 LINEAR_API_KEY ② 대상 팀 키 결정 ③ `pnpm retro extract --team <KEY> --months 9` → `pnpm retro classify` → classifications.json 검수 → `pnpm retro report --out data/retro/report.md`. 산출 분류표가 #10의 입력이 된다."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-28",
+        "body": "종결 (2026-07-28, won't-do) — 운영자 판정: 이 조직은 PM 부재이고 Linear 이슈는 개발자만 작성한다. 요청자↔개발자 명확화 대화는 Linear 이전 단계(Slack·구두)에서 끝나 아카이브에 없으므로, 이 분석의 산출물 3종 — (a) 재질문 빈도 베이스라인 (b) 재질문 유형 분류표 (c) 해소 가능/불가 비율 — 은 원리적으로 얻을 수 없다. 개선 지표로 쓸 백데이터가 없다고 간주한다(ADR-0012). 측정은 전부 전향으로 전환: §2.1 전제 검증은 런타임 슬롯 승격률, 개선 판정은 버전 간 추이, 슬롯 근거는 개발자 엘리시테이션 시드(#10 재정의). `src/analysis/` 도구(`pnpm retro`)는 코드로 남되 실행 계획 없음."
       }
     ]
   },
@@ -425,17 +430,20 @@
     "type": "task",
     "assignee": null,
     "parent": null,
-    "blockedBy": [
-      9
-    ],
+    "blockedBy": [],
     "created": "2026-07-25",
-    "updated": "2026-07-25",
-    "body": "## 목표\n#9의 재질문 유형 분류표에서 필수 슬롯 목록 초안을 도출.\n\n## 수용기준\n- 각 슬롯이 최소 1개의 실측 재질문 유형에 매핑 (근거 없는 슬롯 추가 금지)\n- 미매핑 재질문 유형 목록 별도 산출 (스키마 결손 후보)\n- slot_schema_version v0로 저장소에 등록\n\n## 참조\nPRD F2e",
+    "updated": "2026-07-28",
+    "body": "## 목표\n개발자 엘리시테이션에서 필수 슬롯 목록 초안을 도출 (ADR-0012 — 소급 분류표 폐기).\n\n## 수용기준\n- 개발자 엘리시테이션(요청 수신 시 실제로 되묻는 항목 수집)에서 슬롯 도출, 각 슬롯에 derivedFrom: developer-elicitation 근거 기록 (근거 없는 슬롯 추가 금지)\n- 런타임 검증 계획 명시 — F11 재질문·reopen 신호와의 매핑 분기 점검, 미매핑 유형은 스키마 결손(F13)\n- slot_schema_version v0로 저장소에 등록\n\n## 참조\nPRD F2e, ADR-0012",
     "comments": [
       {
         "author": "claude",
         "date": "2026-07-26",
         "body": "착수 불가 판정 (2026-07-26) — 수용기준 「각 슬롯이 최소 1개의 실측 재질문 유형에 매핑, 근거 없는 슬롯 추가 금지」는 #9의 실측 분류표 없이는 원리적으로 충족할 수 없다. 지금 초안을 만들면 근거를 지어내는 것이 되어 F2e의 취지(문헌이 아니라 실측에서 도출)를 정면으로 위반한다. #9 도구는 준비 완료(pnpm retro) — 운영자가 Linear 토큰으로 extract→classify→검수→report를 돌리면 분류표가 나오고, 그때 이 티켓은 즉시 착수 가능하다. 도출 시 작업 경로: 분류표 상위 유형→슬롯 매핑(derivedFrom에 근거 기록), 미매핑 유형 목록 별도 산출, slot_schema_version 0.1.0 등록 후 TEMP_REQUIRED_SLOTS(src/runner/local-runner.ts) 교체."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-28",
+        "body": "착수 불가 판정 해제 (2026-07-28) — 근거 소스 변경(ADR-0012). 소급 분류표는 원리적으로 산출 불가(#9 종결)이므로 최초 목록은 개발자 엘리시테이션 시드로 도출하고, 검증은 F2e의 기존 갱신 규칙(F11 런타임 신호, 미매핑 = 스키마 결손)이 맡는다. 본문 수용기준을 이에 맞게 개정. 작업 경로: 개발자 인터뷰·설문으로 되물음 항목 수집 → 슬롯 매핑(derivedFrom: developer-elicitation) → slot_schema_version 0.1.0 등록 → TEMP_REQUIRED_SLOTS(src/runner/local-runner.ts) 교체."
       }
     ]
   },
@@ -453,17 +461,21 @@
       5,
       6,
       7,
-      8,
-      9
+      8
     ],
     "created": "2026-07-25",
-    "updated": "2026-07-25",
+    "updated": "2026-07-28",
     "body": "## 목표\nPoC 세션을 익명화 큐레이션해 골든셋 시드를 만들고, Phase 0 판정 리포트를 작성.\n\n## 수용기준\n- 성공·실패 사례 포함, 개인·민감 정보 익명화\n- 리포트: 개발자 검토 통과율 / 세션 완주율 / 요청자 해소 불가 비율\n- 중단·전환 기준 (a)(b)(c) 판정과 Phase 1 착수 여부 권고\n\n## 참조\ndocs/phase0-plan.md, PRD §9·§12-10",
     "comments": [
       {
         "author": "claude",
         "date": "2026-07-26",
         "body": "착수 불가 판정 (2026-07-26) — 리포트의 3수치(개발자 검토 통과율·세션 완주율·요청자 해소 불가 비율)는 실제 스테이크홀더가 참여한 PoC 세션과 #9 실측 분석에서만 나온다. 지어낼 수 없고 지어내면 중단·전환 기준 (a)(b)(c) 판정 자체가 무의미해진다. **선행 조건 현황**: #5(명확화)·#6(완결성)·#7(문서 생성) 코드 완료, #8 코드 완료(운영자의 Slack 앱 프로비저닝 대기), #9 도구 완료(운영자의 Linear 토큰 대기). 즉 남은 경로는 ① 운영자가 #8 런북으로 Slack 러너 가동 → 실제 요청 세션 수집(전 세션 자동 영속·버전 귀속) ② #9 런북으로 분석 실행 ③ 그 데이터로 이 티켓 착수 — 골든셋 시드는 `pnpm intake --export`(익명화 export)가 이미 경로를 깔아 뒀다."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-28",
+        "body": "선행 조건 갱신 (2026-07-28) — #9 의존 제거(ADR-0012: 소급 분석 폐기, blockedBy에서 9 삭제). 리포트 3수치는 전부 전향 수치다: 검토 통과율·완주율은 실세션에서, 해소 불가 비율은 런타임 슬롯 승격률로 측정한다. 남은 선행 조건은 실세션 데이터 확보(#8 Slack 프로비저닝 또는 웹 표면 실사용)뿐."
       }
     ]
   },
@@ -1463,6 +1475,54 @@
         "body": "PR #35 머지 완료 (rebase-merge, 6개 이슈 단위 커밋). 종결."
       }
     ]
+  },
+  {
+    "id": 51,
+    "title": "완주 후 슬롯 정정 UI 부재 — 코어는 허용, 화면이 차단",
+    "state": "open",
+    "labels": [
+      "ready-for-agent"
+    ],
+    "type": "task",
+    "assignee": "claude",
+    "parent": null,
+    "blockedBy": [],
+    "created": "2026-07-28",
+    "updated": "2026-07-28",
+    "body": "## 문제\n완주(session_completed) 성립 시 확인된 슬롯이 뱃지로만 렌더되어 정정 진입점이 사라진다(web-ui/components/slot-review.tsx:57 — confirmedByRequester ? 뱃지 : 버튼). 그러나 코어와 서버는 완주 후에도 정정을 허용한다 — 가드는 status==='documented'뿐(src/runner/core-runner.ts:662, src/web/server.ts:497)이고 tests/core-runner.test.ts:624-651이 「완주 v1 → 정정 → v2에서 완주 재성립」을 고정한다. 즉 코어가 허용하는 경로를 화면이 막고 있으며, 완주 후 문서를 고치려면 API 직접 호출뿐이다.\n\n## 수용기준\n- 완주 후에도 확인된 슬롯에 정정 진입점이 있다 (「아니에요」 경로 재노출 또는 동등 UI)\n- 정정 제출 시 확인 초기화·새 버전에서의 완주 재성립이 화면에 반영된다 (v뱃지·완주 카드·스테퍼)\n- 기존 백엔드·web-ui 테스트 회귀 없음\n\n## 참조\ndocs/ux/requester-journey.md §5.5·§6, G-11(문서 버전 단위 완주)",
+    "comments": []
+  },
+  {
+    "id": 52,
+    "title": "Slack 러너 documented 가드 부재 — 웹과 비대칭, 스레드 답글이 문서를 조용히 재생성",
+    "state": "open",
+    "labels": [
+      "ready-for-agent"
+    ],
+    "type": "task",
+    "assignee": "claude",
+    "parent": null,
+    "blockedBy": [],
+    "created": "2026-07-28",
+    "updated": "2026-07-28",
+    "body": "## 문제\n웹은 documented 세션의 일반 답변을 409로 막고 슬롯 확인·정정으로 안내한다(src/web/server.ts:412-418). 그러나 코어 processReply는 closed만 검사하고(src/runner/core-runner.ts:531) slack-runner의 handleThreadReply는 상태 검사 없이 core.handleReply를 호출한다(src/runner/slack-runner.ts:73-75). 결과: 문서 게시 후 Slack 스레드의 아무 답글이나 전 슬롯 재판정을 돌리고, 정제 판정이면 correction:false로 문서 vN+1이 게시되며 왕복 상한까지 소비한다. Slack에는 슬롯 확인·정정 경로 자체가 없어 요청자가 의도한 정정과 잡담을 구분할 수단도 없다.\n\n## 수용기준\n- documented 상태의 일반 답변 처리 규칙이 채널 무관하게 코어 한 곳에서 강제된다 (웹 409와 동등한 안내 회신)\n- 스레드 답글로 인한 의도치 않은 재판정·버전 증가·왕복 상한 소비가 발생하지 않는다\n- 테스트로 고정 (documented 세션 스레드 답글 시나리오)\n- Slack용 슬롯 확인·정정 UX는 범위 외 — 별도 이슈로 분리\n\n## 참조\nsrc/web/server.ts:412-418(웹 가드), tests/slack-runner.test.ts",
+    "comments": []
+  },
+  {
+    "id": 53,
+    "title": "requirements_doc 영속 미구현 — 문서가 발화 텍스트로만 존재",
+    "state": "open",
+    "labels": [
+      "ready-for-agent"
+    ],
+    "type": "task",
+    "assignee": "claude",
+    "parent": null,
+    "blockedBy": [],
+    "created": "2026-07-28",
+    "updated": "2026-07-28",
+    "body": "## 문제\ndata-model.md가 규정한 requirements_doc(version int, content json, back_injected_from fk)이 스키마에 없다(src/store/schema.ts — 11테이블, 문서 테이블 0건). 현재 문서는 assembleRequirementsDocument()가 만든 구조체를 formatDocument로 문자열화해 에이전트 발화로 append하는 형태뿐이고(src/runner/core-runner.ts:967-975) 구조체는 버려진다. 버전도 저장값이 아니라 document_delivered 신호 개수의 파생값이며(core-runner.ts:993-998), 클라이언트는 마지막 에이전트 발화를 역파싱해 문서를 재구성한다(web-ui/app/s/[id]/page.tsx:162, web-ui/lib/document.ts). 구조체 영속은 목업 역주입(F4, Phase 2)의 전제이고, 역파싱은 문서 서식 변경에 취약하다.\n\n## 수용기준\n- 문서 구조체(JSON)와 버전이 전용 테이블에 영속된다 (data-model.md의 requirements_doc 필드 준수, back_injected_from은 F4 전까지 null 허용)\n- 버전은 신호 개수 파생값이 아니라 저장값이다 (기존 세션의 파생 버전과 정합 유지)\n- 세션 조회 API·문서 화면이 발화 역파싱 대신 저장 구조체를 사용한다\n- 기존 세션 데이터의 마이그레이션 경로 명시 (발화 텍스트는 원칙 7에 따라 불변 보존 — 문서 테이블은 추가 영속이지 대체가 아님)\n\n## 참조\ndocs/data-model.md:96-105, ARCHITECTURE.md ERD, PRD F3·F4",
+    "comments": []
   }
 ]
 </script>
@@ -1534,7 +1594,7 @@ function md(src){
   const fences = [];
   src = String(src).replace(/```([^\n]*)\n([\s\S]*?)```/g, (_, lang, code) => {
     fences.push('<pre><code>' + esc(code) + '</code></pre>');
-    return ' F' + (fences.length - 1) + ' ';
+    return '\u0000F' + (fences.length - 1) + '\u0000';
   });
   const inline = t => esc(t)
     .replace(/`([^`]+)`/g, '<code>$1</code>')
@@ -1555,7 +1615,7 @@ function md(src){
     }
     out.push('<p>' + lines.map(inline).join('<br>') + '</p>');
   }
-  return out.join('\n').replace(/ F(\d+) /g, (_, i) => fences[i]);
+  return out.join('\n').replace(/\u0000F(\d+)\u0000/g, (_, i) => fences[i]);
 }
 
 function matches(it, q){
