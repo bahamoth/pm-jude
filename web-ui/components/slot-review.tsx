@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { t, type Lang } from '@/lib/i18n';
+import { slotActionOf } from '@/lib/slot-actions';
 import type { AttachmentView, SlotView } from '@/lib/types';
 
 interface Props {
@@ -54,10 +55,9 @@ export function SlotReview({ lang, slots, attachments, submitting, onConfirm, on
                   </p>
                 )}
               </div>
-              {slot.confirmedByRequester ? (
-                <Badge variant="secondary">{t(lang, 'slots.confirmed')}</Badge>
-              ) : (
-                <div className="flex shrink-0 gap-2">
+              {/* 확인된 슬롯도 정정 진입점은 닫지 않는다 (#51) — 완주 뒤에도 문서를 고칠 수 있다 */}
+              <div className="flex shrink-0 items-center gap-2">
+                {slotActionOf(slot) === 'confirm-or-correct' && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -66,19 +66,22 @@ export function SlotReview({ lang, slots, attachments, submitting, onConfirm, on
                   >
                     {t(lang, 'slots.yes')}
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={submitting}
-                    onClick={() => {
-                      setCorrecting(correcting === slot.slotKey ? null : slot.slotKey);
-                      setText('');
-                    }}
-                  >
-                    {t(lang, 'slots.no')}
-                  </Button>
-                </div>
-              )}
+                )}
+                {slotActionOf(slot) === 'correct-only' && (
+                  <Badge variant="secondary">{t(lang, 'slots.confirmed')}</Badge>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={submitting}
+                  onClick={() => {
+                    setCorrecting(correcting === slot.slotKey ? null : slot.slotKey);
+                    setText('');
+                  }}
+                >
+                  {t(lang, slotActionOf(slot) === 'correct-only' ? 'slots.correct' : 'slots.no')}
+                </Button>
+              </div>
             </div>
             {correcting === slot.slotKey && (
               <div className="grid gap-2">
