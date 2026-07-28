@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.11.0](https://github.com/bahamoth/pm-jude/compare/v0.10.0...v0.11.0) (2026-07-28)
+
+
+### Features
+
+* 웹 어댑터 — 업로드 스테이징·참조·다운로드 ([#49](https://github.com/bahamoth/pm-jude/issues/49)) ([faf7a5b](https://github.com/bahamoth/pm-jude/commit/faf7a5b30df5ad08e3aa6990aaf0a6bacb5cdb3e))
+* 첨부 UI + trace 뷰어 확장 ([#50](https://github.com/bahamoth/pm-jude/issues/50)) ([8aff5d8](https://github.com/bahamoth/pm-jude/commit/8aff5d83ebd2939bb82d10b901e4d297c3a2d345))
+* 첨부 저장 계층 — 불변 원본·추출 캐시·스테이징 ([#46](https://github.com/bahamoth/pm-jude/issues/46)) ([dfd7ada](https://github.com/bahamoth/pm-jude/commit/dfd7ada09a4467b22dcbef7f2c0199db90ae7dc3))
+* 추출기 레지스트리 — 4군 추출 + attachment-extraction ([#47](https://github.com/bahamoth/pm-jude/issues/47)) ([828b99d](https://github.com/bahamoth/pm-jude/commit/828b99dbcd928e31a09b6a1a7349d85e0c64d8b3))
+* 코어 융합 — 첨부 컨텍스트·근거 추적·상한 + 프롬프트 3종 ([#48](https://github.com/bahamoth/pm-jude/issues/48)) ([d96a57a](https://github.com/bahamoth/pm-jude/commit/d96a57a7b64343ae85fdcdac4203d00a30ad9a84))
+
 ## [0.10.0](https://github.com/bahamoth/pm-jude/compare/v0.9.0...v0.10.0) (2026-07-27)
 
 
