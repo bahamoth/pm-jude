@@ -55,6 +55,8 @@ export interface TraceData {
       originalText: string;
       originalLanguage: string;
       normalizedText: string | null;
+      /** 압축본 길이 (#60, ADR-0014 확장) — 본문이 아니라 압축 여부·비율이 판독 대상이다. */
+      condensedChars: number | null;
       createdAt: string;
     }>;
     /** 첨부와 추출 결과 (F1-Attach) — 원본 주소·파일명은 export 단계에서 이미 빠져 있다. */
@@ -191,6 +193,7 @@ export function buildTraceData(
           originalText: utterance.originalText,
           originalLanguage: utterance.originalLanguage,
           normalizedText: utterance.normalizedText,
+          condensedChars: utterance.condensedText?.length ?? null,
           createdAt: utterance.createdAt,
         })),
         attachments,

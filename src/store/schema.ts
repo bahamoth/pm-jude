@@ -98,6 +98,11 @@ export const utterance = sqliteTable(
     originalText: text('original_text').notNull(),
     originalLanguage: text('original_language').notNull(),
     normalizedText: text('normalized_text'),
+    /**
+     * 장문 발화의 압축본 — 생성 호출 전용 파생물 (#60, ADR-0014 확장). 원문 불변 트리거는
+     * original_text만 보호하므로 파생 컬럼 갱신과 충돌하지 않는다(첨부 condensed_text와 동형).
+     */
+    condensedText: text('condensed_text'),
     createdAt: text('created_at').notNull(),
   },
   (table) => [unique().on(table.sessionId, table.seq)],

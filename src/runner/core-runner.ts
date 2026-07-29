@@ -219,6 +219,9 @@ interface ConversationContext {
   attachments: AttachmentContext[];
   /** ref → attachment.id. 판정이 돌려준 참조를 실제 첨부로 되돌린다 — LLM 입력에는 싣지 않는다. */
   attachmentIdByRef: Map<string, string>;
+  /** 생성 뷰의 압축 대체용 발화 매핑 (#60) — LLM 입력에는 싣지 않는다. */
+  requestUtteranceId: string | null;
+  answerUtteranceIds: Array<string>;
 }
 
 /**
@@ -722,33 +725,58 @@ export class IntakeRunner<A> {
    * 산술적으로 보장된다. 압축 실패는 라운드를 죽이지 않는다(P-U3) — 해당 첨부는 전문
    * 폴백으로 남고, 결과는 신호로 귀속된다.
    */
-  private async condenseLongAttachments(sessionId: string): Promise<void> {
+  private async condenseLongSources(sessionId: string): Promise<void> {
     const { store } = this.deps;
-    const rows = store
+    // 생성 봉투가 보는 것은 총량이다 — 첨부와 요청자 발화를 한 예산으로 합산한다 (#60)
+    const attachmentRows = store
       .listAttachments(sessionId)
       .filter((row) => row.extractionStatus === 'ok' && row.extractedText);
-    let projected = rows.reduce(
-      (sum, row) => sum + (row.condensedText ?? row.extractedText ?? '').length,
+    const utteranceRows = store
+      .listUtterances(sessionId)
+      .filter((row) => row.authorType === 'requester');
+    type Candidate = {
+      kind: 'attachment' | 'utterance';
+      id: string;
+      label: string;
+      text: string;
+      condensedText: string | null;
+    };
+    const sources: Candidate[] = [
+      ...attachmentRows.map((row) => ({
+        kind: 'attachment' as const,
+        id: row.id,
+        label: row.filename,
+        text: row.extractedText ?? '',
+        condensedText: row.condensedText,
+      })),
+      ...utteranceRows.map((row) => ({
+        kind: 'utterance' as const,
+        id: row.id,
+        label: `대화 발화 ${String(row.seq)}`,
+        text: row.originalText,
+        condensedText: row.condensedText,
+      })),
+    ];
+    let projected = sources.reduce(
+      (sum, source) => sum + (source.condensedText ?? source.text).length,
       0,
     );
     if (projected <= this.condense.budgetChars) return;
     const session = store.getSession(sessionId);
     if (!session) return;
 
-    const candidates = rows
-      .filter(
-        (row) => !row.condensedText && (row.extractedText?.length ?? 0) > this.condense.targetChars,
-      )
-      .sort((a, b) => (b.extractedText?.length ?? 0) - (a.extractedText?.length ?? 0));
-    for (const row of candidates) {
+    const candidates = sources
+      .filter((source) => !source.condensedText && source.text.length > this.condense.targetChars)
+      .sort((a, b) => b.text.length - a.text.length);
+    for (const source of candidates) {
       if (projected <= this.condense.budgetChars) break;
-      const fullLength = row.extractedText?.length ?? 0;
-      const condensed = await this.condenseOne(row.filename, row.extractedText ?? '');
+      const fullLength = source.text.length;
+      const condensed = await this.condenseOne(source.label, source.text);
       store.recordSignal({
         sessionId,
-        type: 'attachment_condensed',
+        type: source.kind === 'attachment' ? 'attachment_condensed' : 'utterance_condensed',
         payload: {
-          attachmentId: row.id,
+          [source.kind === 'attachment' ? 'attachmentId' : 'utteranceId']: source.id,
           status: condensed === null ? 'failed' : 'ok',
           fromChars: fullLength,
           ...(condensed !== null ? { toChars: condensed.length } : {}),
@@ -758,7 +786,11 @@ export class IntakeRunner<A> {
         ...this.versionAxesOf(session),
       });
       if (condensed === null) continue;
-      store.setCondensed({ id: row.id, condensedText: condensed });
+      if (source.kind === 'attachment') {
+        store.setCondensed({ id: source.id, condensedText: condensed });
+      } else {
+        store.setUtteranceCondensed({ id: source.id, condensedText: condensed });
+      }
       projected -= fullLength - condensed.length;
     }
   }
@@ -779,6 +811,34 @@ export class IntakeRunner<A> {
     } catch {
       return null; // 전문 폴백 — 실패 귀속은 호출자의 신호 기록 몫
     }
+  }
+
+  /**
+   * 생성 호출 전용 대화 뷰 (#60, ADR-0014 확장) — 압축본이 있는 발화는 표시와 함께 대체한다.
+   * 판정 호출은 이 뷰를 쓰지 않는다 — 첨부 뷰(generationAttachments)와 같은 규율.
+   */
+  private generationConversation(
+    sessionId: string,
+    context: ConversationContext,
+  ): { request: string; conversation: Array<{ question: string; answer: string }> } {
+    const condensedById = new Map(
+      this.deps.store
+        .listUtterances(sessionId)
+        .filter((row) => row.condensedText)
+        .map((row) => [row.id, row.condensedText!]),
+    );
+    const substitute = (utteranceId: string | null, text: string): string => {
+      const condensed = utteranceId ? condensedById.get(utteranceId) : undefined;
+      if (!condensed) return text;
+      return `[압축본 — 원문 ${String(text.length)}자를 축약]\n${condensed}`;
+    };
+    return {
+      request: substitute(context.requestUtteranceId, context.request),
+      conversation: context.conversation.map((pair, index) => ({
+        question: pair.question,
+        answer: substitute(context.answerUtteranceIds[index] ?? null, pair.answer),
+      })),
+    };
   }
 
   /**
@@ -810,7 +870,7 @@ export class IntakeRunner<A> {
     // 자료를 먼저 읽는다 — 읽지 않은 채 질문을 만들면 자료에 있는 것을 되묻게 된다
     await this.ingestNotionLinks(session.id);
     await this.extractPendingAttachments(session.id);
-    await this.condenseLongAttachments(session.id);
+    await this.condenseLongSources(session.id);
     await this.runClarificationRound(session.id, event, this.sessionLanguageOf(session.id, event));
   }
 
@@ -951,7 +1011,7 @@ export class IntakeRunner<A> {
     // 판정 전에 자료를 읽는다 — 방금 붙인 것도 이 라운드의 근거가 되어야 한다
     await this.ingestNotionLinks(session.id);
     await this.extractPendingAttachments(session.id);
-    await this.condenseLongAttachments(session.id);
+    await this.condenseLongSources(session.id);
 
     const versionAxes = this.versionAxesOf(session);
     const context = this.buildConversation(session.id);
@@ -1338,13 +1398,14 @@ export class IntakeRunner<A> {
           `${slot.slotKey} 확정 필요`,
       }));
 
+    // 생성 출력은 소스 크기에 비례한다 — 장문 첨부·발화는 압축본으로 실린다 (#58 #60, ADR-0014)
+    const generationView = this.generationConversation(sessionId, context);
     const result = await this.gateway.complete<RequirementsOutput>(REQUIREMENTS_V1, {
-      request: context.request,
+      request: generationView.request,
       teamLanguage: this.teamLanguage,
-      clarifications: context.conversation,
+      clarifications: generationView.conversation,
       promotedSlots: promotedSlots.map(({ slotKey, question }) => ({ key: slotKey, question })),
-      // 자료에서 확정된 것은 문서 문장으로 흡수된다 — 첨부를 지워도 구현 가능해야 한다 (원칙 7).
-      // 생성 출력은 소스 크기에 비례하므로 장문은 압축본으로 실린다 (#58, ADR-0014 결정 2)
+      // 자료에서 확정된 것은 문서 문장으로 흡수된다 — 첨부를 지워도 구현 가능해야 한다 (원칙 7)
       attachments: this.generationAttachments(sessionId, context),
     });
     const doc = assembleRequirementsDocument({
@@ -1771,14 +1832,17 @@ export class IntakeRunner<A> {
    */
   private buildConversation(sessionId: string): ConversationContext {
     const utterances = this.deps.store.listUtterances(sessionId);
-    const request = utterances.find((u) => u.authorType === 'requester')?.originalText ?? '';
+    const requestUtterance = utterances.find((u) => u.authorType === 'requester');
+    const request = requestUtterance?.originalText ?? '';
     const conversation: Array<{ question: string; answer: string }> = [];
+    const answerUtteranceIds: string[] = [];
     let pendingQuestion: string | null = null;
     for (const utterance of utterances) {
       if (utterance.authorType === 'agent') {
         pendingQuestion = utterance.originalText;
       } else if (pendingQuestion !== null) {
         conversation.push({ question: pendingQuestion, answer: utterance.originalText });
+        answerUtteranceIds.push(utterance.id);
         pendingQuestion = null;
       }
     }
@@ -1791,7 +1855,14 @@ export class IntakeRunner<A> {
       attachments.push({ ref, filename: row.filename, text: row.extractedText });
       attachmentIdByRef.set(ref, row.id);
     }
-    return { request, conversation, attachments, attachmentIdByRef };
+    return {
+      request,
+      conversation,
+      attachments,
+      attachmentIdByRef,
+      requestUtteranceId: requestUtterance?.id ?? null,
+      answerUtteranceIds,
+    };
   }
 
   /** 판정이 가리킨 첨부 참조를 실제 id로 되돌린다. 알 수 없는 참조는 근거 없음으로 취급한다. */

@@ -1352,3 +1352,60 @@ describe('코어 러너 — 게이트웨이 상한 주입 (#59, ADR-0015)', () =
     }
   });
 });
+
+describe('코어 러너 — 생성 뷰의 대화 예산 (#60, ADR-0014 확장)', () => {
+  const condensationOf = (text: string) => JSON.stringify({ condensed: text });
+  const longAnswer = `영업팀 매니저가 봅니다. ${'요구사항 상세: 기간 필터와 팀별 비교가 필요하다. '.repeat(12)}데이터는 모르겠어요 — 개발팀이 정해 주세요.`;
+
+  it('예산 초과 세션의 장문 답변은 압축돼 — 판정은 전문, requirements는 표시된 압축본을 받는다', async () => {
+    const { runner, backend, store } = makeRunner(
+      [
+        clarificationResponse,
+        condensationOf('압축된 답변 핵심'),
+        refinedCompletenessResponse,
+        requirementsResponse,
+        nonUiClassificationResponse,
+      ],
+      { condense: { targetChars: 100, budgetChars: 200 } },
+    );
+    await runner.handleIntake(intake);
+    await runner.handleReply({ ...intake, text: longAnswer });
+
+    // 판정(완결성)은 대화 전문을 받는다 (ADR-0014 결정 1)
+    const completenessInput = backend.requests[2]?.input as {
+      conversation: Array<{ answer: string }>;
+    };
+    expect(completenessInput.conversation[0]?.answer).toBe(longAnswer);
+    // 생성(requirements)은 표시된 압축본을 받는다
+    const requirementsInput = backend.requests[3]?.input as {
+      clarifications: Array<{ answer: string }>;
+    };
+    expect(requirementsInput.clarifications[0]?.answer).toContain('압축된 답변 핵심');
+    expect(requirementsInput.clarifications[0]?.answer).toContain('압축본');
+    expect(requirementsInput.clarifications[0]?.answer).not.toContain('기간 필터와 팀별 비교');
+    // 압축본은 발화의 파생 컬럼에 캐시된다 — 원문은 불변
+    const session = store.findSessionByThreadKey(intake.threadKey)!;
+    const answerRow = store.listUtterances(session.id).find((u) => u.originalText === longAnswer);
+    expect(answerRow?.condensedText).toBe('압축된 답변 핵심');
+    expect(answerRow?.originalText).toBe(longAnswer);
+  });
+
+  it('예산 이내 세션의 대화는 압축되지 않는다', async () => {
+    const { runner, backend } = makeRunner(
+      [
+        clarificationResponse,
+        refinedCompletenessResponse,
+        requirementsResponse,
+        nonUiClassificationResponse,
+      ],
+      { condense: { targetChars: 100, budgetChars: 100_000 } },
+    );
+    await runner.handleIntake(intake);
+    await runner.handleReply({ ...intake, text: longAnswer });
+
+    const requirementsInput = backend.requests[2]?.input as {
+      clarifications: Array<{ answer: string }>;
+    };
+    expect(requirementsInput.clarifications[0]?.answer).toBe(longAnswer);
+  });
+});

@@ -341,6 +341,15 @@ export class SessionStore {
       .run();
   }
 
+  /** 장문 발화의 압축본 저장 (#60, ADR-0014 확장) — original_text 불변 트리거와 무관한 파생 컬럼. */
+  setUtteranceCondensed(input: { id: string; condensedText: string }): void {
+    this.db
+      .update(schema.utterance)
+      .set({ condensedText: input.condensedText })
+      .where(eq(schema.utterance.id, input.id))
+      .run();
+  }
+
   /**
    * 참조되지 않은 채 남은 업로드의 메타를 정리한다. 원본 파일은 지우지 않는다 —
    * 여러 세션이 같은 내용을 가리킬 수 있어 참조 카운트 없이는 안전하지 않고,

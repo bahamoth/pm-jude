@@ -153,7 +153,8 @@ for (const sess of DATA.sessions) {
     '<div class="body">' +
       '<div><div class="sect">발화 타임라인 (원문 전사)</div><div class="utt">' +
         sess.utterances.map((u) =>
-          '<span class="who">' + esc(u.seq + ' ' + u.authorType) + '</span>' +
+          '<span class="who">' + esc(u.seq + ' ' + u.authorType +
+            (u.condensedChars == null ? '' : ' · 압축 ' + u.condensedChars + '자')) + '</span>' +
           '<span class="when">' + esc(u.createdAt.slice(11, 19)) + '</span>' +
           '<span class="txt">' + esc(u.originalText) + '</span>').join('') +
       '</div></div>' +
