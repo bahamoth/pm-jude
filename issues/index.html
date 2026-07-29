@@ -1658,7 +1658,13 @@
     "created": "2026-07-29",
     "updated": "2026-07-29",
     "body": "## Problem Statement\n\n설정이 환경변수 단독으로 관리되고 있고 그마저 일관되지 않다. 환경변수 14종이 CLI 엔트리포인트 4곳에 흩어져 기본값이 중복되고(PMJUDE_DB_PATH·PMJUDE_MAX_ROUNDS 각 4곳), .env.example이 문서화한 PMJUDE_LLM_TIMEOUT_MS·PMJUDE_LLM_MAX_CONCURRENCY는 어디에서도 읽지 않는 죽은 설정이다. 코드 내 기본값(첨부 상한·압축 수치·왕복 상한·로그 로테이션)도 모듈별 상수로 산재한다. 운영자 지시(2026-07-29): 기본 설정 → 통합 설정 파일 → 환경변수 주입 순서의 레이어드 설정.\n\n## Solution\n\n깊은 모듈 하나 — src/config.ts, 인터페이스는 loadConfig() 단일 함수. ① 기본값은 zod 스키마 .default()가 단일 원천, ② 리포 루트 pm-jude.config.json(위치는 PMJUDE_CONFIG로 교체) 파일 층, ③ env var → 설정 경로 명시 매핑 + 타입 강제의 env 층이 순서대로 겹친다. 엔트리포인트는 loadConfig() 1회 호출 후 값을 내려보낸다 — 러너·서버 deps는 이미 값 주입 구조라 시임 불변.\n\n## Implementation Decisions\n\n- 형식 JSON(의존성 0, 운영자 확정 2026-07-29). 실파일은 gitignore, pm-jude.config.example.json만 커밋 — 토큰을 파일에 둘 수 있는 전제.\n- 비밀 4종(ANTHROPIC·SLACK·NOTION·LINEAR)은 파일·env 양쪽 허용, env가 최종 우선(운영자 확정).\n- 파일 부재는 정상, 파싱·스키마 실패와 미지 키는 기동 시점 명시 거부(미등록 MIME 거부와 같은 철학).\n- 기존 env var 이름 전부 보존 — 하위 호환. 죽은 설정 2종(LLM 타임아웃·동시성)은 게이트웨이 생성까지 배선해 되살린다(IntakeRunnerDeps.llm).\n- 코드 산재 기본값(첨부 상한·압축·발화 상한·노션 페이지 상한·왕복 상한·목업 상한·로그)을 스키마 기본값으로 승격.\n- web-ui(Next)와 scripts/demo.mjs는 범위 밖 — 백엔드 src/만.\n\n## Testing Decisions\n\n- 신설 심 1곳: loadConfig({ filePath, env }) 주입 — 기본값·파일 오버라이드·env 최종 우선·파일 부재·JSON 오류·미지 키 거부·타입 강제를 픽스처로 검증.\n- 게이트웨이 상한 배선은 기존 러너 심 확장 1건.\n\n## Out of Scope\n\n- 설정 핫리로드, 다중 프로파일(dev/prod), web-ui 설정 통합.",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-29",
+        "body": "구현 완료 — PR #44에 이슈 단위 커밋으로 합류. src/config.ts 단일 loadConfig()(zod 스키마가 기본값 단일 원천, env 매핑 17종 이름 보존, 파일 부재 정상·깨진 JSON·미지 키 기동 거부), 죽은 설정 2종(PMJUDE_LLM_TIMEOUT_MS·MAX_CONCURRENCY) 게이트웨이까지 배선 부활, CLI 4곳 소비 전환(플래그는 최상위 오버라이드), pm-jude.config.example.json 커밋 + 실파일 gitignore. ADR-0015. 신설 심 8 테스트 + 러너 확장 1, 전체 244 그린, 파일 층·env 우선 실기동 스모크 확인. 머지 후 종결."
+      }
+    ]
   }
 ]
 </script>
