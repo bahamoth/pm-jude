@@ -69,8 +69,8 @@ const configSchema = z
       .prefault({}),
     condense: z
       .object({
-        targetChars: z.number().int().positive().default(12_000),
-        budgetChars: z.number().int().positive().default(120_000),
+        targetChars: z.number().int().positive().default(16_000),
+        budgetChars: z.number().int().positive().default(160_000),
       })
       .strict()
       .prefault({}),

@@ -181,10 +181,10 @@ export const MAX_NOTION_PAGES_PER_SESSION = 5;
  * budgetChars = 세션당 첨부 상한(10) × targetChars — 전 파일이 압축되면 산술적으로 예산 안이다.
  */
 export const DEFAULT_CONDENSE_LIMITS = {
-  /** 압축본의 최대 길이 — 실측(#64): 6k는 89.6% 밀착으로 산문형 요구가 밀려났다. */
-  targetChars: 12_000,
+  /** 압축본의 최대 길이 — 실측(#64): 6k는 89.6% 밀착, 12k는 19% 초과 — 절단 시 후반 섹션(개선분 핵심)이 잘린다. */
+  targetChars: 16_000,
   /** 생성 호출에 실리는 소스 텍스트 총량 예산 = 첨부 상한 × 목표. */
-  budgetChars: 120_000,
+  budgetChars: 160_000,
 } as const;
 
 export interface ReplyOutcome {
