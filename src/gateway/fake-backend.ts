@@ -6,7 +6,7 @@ import {
   COMPLETENESS_V1,
   MOCKUP_V0,
   PROMOTION_V0,
-  REQUIREMENTS_V1,
+  REQUIREMENTS_V2,
   UI_CLASSIFICATION_V0,
 } from '../prompts/catalog';
 import type { BackendRequest, BackendResponse, LlmBackend } from './backend';
@@ -22,7 +22,7 @@ export function createFakeBackend(registry: PromptRegistry): LlmBackend {
   const clarificationBody = registry.get(CLARIFICATION_V2).body;
   const completenessBody = registry.get(COMPLETENESS_V1).body;
   const promotionBody = registry.get(PROMOTION_V0).body;
-  const requirementsBody = registry.get(REQUIREMENTS_V1).body;
+  const requirementsBody = registry.get(REQUIREMENTS_V2).body;
   const extractionBody = registry.get(ATTACHMENT_EXTRACTION_V0).body;
   const uiClassificationBody = registry.get(UI_CLASSIFICATION_V0).body;
   const mockupBody = registry.get(MOCKUP_V0).body;
