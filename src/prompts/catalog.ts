@@ -1,6 +1,7 @@
 import { PromptRegistry } from './registry';
 import { attachmentExtractionPromptV0 } from './attachment-extraction-v0';
 import { backInjectionPromptV0 } from './back-injection-v0';
+import { condensationPromptV0 } from './condensation-v0';
 import { clarificationPromptV0 } from './clarification-v0';
 import { clarificationPromptV1 } from './clarification-v1';
 import { clarificationPromptV2 } from './clarification-v2';
@@ -34,6 +35,8 @@ export const UI_CLASSIFICATION_V0 = 'ui-classification@0.1.0';
 export const MOCKUP_V0 = 'mockup@0.1.0';
 /** 목업 승인 시 어노테이션 확정 사항의 문서 흡수 (F4 역주입, #54). */
 export const BACK_INJECTION_V0 = 'back-injection@0.1.0';
+/** 장문 첨부의 사실 보존 축약 — 생성 호출 전용 파생물 (#58, ADR-0014). */
+export const CONDENSATION_V0 = 'condensation@0.1.0';
 
 /** 리포지토리에 정의된 모든 프롬프트 버전이 등록된 레지스트리를 만든다. */
 export function createDefaultRegistry(): PromptRegistry {
@@ -50,5 +53,6 @@ export function createDefaultRegistry(): PromptRegistry {
   registry.register(uiClassificationPromptV0);
   registry.register(mockupPromptV0);
   registry.register(backInjectionPromptV0);
+  registry.register(condensationPromptV0);
   return registry;
 }

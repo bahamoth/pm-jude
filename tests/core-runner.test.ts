@@ -16,6 +16,7 @@ import {
   detectRequesterLanguage,
   IntakeRunner,
   UploadRejectedError,
+  UtteranceRejectedError,
   type AttachmentLimits,
   type ChannelPort,
   type ClarificationRoundPayload,
@@ -187,6 +188,8 @@ function makeRunner(
     maxRounds?: number;
     attachments?: { store: AttachmentStore; extractors: ExtractorRegistry };
     limits?: Partial<AttachmentLimits>;
+    maxUtteranceChars?: number;
+    condense?: { targetChars?: number; budgetChars?: number };
   },
 ) {
   store = SessionStore.open(':memory:');
@@ -200,6 +203,10 @@ function makeRunner(
     port,
     teamLanguage: 'ko',
     ...(options?.maxRounds !== undefined ? { maxRounds: options.maxRounds } : {}),
+    ...(options?.maxUtteranceChars !== undefined
+      ? { maxUtteranceChars: options.maxUtteranceChars }
+      : {}),
+    ...(options?.condense ? { condense: options.condense } : {}),
     ...(options?.attachments
       ? {
           attachmentStore: options.attachments.store,
@@ -214,7 +221,12 @@ function makeRunner(
 /** 원본 저장소와 등록된 추출기를 붙인 러너 — 첨부를 다루는 구성 (F1-Attach). */
 function makeAttachmentRunner(
   responses: string[],
-  options?: { maxRounds?: number; limits?: Partial<AttachmentLimits>; extractor?: Extractor },
+  options?: {
+    maxRounds?: number;
+    limits?: Partial<AttachmentLimits>;
+    extractor?: Extractor;
+    condense?: { targetChars?: number; budgetChars?: number };
+  },
 ) {
   const blobs = new AttachmentStore(mkdtempSync(join(tmpdir(), 'pm-jude-core-attach-')));
   const extractors = new ExtractorRegistry();
@@ -222,6 +234,7 @@ function makeAttachmentRunner(
   const made = makeRunner(responses, {
     ...(options?.maxRounds !== undefined ? { maxRounds: options.maxRounds } : {}),
     ...(options?.limits ? { limits: options.limits } : {}),
+    ...(options?.condense ? { condense: options.condense } : {}),
     attachments: { store: blobs, extractors },
   });
   /** 파일을 저장소에 넣고 스테이징까지 마친다 — 어댑터(#49)가 할 일의 최소 재현. */
@@ -1084,5 +1097,124 @@ describe('코어 러너 — 자료 첨부 (F1-Attach, ADR-0011)', () => {
     await runner.handleReply({ ...intake, text: '영업팀 매니저요' });
 
     expect(calls).toBe(1);
+  });
+});
+
+describe('코어 러너 — 발화 길이 상한 (#58, ADR-0014)', () => {
+  it('상한을 넘는 인테이크 발화는 세션을 만들지 않고 안내와 함께 거부한다', async () => {
+    const { runner, port, store } = makeRunner([], { maxUtteranceChars: 100 });
+
+    await expect(runner.handleIntake({ ...intake, text: '가'.repeat(101) })).rejects.toThrow(
+      UtteranceRejectedError,
+    );
+
+    expect(store.findSessionByThreadKey(intake.threadKey)).toBeNull();
+    expect(port.posted).toHaveLength(0); // 접수 확인도 나가지 않는다 — 접수 전 거부
+  });
+
+  it('상한을 넘는 답변 발화는 저장하지 않고 거부하며, 세션은 계속 답변을 기다린다', async () => {
+    const { runner, store } = makeRunner([clarificationResponse], { maxUtteranceChars: 100 });
+    await runner.handleIntake(intake);
+    const before = store.listUtterances(store.findSessionByThreadKey(intake.threadKey)!.id).length;
+
+    await expect(runner.handleReply({ ...intake, text: '가'.repeat(101) })).rejects.toThrow(
+      UtteranceRejectedError,
+    );
+
+    const session = store.findSessionByThreadKey(intake.threadKey)!;
+    expect(store.listUtterances(session.id)).toHaveLength(before); // 장문 발화 미저장
+    expect(session.status).toBe('clarifying');
+  });
+
+  it('거부 안내는 요청자 언어로 파일 첨부·링크 대안을 담는다', async () => {
+    const { runner } = makeRunner([], { maxUtteranceChars: 100 });
+
+    await expect(runner.handleIntake({ ...intake, text: 'a'.repeat(101) })).rejects.toThrow(
+      /attach|link/i,
+    );
+    await expect(runner.handleIntake({ ...intake, text: '가'.repeat(101) })).rejects.toThrow(
+      /첨부|링크/,
+    );
+  });
+});
+
+describe('코어 러너 — 장문 첨부 압축 (#58, ADR-0014)', () => {
+  const condensationOf = (text: string) => JSON.stringify({ condensed: text });
+  const longText = '대상 사용자: 영업팀 매니저. 월별 매출 추이와 팀별 비교가 필요하다. '.repeat(10).trim();
+
+  it('생성 예산 초과 세션은 장문 첨부가 압축되고 — 판정은 전문, requirements는 표시된 압축본을 받는다', async () => {
+    const { runner, backend, store, stage } = makeAttachmentRunner(
+      [
+        condensationOf('압축된 PRD 핵심'),
+        clarificationResponse,
+        refinedCompletenessResponse,
+        requirementsResponse,
+        nonUiClassificationResponse,
+      ],
+      { condense: { targetChars: 100, budgetChars: 200 } },
+    );
+    const uploadId = stage('prd.md', longText, 'text/markdown');
+    const { sessionId } = await runner.handleIntake({ ...intake, uploadIds: [uploadId] });
+    await runner.handleReply({
+      ...intake,
+      text: '영업팀 매니저가 봅니다. 수작업 집계를 없애고 싶어요. 데이터는 모르겠어요 — 개발팀이 정해 주세요.',
+    });
+
+    // 압축 호출이 첫 호출로, 원문 전체와 목표 길이를 받는다
+    const condensationInput = backend.requests[0]?.input as { text: string; targetChars: number };
+    expect(condensationInput.text).toBe(longText);
+    expect(condensationInput.targetChars).toBe(100);
+    // 판정 호출(명확화·완결성)은 원문 전문을 유지한다 (ADR-0014 결정 1)
+    const clarifyInput = backend.requests[1]?.input as { attachments: Array<{ text: string }> };
+    expect(clarifyInput.attachments[0]?.text).toBe(longText);
+    const completenessInput = backend.requests[2]?.input as { attachments: Array<{ text: string }> };
+    expect(completenessInput.attachments[0]?.text).toBe(longText);
+    // 생성 호출(requirements)은 압축본을 압축 표시와 함께 받는다 (ADR-0014 결정 2)
+    const requirementsInput = backend.requests[3]?.input as { attachments: Array<{ text: string }> };
+    expect(requirementsInput.attachments[0]?.text).toContain('압축된 PRD 핵심');
+    expect(requirementsInput.attachments[0]?.text).toContain('압축본');
+    expect(requirementsInput.attachments[0]?.text).not.toContain(longText);
+    // 원문은 그대로, 압축본은 파생물로 저장된다 (ADR-0014 결정 3)
+    const row = store.listAttachments(sessionId)[0];
+    expect(row?.extractedText).toBe(longText);
+    expect(row?.condensedText).toBe('압축된 PRD 핵심');
+  });
+
+  it('생성 예산 이내의 세션은 아무것도 압축되지 않는다 — 흔한 경우의 충실도 보존', async () => {
+    const { runner, backend, store, stage } = makeAttachmentRunner(
+      [
+        clarificationResponse,
+        refinedCompletenessResponse,
+        requirementsResponse,
+        nonUiClassificationResponse,
+      ],
+      { condense: { targetChars: 100, budgetChars: 10_000 } },
+    );
+    const uploadId = stage('prd.md', longText, 'text/markdown');
+    const { sessionId } = await runner.handleIntake({ ...intake, uploadIds: [uploadId] });
+    await runner.handleReply({
+      ...intake,
+      text: '영업팀 매니저가 봅니다. 수작업 집계를 없애고 싶어요. 데이터는 모르겠어요 — 개발팀이 정해 주세요.',
+    });
+
+    expect(store.listAttachments(sessionId)[0]?.condensedText).toBeNull();
+    const requirementsInput = backend.requests[2]?.input as { attachments: Array<{ text: string }> };
+    expect(requirementsInput.attachments[0]?.text).toBe(longText);
+  });
+
+  it('압축 출력이 목표를 넘으면 1회 재시도하고, 그래도 넘으면 명시 마커와 함께 절단한다', async () => {
+    const overlong = 'x'.repeat(200);
+    const { runner, backend, store, stage } = makeAttachmentRunner(
+      [condensationOf(overlong), condensationOf(overlong), clarificationResponse],
+      { condense: { targetChars: 50, budgetChars: 100 } },
+    );
+    const uploadId = stage('prd.md', longText, 'text/markdown');
+    const { sessionId } = await runner.handleIntake({ ...intake, uploadIds: [uploadId] });
+
+    // 압축 2회(원시도+재시도) 후 명확화 — 순서가 곧 검증이다
+    expect(backend.requests).toHaveLength(3);
+    const row = store.listAttachments(sessionId)[0];
+    expect(row?.condensedText?.startsWith('x'.repeat(50))).toBe(true);
+    expect(row?.condensedText).toContain('잘렸다');
   });
 });

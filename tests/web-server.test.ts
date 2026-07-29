@@ -140,7 +140,12 @@ afterEach(async () => {
 
 async function startServer(
   backend: LlmBackend,
-  options?: { maxRounds?: number; attachments?: boolean; maxBytesPerFile?: number },
+  options?: {
+    maxRounds?: number;
+    attachments?: boolean;
+    maxBytesPerFile?: number;
+    maxUtteranceChars?: number;
+  },
 ): Promise<{ baseUrl: string; store: SessionStore }> {
   store = SessionStore.open(':memory:');
   // 첨부를 켜는 구성은 텍스트 추출기만 등록한다 — 어댑터 계약 검증에 이미지 호출은 불필요
@@ -153,6 +158,9 @@ async function startServer(
     modelVersion: 'claude-sonnet-5',
     teamLanguage: 'ko',
     ...(options?.maxRounds !== undefined ? { maxRounds: options.maxRounds } : {}),
+    ...(options?.maxUtteranceChars !== undefined
+      ? { maxUtteranceChars: options.maxUtteranceChars }
+      : {}),
     ...(options?.attachments
       ? {
           attachmentStore: new AttachmentStore(mkdtempSync(join(tmpdir(), 'pm-jude-web-attach-'))),
@@ -976,5 +984,25 @@ describe('웹 어댑터 — 목업 반복·디자인 시스템 선정 (F4, #54)'
     });
     expect(rejected.status).toBe(409);
     expect((await json<{ code: string }>(rejected)).code).toBe('theme_required');
+  });
+});
+
+describe('웹 어댑터 — 발화 길이 상한 (#58, ADR-0014)', () => {
+  it('상한 초과 인테이크는 400과 사유·대안 안내로 거부된다', async () => {
+    const { baseUrl, store } = await startServer(new ScriptedBackend([]), {
+      maxUtteranceChars: 100,
+    });
+
+    const res = await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: '가'.repeat(101), language: 'ko' }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = await json<{ code: string; error: string }>(res);
+    expect(body.code).toBe('utterance_rejected');
+    expect(body.error).toMatch(/첨부|링크/);
+    expect(store.exportSessions()).toHaveLength(0); // 세션 자체가 만들어지지 않는다
   });
 });

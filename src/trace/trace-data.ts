@@ -66,6 +66,10 @@ export interface TraceData {
       extractionStatus: string;
       extractionError: string | null;
       extractorVersion: string | null;
+      /** 압축본 길이 (#58, ADR-0014) — 압축 여부·비율이 판독 대상이다. */
+      condensedChars: number | null;
+      /** 페치 산출물의 출처 (#57, ADR-0013). 직접 업로드는 null. */
+      sourceUrl: string | null;
       createdAt: string;
     }>;
     slotStates: Array<{

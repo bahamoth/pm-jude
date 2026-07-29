@@ -290,6 +290,15 @@ export class SessionStore {
       .run();
   }
 
+  /** 장문 첨부의 압축본 저장 (#58, ADR-0014) — 원문(extracted_text)은 건드리지 않는다. */
+  setCondensed(input: { id: string; condensedText: string }): void {
+    this.db
+      .update(schema.attachment)
+      .set({ condensedText: input.condensedText })
+      .where(eq(schema.attachment.id, input.id))
+      .run();
+  }
+
   /**
    * 참조되지 않은 채 남은 업로드의 메타를 정리한다. 원본 파일은 지우지 않는다 —
    * 여러 세션이 같은 내용을 가리킬 수 있어 참조 카운트 없이는 안전하지 않고,
@@ -403,6 +412,10 @@ export class SessionStore {
       extractionStatus: string;
       extractionError: string | null;
       extractorVersion: string | null;
+      /** 압축본 길이 (#58, ADR-0014) — 본문 대신 길이만: trace가 볼 것은 압축 여부·비율이다. */
+      condensedChars: number | null;
+      /** 페치 산출물의 출처 (#57, ADR-0013). 직접 업로드는 null. */
+      sourceUrl: string | null;
       createdAt: string;
     }>;
     slotStates: Array<typeof schema.slotState.$inferSelect>;
@@ -454,6 +467,8 @@ export class SessionStore {
             extractionStatus: row.extractionStatus,
             extractionError: row.extractionError,
             extractorVersion: row.extractorVersion,
+            condensedChars: row.condensedText?.length ?? null,
+            sourceUrl: row.sourceUrl,
             createdAt: row.createdAt,
           })),
           requesters: this.db

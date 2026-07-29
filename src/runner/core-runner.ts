@@ -4,6 +4,7 @@ import {
   BACK_INJECTION_V0,
   CLARIFICATION_V2,
   COMPLETENESS_V1,
+  CONDENSATION_V0,
   MOCKUP_V0,
   PROMOTION_V0,
   REQUIREMENTS_V1,
@@ -16,6 +17,7 @@ import {
   runRuleLayer,
 } from '../prompts/completeness-v0';
 import type { CompletenessV1Output } from '../prompts/completeness-v1';
+import type { CondensationOutput } from '../prompts/condensation-v0';
 import type { PromotionOutput } from '../prompts/promotion-v0';
 import type { BackInjectionOutput } from '../prompts/back-injection-v0';
 import type { MockupOutput } from '../prompts/mockup-v0';
@@ -161,6 +163,26 @@ export const DEFAULT_ATTACHMENT_LIMITS: AttachmentLimits = {
 /** 업로드 검증 실패 — 어댑터가 사유를 요청자에게 그대로 전한다. */
 export class UploadRejectedError extends Error {}
 
+/**
+ * 발화 길이 상한 초과 (#58, ADR-0014 결정 6) — 첨부 상한을 통째로 우회하던 붙여넣기 경로를
+ * 접수 전에 막는다. 어댑터가 사유를 요청자에게 그대로 전한다.
+ */
+export class UtteranceRejectedError extends Error {}
+
+/** 발화 길이 상한 기본값 — 결정 대기 수치 (ADR-0014 결정 7, PRD §12). */
+export const DEFAULT_MAX_UTTERANCE_CHARS = 10_000;
+
+/**
+ * 장문 첨부 압축·생성 조립 예산 기본값 (#58, ADR-0014 결정 7) — 결정 대기 수치 (PRD §12).
+ * budgetChars = 세션당 첨부 상한(10) × targetChars — 전 파일이 압축되면 산술적으로 예산 안이다.
+ */
+export const DEFAULT_CONDENSE_LIMITS = {
+  /** 압축본의 최대 길이. 이보다 긴 첨부만 압축 후보가 된다. */
+  targetChars: 6_000,
+  /** 생성 호출에 실리는 첨부 텍스트 총량 예산 — 넘으면 큰 것부터 압축한다. */
+  budgetChars: 60_000,
+} as const;
+
 export interface ReplyOutcome {
   sessionId: string;
   status: string;
@@ -227,6 +249,8 @@ const MESSAGES = {
     themeDelegated: '분위기 선택은 개발팀 몫으로 남겨 둘게요. 이대로 좋으면 최종 확인해 주세요.',
     mockupApproved:
       '목업에서 확정된 내용을 문서에 반영해 새 버전으로 정리했어요. 이제 문서가 기준이 되고, 목업은 참고용이에요.',
+    utteranceTooLong: (max: number) =>
+      `메시지가 너무 길어요 (최대 ${String(max)}자). 긴 자료는 파일로 첨부하거나 링크로 주시면 제가 직접 읽을게요.`,
   },
   en: {
     ack: "Got it. I'll ask a few questions to pin the request down.",
@@ -251,6 +275,8 @@ const MESSAGES = {
       "I'll leave the look for the team to decide. If everything looks right, give it a final confirm.",
     mockupApproved:
       'Everything settled on the mockup is now folded into a new version of the document. The document is the reference from here — the mockup stays around only for context.',
+    utteranceTooLong: (max: number) =>
+      `That message is too long (max ${String(max)} characters). For long material, attach a file or share a link and I'll read it directly.`,
   },
 } as const;
 
@@ -279,6 +305,10 @@ export interface IntakeRunnerDeps<A> {
   themes?: ThemeRegistry;
   /** 목업 재생성 상한 — 수치는 결정 대기 (PRD §12). 기본 3. */
   maxMockupIterations?: number;
+  /** 요청자 발화 길이 상한 (#58, ADR-0014). 기본 10k자 — 결정 대기 수치 (PRD §12). */
+  maxUtteranceChars?: number;
+  /** 장문 첨부 압축 목표·생성 조립 예산 (#58, ADR-0014). 기본 6k/60k자 — 결정 대기 수치. */
+  condense?: { targetChars?: number; budgetChars?: number };
 }
 
 function formatQuestions(output: ClarificationOutput, language: 'ko' | 'en'): string {
@@ -352,6 +382,8 @@ export class IntakeRunner<A> {
   private readonly extractors: ExtractorRegistry | undefined;
   private readonly themes: ThemeRegistry;
   private readonly maxMockupIterations: number;
+  private readonly maxUtteranceChars: number;
+  private readonly condense: { targetChars: number; budgetChars: number };
 
   constructor(private readonly deps: IntakeRunnerDeps<A>) {
     this.gateway = new LlmGateway({
@@ -366,6 +398,11 @@ export class IntakeRunner<A> {
     this.extractors = deps.createExtractors?.(this.gateway);
     this.themes = deps.themes ?? ThemeRegistry.withBuiltins();
     this.maxMockupIterations = deps.maxMockupIterations ?? 3;
+    this.maxUtteranceChars = deps.maxUtteranceChars ?? DEFAULT_MAX_UTTERANCE_CHARS;
+    this.condense = {
+      targetChars: deps.condense?.targetChars ?? DEFAULT_CONDENSE_LIMITS.targetChars,
+      budgetChars: deps.condense?.budgetChars ?? DEFAULT_CONDENSE_LIMITS.budgetChars,
+    };
   }
 
   /** 첨부를 다룰 수 있는 구성인가 — 어댑터가 업로드 표면을 열지 판단하는 근거. */
@@ -396,6 +433,16 @@ export class IntakeRunner<A> {
   }
 
   /**
+   * 발화 길이 상한 검사 (#58, ADR-0014 결정 6) — 첨부 상한(F1-Attach)을 통째로 우회하던
+   * 붙여넣기 경로를 접수 전에 막는다. 안내는 요청자 언어로, 대안(첨부·링크)과 함께.
+   */
+  private rejectOversizedUtterance(text: string): void {
+    if (text.length <= this.maxUtteranceChars) return;
+    const language = detectRequesterLanguage(text);
+    throw new UtteranceRejectedError(MESSAGES[language].utteranceTooLong(this.maxUtteranceChars));
+  }
+
+  /**
    * 세션 개설만 수행한다 — 생성·원문 기록·접수 확인 게시(F1 즉시 확인)까지. 명확화 라운드는
    * startClarification 몫이라, 어댑터가 접수 응답을 먼저 돌려주고 라운드를 비동기로 돌릴 수 있다(G-1).
    */
@@ -403,6 +450,8 @@ export class IntakeRunner<A> {
     const { store, registry } = this.deps;
     const found = store.findSessionByThreadKey(event.threadKey);
     if (found) return { sessionId: found.id, existing: true };
+    // 접수 전 거부 — 세션도 접수 확인도 만들지 않는다 (#58, ADR-0014 결정 6)
+    this.rejectOversizedUtterance(event.text);
 
     const versionAxes = ensureVersionAxes(store, registry);
     const session = store.createSession({
@@ -546,6 +595,91 @@ export class IntakeRunner<A> {
   }
 
   /**
+   * 장문 첨부 압축 (#58, ADR-0014) — 생성 호출에 실릴 첨부 텍스트 총량이 예산을 넘으면
+   * 큰 것부터 압축본을 만든다. 예산 이내의 세션은 아무것도 압축되지 않고(흔한 경우의
+   * 충실도 보존), 압축본이 있어도 판정 호출은 계속 원문 전문을 받는다.
+   *
+   * 목표보다 큰 파일만 후보이므로 전 파일이 압축되면 총량 ≤ 첨부 상한 × 목표 = 예산이
+   * 산술적으로 보장된다. 압축 실패는 라운드를 죽이지 않는다(P-U3) — 해당 첨부는 전문
+   * 폴백으로 남고, 결과는 신호로 귀속된다.
+   */
+  private async condenseLongAttachments(sessionId: string): Promise<void> {
+    const { store } = this.deps;
+    const rows = store
+      .listAttachments(sessionId)
+      .filter((row) => row.extractionStatus === 'ok' && row.extractedText);
+    let projected = rows.reduce(
+      (sum, row) => sum + (row.condensedText ?? row.extractedText ?? '').length,
+      0,
+    );
+    if (projected <= this.condense.budgetChars) return;
+    const session = store.getSession(sessionId);
+    if (!session) return;
+
+    const candidates = rows
+      .filter((row) => !row.condensedText && (row.extractedText?.length ?? 0) > this.condense.targetChars)
+      .sort((a, b) => (b.extractedText?.length ?? 0) - (a.extractedText?.length ?? 0));
+    for (const row of candidates) {
+      if (projected <= this.condense.budgetChars) break;
+      const fullLength = row.extractedText?.length ?? 0;
+      const condensed = await this.condenseOne(row.filename, row.extractedText ?? '');
+      store.recordSignal({
+        sessionId,
+        type: 'attachment_condensed',
+        payload: {
+          attachmentId: row.id,
+          status: condensed === null ? 'failed' : 'ok',
+          fromChars: fullLength,
+          ...(condensed !== null ? { toChars: condensed.length } : {}),
+          promptRef: CONDENSATION_V0,
+        },
+        modelVersion: this.deps.modelVersion,
+        ...this.versionAxesOf(session),
+      });
+      if (condensed === null) continue;
+      store.setCondensed({ id: row.id, condensedText: condensed });
+      projected -= fullLength - condensed.length;
+    }
+  }
+
+  /** 압축 1회 실행 — 목표 초과 출력은 1회 재시도 후 명시 마커와 함께 절단 (ADR-0014 결정 5). */
+  private async condenseOne(filename: string, text: string): Promise<string | null> {
+    const { targetChars } = this.condense;
+    const input = { filename, text, targetChars };
+    try {
+      let { output } = await this.gateway.complete<CondensationOutput>(CONDENSATION_V0, input);
+      if (output.condensed.length > targetChars) {
+        ({ output } = await this.gateway.complete<CondensationOutput>(CONDENSATION_V0, input));
+      }
+      if (output.condensed.length > targetChars) {
+        return `${output.condensed.slice(0, targetChars)}\n[압축본이 목표 길이를 넘어 잘렸다]`;
+      }
+      return output.condensed;
+    } catch {
+      return null; // 전문 폴백 — 실패 귀속은 호출자의 신호 기록 몫
+    }
+  }
+
+  /**
+   * 생성 호출 전용 첨부 뷰 (#58, ADR-0014 결정 2) — 압축본이 있으면 표시와 함께 대체한다.
+   * 판정 호출은 이 뷰를 쓰지 않는다: 자료 깊숙한 곳의 답을 찾는 임무에는 원문 전문이 필요하다.
+   */
+  private generationAttachments(
+    sessionId: string,
+    context: ConversationContext,
+  ): AttachmentContext[] {
+    const rowById = new Map(this.deps.store.listAttachments(sessionId).map((row) => [row.id, row]));
+    return context.attachments.map((attachment) => {
+      const row = rowById.get(context.attachmentIdByRef.get(attachment.ref) ?? '');
+      if (!row?.condensedText) return attachment;
+      return {
+        ...attachment,
+        text: `[압축본 — 원문 ${String(attachment.text.length)}자를 축약]\n${row.condensedText}`,
+      };
+    });
+  }
+
+  /**
    * 개설된 세션의 명확화 라운드 실행 — intake·clarifying 상태에서만 동작한다.
    * 백그라운드 호출은 이벤트에 원문이 없으므로, 언어는 저장된 요청자 발화에서 되찾는다.
    */
@@ -554,6 +688,7 @@ export class IntakeRunner<A> {
     if (!session || (session.status !== 'intake' && session.status !== 'clarifying')) return;
     // 자료를 먼저 읽는다 — 읽지 않은 채 질문을 만들면 자료에 있는 것을 되묻게 된다
     await this.extractPendingAttachments(session.id);
+    await this.condenseLongAttachments(session.id);
     await this.runClarificationRound(session.id, event, this.sessionLanguageOf(session.id, event));
   }
 
@@ -618,6 +753,8 @@ export class IntakeRunner<A> {
     options: { correction: boolean; appendUtterance: boolean },
   ): Promise<ReplyOutcome | null> {
     const { store } = this.deps;
+    // 재시도(appendUtterance:false)는 이미 저장된 발화를 다시 쓰므로 검사 대상이 아니다
+    if (options.appendUtterance) this.rejectOversizedUtterance(event.text);
     let session = store.findSessionByThreadKey(event.threadKey);
     if (!session) return null;
     if (session.status === 'closed') {
@@ -691,6 +828,7 @@ export class IntakeRunner<A> {
     }
     // 판정 전에 자료를 읽는다 — 방금 붙인 것도 이 라운드의 근거가 되어야 한다
     await this.extractPendingAttachments(session.id);
+    await this.condenseLongAttachments(session.id);
 
     const versionAxes = this.versionAxesOf(session);
     const context = this.buildConversation(session.id);
@@ -1082,8 +1220,9 @@ export class IntakeRunner<A> {
       teamLanguage: this.teamLanguage,
       clarifications: context.conversation,
       promotedSlots: promotedSlots.map(({ slotKey, question }) => ({ key: slotKey, question })),
-      // 자료에서 확정된 것은 문서 문장으로 흡수된다 — 첨부를 지워도 구현 가능해야 한다 (원칙 7)
-      attachments: context.attachments,
+      // 자료에서 확정된 것은 문서 문장으로 흡수된다 — 첨부를 지워도 구현 가능해야 한다 (원칙 7).
+      // 생성 출력은 소스 크기에 비례하므로 장문은 압축본으로 실린다 (#58, ADR-0014 결정 2)
+      attachments: this.generationAttachments(sessionId, context),
     });
     const doc = assembleRequirementsDocument({
       output: result.output,
