@@ -1536,3 +1536,47 @@ describe('코어 러너 — 명확화 라운드 간 심화 (#61, F2b)', () => {
     });
   });
 });
+
+describe('코어 러너 — 세션 비용·지표 가시성 (#63)', () => {
+  it('라운드가 쓴 토큰과 비용이 세션에 누적된다 — 상한 대신 보여주려면 먼저 세어야 한다', async () => {
+    const { runner, store } = makeRunner([clarificationResponse]);
+
+    const { sessionId } = await runner.handleIntake(intake);
+
+    const session = store.getSession(sessionId)!;
+    // ScriptedBackend는 호출마다 in:100 out:50을 돌려준다
+    expect(session.totalTokens).toBe(150);
+    expect(session.llmCallCount).toBe(1);
+  });
+
+  it('판정 신호에 직전 라운드 대비 점수 델타가 남는다 — 개선 여부가 정량으로 보이게', async () => {
+    const lowerScoreResponse = JSON.stringify({
+      slots: [
+        slot('target-user', 'filled', '확답'),
+        slot('purpose', 'unfilled', '아직 답이 없다'),
+        slot('data-source', 'unfilled', '아직 답이 없다'),
+      ],
+      remainingAmbiguities: ['목적이 갈린다'],
+      rubric: { score: 30, rationale: '핵심이 비어 있다' },
+    } satisfies CompletenessV1Output);
+
+    const { runner, store } = makeRunner([
+      clarificationResponse,
+      unrefinedCompletenessResponse, // score 35
+      clarificationResponse,
+      lowerScoreResponse, // score 30 — 5점 하락
+      clarificationResponse,
+    ]);
+    await runner.handleIntake(intake);
+    await runner.handleReply({ ...intake, text: '영업팀 매니저요' });
+    await runner.handleReply({ ...intake, text: '아직 잘 모르겠어요' });
+
+    const session = store.findSessionByThreadKey(intake.threadKey)!;
+    const checks = store
+      .listSignals(session.id)
+      .filter((signal) => signal.type === 'completeness_check');
+    expect(checks).toHaveLength(2);
+    expect(checks[0]?.payload).toMatchObject({ llmScore: 35, scoreDelta: null }); // 첫 판정은 비교 대상 없음
+    expect(checks[1]?.payload).toMatchObject({ llmScore: 30, scoreDelta: -5, improved: false });
+  });
+});

@@ -276,3 +276,20 @@ describe('백엔드 차단 응답 (#65)', () => {
     expect(entries[0]).toMatchObject({ attempt: 1, outcome: 'blocked' });
   });
 });
+
+describe('세션 귀속 사용량 (#63)', () => {
+  it('complete에 넘긴 sessionId가 usage 로그에 실린다 — 비용을 세션에 귀속시키는 유일한 경로', async () => {
+    const backend = new FakeBackend();
+    backend.enqueueText('{"answer":"완료"}');
+    const entries: UsageLogEntry[] = [];
+    const gateway = new LlmGateway({
+      backend,
+      registry: makeRegistry(),
+      usageLogger: { log: (entry) => entries.push(entry) },
+    });
+
+    await gateway.complete('clarification@0.1.0', {}, { sessionId: 'session-1' });
+
+    expect(entries[0]).toMatchObject({ sessionId: 'session-1', outcome: 'ok' });
+  });
+});

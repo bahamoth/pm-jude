@@ -4,6 +4,8 @@ import type { PromptRegistry, PromptVersion } from '../prompts/registry';
 /** 백엔드 호출 1회의 비용/사용량 기록 (F14 운영 규약). */
 export interface UsageLogEntry {
   promptRef: string;
+  /** 이 호출이 귀속되는 세션 (#63). 세션 밖 호출(첨부 추출 등)은 없다. */
+  sessionId?: string;
   attempt: number;
   outcome: 'ok' | 'invalid_output' | 'timeout' | 'blocked';
   usage?: BackendUsage;
@@ -72,8 +74,9 @@ export class LlmGateway {
   async complete<T = unknown>(
     promptRef: string,
     input: unknown,
-    options: { images?: readonly BackendImage[] } = {},
+    options: { images?: readonly BackendImage[]; sessionId?: string } = {},
   ): Promise<CompletionResult<T>> {
+    const attribution = options.sessionId ? { sessionId: options.sessionId } : {};
     const version = this.options.registry.get(promptRef); // 버전 참조 검증은 상한 대기보다 먼저
     await this.acquire();
     try {
@@ -86,10 +89,22 @@ export class LlmGateway {
           response = await this.runWithTimeout(version, input, options.images);
         } catch (error) {
           if (error instanceof GatewayTimeoutError) {
-            this.log({ promptRef, attempt, outcome: 'timeout', durationMs: Date.now() - started });
+            this.log({
+              promptRef,
+              ...attribution,
+              attempt,
+              outcome: 'timeout',
+              durationMs: Date.now() - started,
+            });
           } else if (error instanceof BackendBlockedError) {
             // 재시도하지 않는다 — 한도는 다시 물어도 같은 답이고, 로그가 프롬프트 결함으로 읽히면 안 된다
-            this.log({ promptRef, attempt, outcome: 'blocked', durationMs: Date.now() - started });
+            this.log({
+              promptRef,
+              ...attribution,
+              attempt,
+              outcome: 'blocked',
+              durationMs: Date.now() - started,
+            });
           }
           throw error;
         }
@@ -97,11 +112,19 @@ export class LlmGateway {
         try {
           const parsed: unknown = JSON.parse(stripFences(response.outputText));
           const output = version.outputSchema.parse(parsed) as T;
-          this.log({ promptRef, attempt, outcome: 'ok', usage: response.usage, durationMs });
+          this.log({
+            promptRef,
+            ...attribution,
+            attempt,
+            outcome: 'ok',
+            usage: response.usage,
+            durationMs,
+          });
           return { output, promptRef };
         } catch (error) {
           this.log({
             promptRef,
+            ...attribution,
             attempt,
             outcome: 'invalid_output',
             usage: response.usage,
