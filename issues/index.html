@@ -1549,7 +1549,7 @@
   {
     "id": 55,
     "title": "백엔드 로그 파일화 — 롤링 로테이트 + 에이전트 문서화",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
@@ -1565,13 +1565,18 @@
         "author": "claude",
         "date": "2026-07-29",
         "body": "구현 완료 — PR #42 (feat/55-rolling-logs). 롤링 sink(5MB × 5세대) + 콘솔 티(원본 출력 유지·ISO 타임스탬프) + CLI 4곳 배선(intake --export 제외) + AGENTS.md Backend logs 섹션. TDD 4사이클, 전체 210 테스트 그린, 가짜 백엔드 스모크로 data/logs/web.log 기록 확인. 머지 후 이 이슈를 종결한다."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-29",
+        "body": "PR #42 rebase-merge로 main 랜딩 — 종결."
       }
     ]
   },
   {
     "id": 56,
     "title": "게이트웨이 타임아웃 프롬프트별 상한 — 장문 생성 120s 초과 실패 해소",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
@@ -1587,8 +1592,45 @@
         "author": "claude",
         "date": "2026-07-29",
         "body": "구현 완료 — PR #42에 이슈 단위 커밋으로 합류(규칙 2 — 열린 PR 브랜치를 키움). PromptVersion.timeoutMs + 게이트웨이 우선 적용(version ?? options ?? 120s) + 장문 4종(completeness-v1·requirements-v1·mockup-v0·back-injection-v0) 300s 선언 + 레지스트리 양의 정수 검증. 게이트웨이 스위트 확장 2건 + 레지스트리 검증 1건, 전체 213 테스트 그린. 머지 후 이 이슈를 종결한다."
+      },
+      {
+        "author": "claude",
+        "date": "2026-07-29",
+        "body": "PR #42 rebase-merge로 main 랜딩 — 종결."
       }
     ]
+  },
+  {
+    "id": 57,
+    "title": "노션 커넥터(입력) — 노션 URL을 첨부로 페치 (F1-Attach 확장)",
+    "state": "open",
+    "labels": [
+      "ready-for-agent"
+    ],
+    "type": "task",
+    "assignee": "claude",
+    "parent": null,
+    "blockedBy": [],
+    "created": "2026-07-29",
+    "updated": "2026-07-29",
+    "body": "## Problem Statement\n\n요구사항 문서가 노션으로 작성되는 경우, 요청자는 노션 링크를 붙여넣지만 시스템은 링크를 읽지 못한다. 실제 사고(세션 49597175, 2026-07-29): 링크가 무시되자 요청자가 노션 PRD 본문 134k자를 대화에 통째로 붙여넣었고, requirements 생성이 300s 상한에서도 타임아웃했다(#56 코멘트·#58 참조).\n\n## Solution\n\n요청자 발화의 노션 URL을 감지해 페이지를 페치하고 `<페이지제목>.md` 첨부로 저장한다. text/markdown은 이미 등록된 MIME이라 이후는 기존 F1-Attach 파이프라인(원본 불변·추출 캐시·세션 텍스트 예산·근거 참조·판독 귀속)이 그대로 적용된다.\n\n## Implementation Decisions\n\n- 모듈 `src/connect/notion.ts` 하나 — 인터페이스는 detectNotionUrls(text) + fetchPage(url) 둘. URL→ID 추출, 인증(NOTION_API_KEY 내부 통합 토큰), 블록 재귀·페이지네이션, rate limit 대기, 블록→markdown 환원은 구현 뒤에 숨는다.\n- 배선은 라운드 백그라운드 첫 단계(첨부 추출과 같은 자리) — 게이트웨이 봉투 밖이라 LLM 타임아웃과 무관. 페치 자체 예산(페이지당 시간 상한·세션당 페이지 수 상한)을 둔다.\n- 실패는 결과다(P-U3): 미공유·권한·404는 사유를 단 추출 실패로 남아 요청자가 \"통합에 페이지를 공유해 달라\"를 알게 된다.\n- attachment.source_url 컬럼 신설(마이그레이션) — 출처 기록 + 라운드 간 재페치 방지.\n- NOTION_API_KEY 미설정이면 커넥터 꺼짐(현행 동작 유지). .env.example은 통합 시점 편집.\n- API 사실관계는 docs/research/의 노션 API 조사 노트 참조(1차 소스 조사).\n\n## Testing Decisions\n\n- 신설 심 1곳: NotionConnector 인터페이스 — fetch 함수 주입으로 페이지네이션·재귀·rate limit 대기·실패 분류를 픽스처로 검증. URL 감지·ID 추출은 순수 함수 테스트.\n- 배선은 기존 CoreRunner 심 확장: URL 포함 발화 → 첨부 행 생성 → 추출 합류 → 근거 참조까지.\n\n## Out of Scope\n\n- 노션 데이터베이스(행 컬렉션) 페치 — 페이지만. ?v= 뷰 링크는 페이지 ID만 취한다.\n- F2a 검색 소스로서의 노션, requirements의 노션 발행(출력) — 방향은 확정(2026-07-29), 별도 티켓.\n- 첨부 이미지·파일 블록의 재귀 다운로드.",
+    "comments": []
+  },
+  {
+    "id": 58,
+    "title": "장문 소스 규율 — 발화 상한 + 추출 시점 압축 + 조립 예산",
+    "state": "open",
+    "labels": [
+      "ready-for-agent"
+    ],
+    "type": "task",
+    "assignee": "claude",
+    "parent": null,
+    "blockedBy": [],
+    "created": "2026-07-29",
+    "updated": "2026-07-29",
+    "body": "## Problem Statement\n\n세션 텍스트 예산(200k자)과 생성 봉투(300s ≈ 관측 72tok/s로 ~21k토큰)가 맞지 않는다. 실측: 134k자 소스가 대화로 유입되자 requirements 생성이 300s에도 미완(2026-07-29 로그). 구멍이 둘이다 — (1) 붙여넣기 발화에는 어떤 상한도 없고, (2) 정상 첨부 경로로도 200k자가 프롬프트에 그대로 실려 같은 폭발이 재현된다.\n\n## Solution\n\n세 층의 입력 규율: ① 요청자 발화 길이 상한(초과는 사유와 함께 거부 + \"파일 첨부/링크\" 안내), ② 장문 첨부는 추출 시점에 LLM 1회 압축(사실·수치·표 보존) — 원문 extracted_text는 그대로 두고 condensed_text를 별도 저장(운영자 확인 2026-07-29), ③ 프롬프트 조립 시점에 첨부 텍스트 총량 예산 — 초과분은 압축본으로 대체(전량 압축 시 예산 내 수렴이 산술적으로 보장되는 수치로 설정).\n\n## Implementation Decisions\n\n- 발화 상한 기본 10k자 — 업로드 거부(UploadRejectedError)와 같은 정신으로 접수 전 거부, 요청자 언어로 안내.\n- 압축 트리거 20k자, 압축 목표 ≤6k자, 조립 예산 = maxPerSession(10) × 6k = 60k자 — 전량 압축이면 반드시 예산 안. 수치는 §12식 결정 대기 기본값(설정 교체 가능).\n- 압축은 새 프롬프트 버전(condensation@0.1.0)으로 카탈로그·레지스트리 규율을 따른다. 요청 맥락 비의존이라 캐시 성립(ADR-0011 정합). 이미지 추출기의 게이트웨이 사용 선례.\n- 압축 출력이 목표 길이 초과 시 1회 재시도 후 명시 마커와 함께 절단 — 조용한 절단 금지.\n- ADR 0013/0014로 결정 기록, PRD §12 수치 목록 갱신.\n\n## Testing Decisions\n\n- 기존 심 확장: CoreRunner(발화 상한 거부 회신, 장문 첨부 세션의 requirements 입력이 압축본으로 대체), 추출(압축 트리거·저장), 게이트웨이/프롬프트 레지스트리(condensation 등록).\n\n## Out of Scope\n\n- requirements 분할 생성(섹션별 다중 호출), 대화 이력 요약, maxSessionTextChars 자체 변경.",
+    "comments": []
   }
 ]
 </script>
