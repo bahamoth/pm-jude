@@ -10,6 +10,7 @@ import {
 } from '../analysis/requestion-classification-v0';
 import { AgentSdkBackend } from '../gateway/agent-sdk-backend';
 import { LlmGateway } from '../gateway/gateway';
+import { setupBackendLog } from '../log/setup';
 
 // 소급 아카이브 분석 CLI (#9, ADR-0004) — 배선만 하고 로직은 src/analysis에 둔다.
 //   pnpm retro extract --team ENG [--months 9] [--out data/retro/archive.json]   (LINEAR_API_KEY 필요)
@@ -27,6 +28,8 @@ const { values, positionals } = parseArgs({
   },
   allowPositionals: true,
 });
+
+setupBackendLog('retro'); // 이후의 모든 콘솔 출력이 data/logs/retro.log에도 남는다 (#55)
 
 const command = positionals[0];
 const ARCHIVE_DEFAULT = 'data/retro/archive.json';

@@ -29,3 +29,14 @@ Requester-facing copy speaks as **Jude**, a first-person colleague. The voice ap
 ### Session trace
 
 `pnpm trace` reads the session store and regenerates `data/trace.html` — a self-contained viewer (JSON data island convention) over sessions, transcripts, slot states, signals, and version axes. Operator standing directive: tracking visualization is a permanent companion concern — any change that adds or reshapes session-store writes must keep `src/trace/` rendering them (extend `buildTraceData` + tests in `tests/trace.test.ts`).
+
+### Backend logs
+
+Every backend console line (usage entries, round failures, stack traces) is also persisted to a rolling log file — **read these first when diagnosing runtime failures** instead of asking the operator to paste console output. Default paths, one file per entrypoint (gitignored under `data/`):
+
+- `data/logs/web.log` — `pnpm web` / the api process under `pnpm dev`
+- `data/logs/slack.log` — `pnpm slack`
+- `data/logs/intake.log` — `pnpm intake` (except `--export`, which is data output)
+- `data/logs/retro.log` — `pnpm retro`
+
+File lines are the exact console text prefixed with an ISO timestamp. Rotation: 5 MB per file, 5 generations (`web.log` → `web.log.1` … `web.log.4`, oldest deleted). Override the path with `PMJUDE_LOG_FILE`. Implementation: `src/log/` (sink + console tee), wired one line per entrypoint in `src/cli/`.

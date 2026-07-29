@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import App from '@slack/bolt';
 import { AgentSdkBackend } from '../gateway/agent-sdk-backend';
+import { setupBackendLog } from '../log/setup';
 import { createDefaultRegistry } from '../prompts/catalog';
 import { SlackIntakeRunner } from '../runner/slack-runner';
 import { SessionStore } from '../store/session-store';
@@ -9,6 +10,8 @@ import { SessionStore } from '../store/session-store';
 // Slack PoC 러너 배선 (#8) — Bolt Socket Mode. 배선만 하고 로직은 러너에 둔다.
 //   실행: pnpm slack   (SLACK_BOT_TOKEN·SLACK_APP_TOKEN 필요 — .env.example 참조)
 // 앱 생성·토큰 발급·채널 선정은 운영자 작업이다 (이슈 보드 #8).
+
+setupBackendLog('slack'); // 이후의 모든 콘솔 출력이 data/logs/slack.log에도 남는다 (#55)
 
 const botToken = process.env.SLACK_BOT_TOKEN;
 const appToken = process.env.SLACK_APP_TOKEN;

@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { AgentSdkBackend } from '../gateway/agent-sdk-backend';
+import { setupBackendLog } from '../log/setup';
 import { createDefaultRegistry } from '../prompts/catalog';
 import { runClarificationSession } from '../runner/local-runner';
 import { SessionStore } from '../store/session-store';
@@ -20,6 +21,9 @@ const { values, positionals } = parseArgs({
   },
   allowPositionals: true,
 });
+
+// --export는 세션 데이터를 stdout으로 내보내는 경로라 로그 사본 대상이 아니다 (#55)
+if (!values.export) setupBackendLog('intake');
 
 const dbPath = resolve(values.db ?? process.env.PMJUDE_DB_PATH ?? './data/pm-jude.db');
 mkdirSync(dirname(dbPath), { recursive: true });
