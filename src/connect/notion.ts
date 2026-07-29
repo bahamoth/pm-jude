@@ -16,8 +16,7 @@ const BASE_URL = 'https://api.notion.com';
 /** 페이지 1건 페치의 시간 상한 — 게이트웨이 봉투 밖, 커넥터 자체 예산 (ADR-0013 결정 3). */
 const DEFAULT_TIMEOUT_MS = 30_000;
 
-const NOTION_URL_PATTERN =
-  /https?:\/\/(?:[a-z0-9-]+\.)?notion\.(?:com|so|site)\/[^\s<>")\]]+/gi;
+const NOTION_URL_PATTERN = /https?:\/\/(?:[a-z0-9-]+\.)?notion\.(?:com|so|site)\/[^\s<>")\]]+/gi;
 /** 버전 무관 32-hex — v4 강제 검사는 현행 노션 ID(v8)를 거부한다 (research §4.2). */
 const HEX32 = /[0-9a-f]{32}/i;
 
@@ -33,9 +32,7 @@ function dashed(hex32: string): string {
 }
 
 export type ParsedNotionUrl =
-  | { kind: 'page'; pageId: string }
-  | { kind: 'database' }
-  | { kind: 'invalid' };
+  { kind: 'page'; pageId: string } | { kind: 'database' } | { kind: 'invalid' };
 
 /**
  * URL → 페이지 ID. 우선순위는 공식 SDK 추출기 이식 (research §4.5):
@@ -60,8 +57,7 @@ export function parseNotionUrl(url: string): ParsedNotionUrl {
 }
 
 export type NotionFetchResult =
-  | { status: 'ok'; title: string; markdown: string }
-  | { status: 'failed'; error: string };
+  { status: 'ok'; title: string; markdown: string } | { status: 'failed'; error: string };
 
 /** 코어 러너가 의존하는 최소 표면 — 테스트는 이 인터페이스의 가짜를 주입한다. */
 export interface NotionPageSource {
@@ -150,7 +146,8 @@ function failureReason(status: number): string {
   if (status === 403) {
     return '노션 통합에 read content capability가 없다 — 운영자가 통합 설정을 확인해야 한다';
   }
-  if (status === 401) return '노션 API 토큰이 유효하지 않다 — 운영자가 NOTION_API_KEY를 확인해야 한다';
+  if (status === 401)
+    return '노션 API 토큰이 유효하지 않다 — 운영자가 NOTION_API_KEY를 확인해야 한다';
   if (status === 429) return '노션 API 요청 한도 초과 — 잠시 뒤 다시 시도해 달라';
   return `노션 API 오류 (HTTP ${String(status)})`;
 }

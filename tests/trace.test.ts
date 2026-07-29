@@ -238,7 +238,10 @@ describe('trace-data — 저장소 export의 조형', () => {
     // 압축 여부는 길이로 남는다 — 본문이 아니라 압축 비율이 판독 대상 (#58)
     expect(data.sessions[0]?.attachments).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ extractionStatus: 'ok', condensedChars: '압축된 기획 핵심'.length }),
+        expect.objectContaining({
+          extractionStatus: 'ok',
+          condensedChars: '압축된 기획 핵심'.length,
+        }),
       ]),
     );
     // 파일명은 export 단계에서 이미 빠져 있다 (요청자 이름을 담는 일이 잦다)
