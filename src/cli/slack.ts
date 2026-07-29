@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import App from '@slack/bolt';
+import { loadConfig } from '../config';
 import { AgentSdkBackend } from '../gateway/agent-sdk-backend';
 import { setupBackendLog } from '../log/setup';
 import { createDefaultRegistry } from '../prompts/catalog';
@@ -9,12 +10,14 @@ import { SessionStore } from '../store/session-store';
 
 // Slack PoC 러너 배선 (#8) — Bolt Socket Mode. 배선만 하고 로직은 러너에 둔다.
 //   실행: pnpm slack   (SLACK_BOT_TOKEN·SLACK_APP_TOKEN 필요 — .env.example 참조)
+//   설정: 기본값 → pm-jude.config.json → 환경변수 (#59, ADR-0015)
 // 앱 생성·토큰 발급·채널 선정은 운영자 작업이다 (이슈 보드 #8).
 
-setupBackendLog('slack'); // 이후의 모든 콘솔 출력이 data/logs/slack.log에도 남는다 (#55)
+const config = loadConfig();
+setupBackendLog('slack', config.log.file); // 이후의 모든 콘솔 출력이 data/logs/slack.log에도 남는다 (#55)
 
-const botToken = process.env.SLACK_BOT_TOKEN;
-const appToken = process.env.SLACK_APP_TOKEN;
+const botToken = config.slack.botToken;
+const appToken = config.slack.appToken;
 if (!botToken || !appToken) {
   console.error(
     'SLACK_BOT_TOKEN과 SLACK_APP_TOKEN이 필요하다 — Slack 앱 생성 후 .env에 채운다 (.env.example 참조).',
@@ -22,12 +25,12 @@ if (!botToken || !appToken) {
   process.exit(1);
 }
 
-const dbPath = resolve(process.env.PMJUDE_DB_PATH ?? './data/pm-jude.db');
+const dbPath = resolve(config.db.path);
 mkdirSync(dirname(dbPath), { recursive: true });
 const store = SessionStore.open(dbPath);
 
 const app = new App({ token: botToken, appToken, socketMode: true });
-const model = process.env.PMJUDE_MODEL;
+const model = config.llm.model;
 const runner = new SlackIntakeRunner({
   store,
   backend: new AgentSdkBackend(model ? { model } : {}),
@@ -45,8 +48,8 @@ const runner = new SlackIntakeRunner({
           (entry.usage ? ` in:${entry.usage.inputTokens} out:${entry.usage.outputTokens}` : ''),
       ),
   },
-  teamLanguage: process.env.PMJUDE_TEAM_LANGUAGE ?? 'ko',
-  ...(process.env.PMJUDE_MAX_ROUNDS ? { maxRounds: Number(process.env.PMJUDE_MAX_ROUNDS) } : {}),
+  teamLanguage: config.intake.teamLanguage,
+  maxRounds: config.intake.maxRounds,
 });
 
 app.event('app_mention', async ({ event }) => {

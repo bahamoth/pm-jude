@@ -7,8 +7,9 @@ import { createRollingFileSink } from './rolling-file';
  *
  * 파일은 엔트리포인트별로 나뉜다: web과 slack이 동시에 뜰 수 있어, 두 프로세스가
  * 같은 파일을 로테이션하면 rename 경합이 생기기 때문이다. 경로·정책은 AGENTS.md 참조.
+ * 경로 오버라이드는 레이어드 설정(log.file — #59)에서 온다.
  */
-export function setupBackendLog(name: string): void {
-  const path = resolve(process.env.PMJUDE_LOG_FILE ?? `./data/logs/${name}.log`);
+export function setupBackendLog(name: string, file?: string | null): void {
+  const path = resolve(file ?? `./data/logs/${name}.log`);
   installConsoleTee(createRollingFileSink({ path }));
 }

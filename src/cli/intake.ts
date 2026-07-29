@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
+import { loadConfig } from '../config';
 import { AgentSdkBackend } from '../gateway/agent-sdk-backend';
 import { setupBackendLog } from '../log/setup';
 import { createDefaultRegistry } from '../prompts/catalog';
@@ -22,10 +23,12 @@ const { values, positionals } = parseArgs({
   allowPositionals: true,
 });
 
+const config = loadConfig();
 // --export는 세션 데이터를 stdout으로 내보내는 경로라 로그 사본 대상이 아니다 (#55)
-if (!values.export) setupBackendLog('intake');
+if (!values.export) setupBackendLog('intake', config.log.file);
 
-const dbPath = resolve(values.db ?? process.env.PMJUDE_DB_PATH ?? './data/pm-jude.db');
+// CLI 플래그가 설정 3층 위의 최상위 오버라이드다 — 명령 한 번의 의도가 정착 설정을 이긴다
+const dbPath = resolve(values.db ?? config.db.path);
 mkdirSync(dirname(dbPath), { recursive: true });
 const store = SessionStore.open(dbPath);
 
@@ -49,9 +52,11 @@ try {
     const result = await runClarificationSession(
       {
         store,
-        backend: new AgentSdkBackend(values.model ? { model: values.model } : {}),
+        backend: new AgentSdkBackend(
+          (values.model ?? config.llm.model) ? { model: (values.model ?? config.llm.model)! } : {},
+        ),
         registry: createDefaultRegistry(),
-        modelVersion: values.model ?? 'agent-sdk-default',
+        modelVersion: values.model ?? config.llm.model ?? 'agent-sdk-default',
         usageLogger: {
           log: (entry) =>
             console.error(

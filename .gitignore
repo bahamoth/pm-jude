@@ -8,4 +8,6 @@ data/
 *.db-shm
 .env
 .env.local
+# 레이어드 설정 실파일 (#59, ADR-0015) — 토큰을 담을 수 있어 커밋 금지. example만 커밋한다.
+pm-jude.config.json
 .serena/
