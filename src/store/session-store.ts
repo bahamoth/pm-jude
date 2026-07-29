@@ -341,6 +341,28 @@ export class SessionStore {
       .run();
   }
 
+  /**
+   * 세션 사용량 누적 (#63) — 상한으로 막는 대신 보여주기 위한 계측.
+   * 호출 1회분을 더한다. 비용이 없는 백엔드(가짜)도 호출 수는 센다.
+   */
+  addSessionUsage(input: {
+    sessionId: string;
+    tokens: number;
+    costUsd?: number | undefined;
+  }): void {
+    const current = this.getSession(input.sessionId);
+    if (!current) return;
+    this.db
+      .update(schema.session)
+      .set({
+        totalTokens: current.totalTokens + input.tokens,
+        totalCostUsd: current.totalCostUsd + (input.costUsd ?? 0),
+        llmCallCount: current.llmCallCount + 1,
+      })
+      .where(eq(schema.session.id, input.sessionId))
+      .run();
+  }
+
   /** 장문 발화의 압축본 저장 (#60, ADR-0014 확장) — original_text 불변 트리거와 무관한 파생 컬럼. */
   setUtteranceCondensed(input: { id: string; condensedText: string }): void {
     this.db

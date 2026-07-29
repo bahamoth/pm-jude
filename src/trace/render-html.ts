@@ -131,7 +131,10 @@ document.getElementById('summary').innerHTML =
   stat('첨부', s.attachmentCounts.total === 0 ? '—' :
     'ok ' + s.attachmentCounts.ok + ' · failed ' + s.attachmentCounts.failed +
     ' · pending ' + s.attachmentCounts.pending, '총 ' + s.attachmentCounts.total + '건') +
-  stat('문서', s.documentCount === 0 ? '—' : s.documentCount + '건', '영속된 버전 수 (#53)');
+  stat('문서', s.documentCount === 0 ? '—' : s.documentCount + '건', '영속된 버전 수 (#53)') +
+  stat('LLM 사용량', s.usageTotals.calls === 0 ? '—' :
+    (s.usageTotals.tokens / 1000).toFixed(1) + 'k 토큰',
+    s.usageTotals.calls + '회 호출 · $' + s.usageTotals.costUsd.toFixed(2));
 
 const root = document.getElementById('sessions');
 if (!DATA.sessions.length) {
@@ -147,6 +150,7 @@ for (const sess of DATA.sessions) {
       (sess.terminalState ? '<span class="badge terminal">종결: ' + esc(sess.terminalState) + '</span>' : '') +
       '<span class="badge">' + esc(sess.originChannel) + '</span>' +
       '<span class="badge">왕복 ' + sess.roundCount + '</span>' +
+      (sess.usage.llmCallCount ? '<span class="badge">' + (sess.usage.totalTokens / 1000).toFixed(1) + 'k 토큰 · $' + sess.usage.totalCostUsd.toFixed(2) + '</span>' : '') +
       (sess.isUiRequest == null ? '' : '<span class="badge">' + (sess.isUiRequest ? 'UI 요청' : '비 UI') + '</span>') +
       '<span class="meta">' + esc(sess.createdAt) + '</span>' +
     '</summary>' +

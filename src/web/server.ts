@@ -660,6 +660,12 @@ export function createWebServer(deps: WebServerDeps): Server {
         status: session.status,
         terminalState: session.terminalState,
         roundCount: session.roundCount,
+        // 세션이 쓴 LLM 사용량 (#63) — 상한으로 막는 대신 요청자·운영자에게 보여준다
+        usage: {
+          totalTokens: session.totalTokens,
+          totalCostUsd: session.totalCostUsd,
+          llmCallCount: session.llmCallCount,
+        },
         originChannel: session.originChannel,
         createdAt: session.createdAt,
         updatedAt: session.updatedAt,

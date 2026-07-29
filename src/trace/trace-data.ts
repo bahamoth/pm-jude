@@ -18,6 +18,8 @@ export interface TraceSummary {
   attachmentCounts: Record<'total' | 'ok' | 'failed' | 'pending', number>;
   /** 영속된 requirements 문서 버전 수 (#53) — 정정 재생성이 쌓이면 버전이 는다 (G-11). */
   documentCount: number;
+  /** 전 세션 누적 사용량 (#63). */
+  usageTotals: { tokens: number; costUsd: number; calls: number };
   /** 목업 반복 현황 (F4 #54) — 반복·어노테이션 밀도는 명확화 수렴 품질의 신호다 (F11). */
   mockupCounts: Record<'versions' | 'annotations', number>;
 }
@@ -32,6 +34,8 @@ export interface TraceData {
     originChannel: string;
     isUiRequest: boolean | null;
     roundCount: number;
+    /** 세션이 쓴 LLM 사용량 (#63) — 상한 대신 계측으로 관리하기 위한 근거. */
+    usage: { totalTokens: number; totalCostUsd: number; llmCallCount: number };
     createdAt: string;
     updatedAt: string;
     closedAt: string | null;
@@ -139,6 +143,7 @@ export function buildTraceData(
     signalTypeCounts: {},
     attachmentCounts: { total: 0, ok: 0, failed: 0, pending: 0 },
     documentCount: 0,
+    usageTotals: { tokens: 0, costUsd: 0, calls: 0 },
     mockupCounts: { versions: 0, annotations: 0 },
   };
 
@@ -166,6 +171,9 @@ export function buildTraceData(
         count(summary.attachmentCounts, attachment.extractionStatus);
       }
       summary.documentCount += documents.length;
+      summary.usageTotals.tokens += session.totalTokens;
+      summary.usageTotals.costUsd += session.totalCostUsd;
+      summary.usageTotals.calls += session.llmCallCount;
       summary.mockupCounts.versions += mockups.length;
       summary.mockupCounts.annotations += mockupAnnotations.length;
 
@@ -176,6 +184,11 @@ export function buildTraceData(
         originChannel: session.originChannel,
         isUiRequest: session.isUiRequest,
         roundCount: session.roundCount,
+        usage: {
+          totalTokens: session.totalTokens,
+          totalCostUsd: session.totalCostUsd,
+          llmCallCount: session.llmCallCount,
+        },
         createdAt: session.createdAt,
         updatedAt: session.updatedAt,
         closedAt: session.closedAt,

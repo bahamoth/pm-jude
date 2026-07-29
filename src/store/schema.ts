@@ -1,4 +1,12 @@
-import { index, integer, primaryKey, sqliteTable, text, unique } from 'drizzle-orm/sqlite-core';
+import {
+  index,
+  integer,
+  primaryKey,
+  real,
+  sqliteTable,
+  text,
+  unique,
+} from 'drizzle-orm/sqlite-core';
 
 // 세션 저장소 스키마 (docs/data-model.md의 Phase 0 필요분, ADR-0006).
 // SQLite 전용 기능에 의존하지 않는다 — Phase 1 Postgres 전환 전제.
@@ -40,6 +48,13 @@ export const session = sqliteTable('session', {
   channelThreadKey: text('channel_thread_key').unique(),
   isUiRequest: integer('is_ui_request', { mode: 'boolean' }),
   roundCount: integer('round_count').notNull().default(0),
+  /**
+   * 세션이 쓴 LLM 사용량 (#63) — 상한으로 막는 대신 보여주기 위한 계측.
+   * 비용은 백엔드가 준 값의 합이라 소수라서 실수로 둔다.
+   */
+  totalTokens: integer('total_tokens').notNull().default(0),
+  totalCostUsd: real('total_cost_usd').notNull().default(0),
+  llmCallCount: integer('llm_call_count').notNull().default(0),
   // 버전 귀속 5축 — 세션 생성 시점의 버전을 고정 기록 (F11)
   promptVersionId: text('prompt_version_id')
     .notNull()

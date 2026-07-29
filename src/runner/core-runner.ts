@@ -173,6 +173,23 @@ export class UtteranceRejectedError extends Error {}
 /** 발화 길이 상한 기본값 — 결정 대기 수치 (ADR-0014 결정 7, PRD §12). */
 export const DEFAULT_MAX_UTTERANCE_CHARS = 10_000;
 
+/**
+ * 라운드가 「나아졌다」고 보는 최소 점수 상승 (#63) — 결정 대기 수치 (PRD §12).
+ * 이 값 미만이면 개선 없음으로 본다. 정체가 반복되면 계속 묻는 것이 답이 아니라는 신호다.
+ */
+const SCORE_IMPROVEMENT_STEP = 5;
+
+/** 직전 완결성 판정의 점수 — 없으면 null (첫 라운드). */
+function lastLlmScoreOf(signals: ReadonlyArray<{ type: string; payload: unknown }>): number | null {
+  for (let i = signals.length - 1; i >= 0; i--) {
+    const signal = signals[i];
+    if (signal?.type !== 'completeness_check') continue;
+    const score = (signal.payload as { llmScore?: unknown }).llmScore;
+    return typeof score === 'number' ? score : null;
+  }
+  return null;
+}
+
 /** 세션당 노션 페이지 페치 상한 (#57, ADR-0013 결정 3) — 크롤이 라운드를 인질로 잡지 않게. */
 export const MAX_NOTION_PAGES_PER_SESSION = 5;
 
@@ -411,7 +428,19 @@ export class IntakeRunner<A> {
     this.gateway = new LlmGateway({
       backend: deps.backend,
       registry: deps.registry,
-      ...(deps.usageLogger ? { usageLogger: deps.usageLogger } : {}),
+      // 사용량을 세션에 누적하고 외부 로거에도 그대로 흘린다 (#63) — 상한으로 막는 대신 보여준다
+      usageLogger: {
+        log: (entry) => {
+          if (entry.sessionId && entry.usage) {
+            deps.store.addSessionUsage({
+              sessionId: entry.sessionId,
+              tokens: entry.usage.inputTokens + entry.usage.outputTokens,
+              costUsd: entry.usage.costUsd,
+            });
+          }
+          deps.usageLogger?.log(entry);
+        },
+      },
       ...(deps.llm?.timeoutMs !== undefined ? { timeoutMs: deps.llm.timeoutMs } : {}),
       ...(deps.llm?.maxConcurrency !== undefined
         ? { maxConcurrency: deps.llm.maxConcurrency }
@@ -779,7 +808,7 @@ export class IntakeRunner<A> {
     for (const source of candidates) {
       if (projected <= this.condense.budgetChars) break;
       const fullLength = source.text.length;
-      const condensed = await this.condenseOne(source.label, source.text);
+      const condensed = await this.condenseOne(sessionId, source.label, source.text);
       store.recordSignal({
         sessionId,
         type: source.kind === 'attachment' ? 'attachment_condensed' : 'utterance_condensed',
@@ -814,21 +843,33 @@ export class IntakeRunner<A> {
    * - 재시도는 **더 강한 목표**로 요청한다 — 같은 목표를 되풀이하면 같은 초과가 돌아온다.
    * - 절단은 허용 배수를 넘긴 경우의 최후 수단이고, 잘렸다는 사실을 본문에 남긴다.
    */
-  private async condenseOne(filename: string, text: string): Promise<string | null> {
+  private async condenseOne(
+    sessionId: string,
+    filename: string,
+    text: string,
+  ): Promise<string | null> {
     const { targetChars } = this.condense;
     const tolerated = Math.floor(targetChars * CONDENSE_TOLERANCE);
     try {
-      let { output } = await this.gateway.complete<CondensationOutput>(CONDENSATION_V1, {
-        filename,
-        text,
-        targetChars,
-      });
-      if (output.condensed.length > tolerated) {
-        ({ output } = await this.gateway.complete<CondensationOutput>(CONDENSATION_V1, {
+      let { output } = await this.gateway.complete<CondensationOutput>(
+        CONDENSATION_V1,
+        {
           filename,
           text,
-          targetChars: Math.floor(targetChars * CONDENSE_RETRY_FACTOR),
-        }));
+          targetChars,
+        },
+        { sessionId: sessionId },
+      );
+      if (output.condensed.length > tolerated) {
+        ({ output } = await this.gateway.complete<CondensationOutput>(
+          CONDENSATION_V1,
+          {
+            filename,
+            text,
+            targetChars: Math.floor(targetChars * CONDENSE_RETRY_FACTOR),
+          },
+          { sessionId: sessionId },
+        ));
       }
       if (output.condensed.length > tolerated) {
         return `${output.condensed.slice(0, tolerated)}\n[압축본이 목표 길이를 넘어 잘렸다]`;
@@ -1060,13 +1101,17 @@ export class IntakeRunner<A> {
 
     const versionAxes = this.versionAxesOf(session);
     const context = this.buildConversation(session.id);
-    const completeness = await this.gateway.complete<CompletenessV1Output>(COMPLETENESS_V1, {
-      request: context.request,
-      conversation: context.conversation,
-      attachments: context.attachments,
-      teamLanguage: this.teamLanguage,
-      requiredSlots: TEMP_REQUIRED_SLOTS,
-    });
+    const completeness = await this.gateway.complete<CompletenessV1Output>(
+      COMPLETENESS_V1,
+      {
+        request: context.request,
+        conversation: context.conversation,
+        attachments: context.attachments,
+        teamLanguage: this.teamLanguage,
+        requiredSlots: TEMP_REQUIRED_SLOTS,
+      },
+      { sessionId: session.id },
+    );
 
     // LLM 슬롯 판정을 세션 슬롯 상태로 반영 — 승격 트리거 (F2c, US-10).
     // 판정 근거를 value로 영속해 슬롯 단위 확인 카드(F3)의 표시 텍스트로 쓴다.
@@ -1087,12 +1132,18 @@ export class IntakeRunner<A> {
       slotStates: store.listSlotStates(session.id),
     });
     const verdict = judgeCompleteness({ rule, llm: completeness.output });
+    // 라운드마다 나아지고 있는가 (#63) — 상한으로 막는 대신 개선을 보여주려면 델타가 필요하다.
+    // 첫 판정은 비교 대상이 없어 null이고, 이후는 직전 판정 점수와의 차다.
+    const previousScore = lastLlmScoreOf(store.listSignals(session.id));
+    const scoreDelta = previousScore === null ? null : verdict.llmScore - previousScore;
     store.recordSignal({
       sessionId: session.id,
       type: 'completeness_check',
       payload: {
         refined: verdict.refined,
         llmScore: verdict.llmScore,
+        scoreDelta,
+        ...(scoreDelta === null ? {} : { improved: scoreDelta >= SCORE_IMPROVEMENT_STEP }),
         ruleFailures: verdict.rule.failures,
         llmUnfilledSlotKeys: verdict.llmUnfilledSlotKeys,
         // 심화 질문의 재료이자 판독 근거 — 버려지면 무엇이 왜 남았는지 사후에 알 수 없다 (#61)
@@ -1221,18 +1272,22 @@ export class IntakeRunner<A> {
     // 「정보 부족」이 아니므로 보류로 보내지 않는다. 모호성은 completeness_check 신호에 남아 F12 몫.
     if (unfilled.length === 0) return 'deliver';
 
-    const result = await this.gateway.complete<PromotionOutput>(PROMOTION_V0, {
-      request: context.request,
-      conversation: context.conversation,
-      // promotion은 본문이 바뀌지 않았다 — 첨부는 컨텍스트만 늘린다 (ADR-0011 결정 12)
-      attachments: context.attachments,
-      teamLanguage: this.teamLanguage,
-      unfilledSlots: unfilled.map((slot) => ({
-        key: slot.key,
-        label: slot.label,
-        rationale: nonEmptyText(rowBySlot.get(slot.key)?.value) ?? '',
-      })),
-    });
+    const result = await this.gateway.complete<PromotionOutput>(
+      PROMOTION_V0,
+      {
+        request: context.request,
+        conversation: context.conversation,
+        // promotion은 본문이 바뀌지 않았다 — 첨부는 컨텍스트만 늘린다 (ADR-0011 결정 12)
+        attachments: context.attachments,
+        teamLanguage: this.teamLanguage,
+        unfilledSlots: unfilled.map((slot) => ({
+          key: slot.key,
+          label: slot.label,
+          rationale: nonEmptyText(rowBySlot.get(slot.key)?.value) ?? '',
+        })),
+      },
+      { sessionId },
+    );
     const decisionBySlot = new Map(
       result.output.decisions.map((decision) => [decision.slotKey, decision]),
     );
@@ -1369,31 +1424,35 @@ export class IntakeRunner<A> {
       store.listSlotStates(sessionId).map((slot) => [slot.slotKey, slot.state]),
     );
     const context = this.buildConversation(sessionId);
-    const result = await this.gateway.complete<ClarificationOutput>(CLARIFICATION_V3, {
-      request,
-      requesterLanguage: language,
-      // 슬롯은 3상태 그대로 간다 (#61) — 승격을 unfilled로 뭉개면 요청자가 「모르겠다」고
-      // 답한 항목을 다시 묻게 된다
-      requiredSlots: TEMP_REQUIRED_SLOTS.map((slot) => ({
-        ...slot,
-        state: stateBySlot.get(slot.key) ?? 'unfilled',
-      })),
-      // 무엇을 이미 물었고 무엇을 답받았는가 — 없으면 매 라운드가 첫 라운드가 된다 (#61)
-      conversation: context.conversation,
-      // 심화의 재료: 직전 판정이 각 슬롯을 그렇게 본 근거와 남은 모호성. 첫 라운드는 null.
-      judgement: options.judgement
-        ? {
-            slots: options.judgement.slots.map(({ slotKey, verdict, rationale }) => ({
-              slotKey,
-              verdict,
-              rationale,
-            })),
-            remainingAmbiguities: options.judgement.remainingAmbiguities,
-          }
-        : null,
-      // 자료를 함께 준다 — 이미 답이 있는 것을 되물으면 첨부가 왕복을 늘리는 셈이 된다
-      attachments: context.attachments,
-    });
+    const result = await this.gateway.complete<ClarificationOutput>(
+      CLARIFICATION_V3,
+      {
+        request,
+        requesterLanguage: language,
+        // 슬롯은 3상태 그대로 간다 (#61) — 승격을 unfilled로 뭉개면 요청자가 「모르겠다」고
+        // 답한 항목을 다시 묻게 된다
+        requiredSlots: TEMP_REQUIRED_SLOTS.map((slot) => ({
+          ...slot,
+          state: stateBySlot.get(slot.key) ?? 'unfilled',
+        })),
+        // 무엇을 이미 물었고 무엇을 답받았는가 — 없으면 매 라운드가 첫 라운드가 된다 (#61)
+        conversation: context.conversation,
+        // 심화의 재료: 직전 판정이 각 슬롯을 그렇게 본 근거와 남은 모호성. 첫 라운드는 null.
+        judgement: options.judgement
+          ? {
+              slots: options.judgement.slots.map(({ slotKey, verdict, rationale }) => ({
+                slotKey,
+                verdict,
+                rationale,
+              })),
+              remainingAmbiguities: options.judgement.remainingAmbiguities,
+            }
+          : null,
+        // 자료를 함께 준다 — 이미 답이 있는 것을 되물으면 첨부가 왕복을 늘리는 셈이 된다
+        attachments: context.attachments,
+      },
+      { sessionId: sessionId },
+    );
 
     for (const question of result.output.questions) {
       if (question.target.type === 'slot' && !stateBySlot.has(question.target.slotKey)) {
@@ -1469,14 +1528,18 @@ export class IntakeRunner<A> {
 
     // 생성 출력은 소스 크기에 비례한다 — 장문 첨부·발화는 압축본으로 실린다 (#58 #60, ADR-0014)
     const generationView = this.generationConversation(sessionId, context);
-    const result = await this.gateway.complete<RequirementsOutput>(REQUIREMENTS_V2, {
-      request: generationView.request,
-      teamLanguage: this.teamLanguage,
-      clarifications: generationView.conversation,
-      promotedSlots: promotedSlots.map(({ slotKey, question }) => ({ key: slotKey, question })),
-      // 자료에서 확정된 것은 문서 문장으로 흡수된다 — 첨부를 지워도 구현 가능해야 한다 (원칙 7)
-      attachments: this.generationAttachments(sessionId, context),
-    });
+    const result = await this.gateway.complete<RequirementsOutput>(
+      REQUIREMENTS_V2,
+      {
+        request: generationView.request,
+        teamLanguage: this.teamLanguage,
+        clarifications: generationView.conversation,
+        promotedSlots: promotedSlots.map(({ slotKey, question }) => ({ key: slotKey, question })),
+        // 자료에서 확정된 것은 문서 문장으로 흡수된다 — 첨부를 지워도 구현 가능해야 한다 (원칙 7)
+        attachments: this.generationAttachments(sessionId, context),
+      },
+      { sessionId: sessionId },
+    );
     const doc = assembleRequirementsDocument({
       output: result.output,
       promotedSlots,
@@ -1539,11 +1602,15 @@ export class IntakeRunner<A> {
     let isUi = session.isUiRequest;
     if (isUi === null) {
       const { request } = this.buildConversation(sessionId);
-      const result = await this.gateway.complete<UiClassificationOutput>(UI_CLASSIFICATION_V0, {
-        request,
-        document: store.latestRequirementsDoc(sessionId)?.content ?? null,
-        teamLanguage: this.teamLanguage,
-      });
+      const result = await this.gateway.complete<UiClassificationOutput>(
+        UI_CLASSIFICATION_V0,
+        {
+          request,
+          document: store.latestRequirementsDoc(sessionId)?.content ?? null,
+          teamLanguage: this.teamLanguage,
+        },
+        { sessionId: sessionId },
+      );
       isUi = result.output.isUiRequest;
       store.updateSessionState(sessionId, { isUiRequest: isUi });
       store.recordSignal({
@@ -1605,13 +1672,17 @@ export class IntakeRunner<A> {
     const language = this.sessionLanguageOf(sessionId, event);
     const { request } = this.buildConversation(sessionId);
 
-    const result = await this.gateway.complete<MockupOutput>(MOCKUP_V0, {
-      request,
-      document: store.latestRequirementsDoc(sessionId)?.content ?? null,
-      requesterLanguage: language,
-      ...(options.previousHtml !== undefined ? { previousHtml: options.previousHtml } : {}),
-      ...(options.annotations?.length ? { annotations: options.annotations } : {}),
-    });
+    const result = await this.gateway.complete<MockupOutput>(
+      MOCKUP_V0,
+      {
+        request,
+        document: store.latestRequirementsDoc(sessionId)?.content ?? null,
+        requesterLanguage: language,
+        ...(options.previousHtml !== undefined ? { previousHtml: options.previousHtml } : {}),
+        ...(options.annotations?.length ? { annotations: options.annotations } : {}),
+      },
+      { sessionId: sessionId },
+    );
     const version = (store.latestMockup(sessionId)?.version ?? 0) + 1;
     const row = store.appendMockup({
       sessionId,
@@ -1799,17 +1870,21 @@ export class IntakeRunner<A> {
       delegated: current.themeDelegated,
     };
 
-    const result = await this.gateway.complete<BackInjectionOutput>(BACK_INJECTION_V0, {
-      request,
-      teamLanguage: this.teamLanguage,
-      document: store.latestRequirementsDoc(session.id)?.content ?? null,
-      annotations,
-      // 시각 방향은 참고로만 준다 — 문서 필드 보장은 아래 코드 몫 (원칙 2)
-      visualDirection: {
-        themeName: visualDirection.themeName,
-        delegated: visualDirection.delegated,
+    const result = await this.gateway.complete<BackInjectionOutput>(
+      BACK_INJECTION_V0,
+      {
+        request,
+        teamLanguage: this.teamLanguage,
+        document: store.latestRequirementsDoc(session.id)?.content ?? null,
+        annotations,
+        // 시각 방향은 참고로만 준다 — 문서 필드 보장은 아래 코드 몫 (원칙 2)
+        visualDirection: {
+          themeName: visualDirection.themeName,
+          delegated: visualDirection.delegated,
+        },
       },
-    });
+      { sessionId: session.id },
+    );
 
     // 승격 슬롯 오픈이슈 합류·원문 전사 첨부는 역주입에서도 코드가 보장한다 (원칙 2)
     const promotedSlots = store
