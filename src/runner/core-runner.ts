@@ -4,10 +4,10 @@ import {
   BACK_INJECTION_V0,
   CLARIFICATION_V2,
   COMPLETENESS_V1,
-  CONDENSATION_V0,
+  CONDENSATION_V1,
   MOCKUP_V0,
   PROMOTION_V0,
-  REQUIREMENTS_V1,
+  REQUIREMENTS_V2,
   UI_CLASSIFICATION_V0,
 } from '../prompts/catalog';
 import type { ClarificationOutput } from '../prompts/clarification-v0';
@@ -181,10 +181,10 @@ export const MAX_NOTION_PAGES_PER_SESSION = 5;
  * budgetChars = 세션당 첨부 상한(10) × targetChars — 전 파일이 압축되면 산술적으로 예산 안이다.
  */
 export const DEFAULT_CONDENSE_LIMITS = {
-  /** 압축본의 최대 길이. 이보다 긴 첨부만 압축 후보가 된다. */
-  targetChars: 6_000,
-  /** 생성 호출에 실리는 첨부 텍스트 총량 예산 — 넘으면 큰 것부터 압축한다. */
-  budgetChars: 60_000,
+  /** 압축본의 최대 길이 — 실측(#64): 6k는 89.6% 밀착으로 산문형 요구가 밀려났다. */
+  targetChars: 12_000,
+  /** 생성 호출에 실리는 소스 텍스트 총량 예산 = 첨부 상한 × 목표. */
+  budgetChars: 120_000,
 } as const;
 
 export interface ReplyOutcome {
@@ -780,7 +780,7 @@ export class IntakeRunner<A> {
           status: condensed === null ? 'failed' : 'ok',
           fromChars: fullLength,
           ...(condensed !== null ? { toChars: condensed.length } : {}),
-          promptRef: CONDENSATION_V0,
+          promptRef: CONDENSATION_V1,
         },
         modelVersion: this.deps.modelVersion,
         ...this.versionAxesOf(session),
@@ -800,9 +800,9 @@ export class IntakeRunner<A> {
     const { targetChars } = this.condense;
     const input = { filename, text, targetChars };
     try {
-      let { output } = await this.gateway.complete<CondensationOutput>(CONDENSATION_V0, input);
+      let { output } = await this.gateway.complete<CondensationOutput>(CONDENSATION_V1, input);
       if (output.condensed.length > targetChars) {
-        ({ output } = await this.gateway.complete<CondensationOutput>(CONDENSATION_V0, input));
+        ({ output } = await this.gateway.complete<CondensationOutput>(CONDENSATION_V1, input));
       }
       if (output.condensed.length > targetChars) {
         return `${output.condensed.slice(0, targetChars)}\n[압축본이 목표 길이를 넘어 잘렸다]`;
@@ -1419,7 +1419,7 @@ export class IntakeRunner<A> {
 
     // 생성 출력은 소스 크기에 비례한다 — 장문 첨부·발화는 압축본으로 실린다 (#58 #60, ADR-0014)
     const generationView = this.generationConversation(sessionId, context);
-    const result = await this.gateway.complete<RequirementsOutput>(REQUIREMENTS_V1, {
+    const result = await this.gateway.complete<RequirementsOutput>(REQUIREMENTS_V2, {
       request: generationView.request,
       teamLanguage: this.teamLanguage,
       clarifications: generationView.conversation,

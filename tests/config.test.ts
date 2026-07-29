@@ -32,7 +32,7 @@ describe('레이어드 설정 loadConfig()', () => {
     expect(config.intake.maxUtteranceChars).toBe(10_000);
     expect(config.llm.timeoutMs).toBe(120_000);
     expect(config.llm.maxConcurrency).toBe(2);
-    expect(config.condense).toEqual({ targetChars: 6_000, budgetChars: 60_000 });
+    expect(config.condense).toEqual({ targetChars: 12_000, budgetChars: 120_000 });
     expect(config.notion.apiKey).toBeNull();
   });
 
