@@ -70,5 +70,7 @@ export const requirementsPromptV1: PromptVersion<RequirementsOutput> = {
   body,
   outputSchema: requirementsOutputSchema,
   regressionPassed: false, // F12 — 골든셋 회귀 통과 전까지 false
-  timeoutMs: 300_000, // 장문 문서 생성 — 기본 120s를 실측 초과해 라운드가 죽었다 (#56, 2026-07-29 로그)
+  // 실측(#60, 세션 49597175): 압축 반영 입력 9.7k자에서도 353s — 문서 17.7k자에 출력
+  // 30.7k토큰, 즉 추론(thinking)이 출력 예산의 태반이다. 300s는 원리적으로 부족했다.
+  timeoutMs: 600_000,
 };
