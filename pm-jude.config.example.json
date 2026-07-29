@@ -26,8 +26,8 @@
     "themeDir": null
   },
   "condense": {
-    "targetChars": 12000,
-    "budgetChars": 120000
+    "targetChars": 16000,
+    "budgetChars": 160000
   },
   "notion": { "apiKey": null },
   "slack": { "botToken": null, "appToken": null },
