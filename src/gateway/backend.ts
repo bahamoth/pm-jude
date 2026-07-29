@@ -18,6 +18,8 @@ export interface BackendRequest {
    * 이 필드를 쓰지 않는다 — 이미지가 모델에 닿는 지점은 추출 하나다 (ADR-0011).
    */
   images?: readonly BackendImage[];
+  /** 프롬프트 버전이 선언한 추론 강도 (#60) — 미지정이면 백엔드 기본(high). */
+  effort?: 'low' | 'medium' | 'high';
   /** 타임아웃·취소 전파용. 백엔드는 중단 신호를 존중해야 한다. */
   signal: AbortSignal;
 }

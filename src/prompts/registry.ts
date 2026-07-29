@@ -15,6 +15,12 @@ export interface PromptVersion<TOutput = unknown> {
    * 값 조정은 semver 증가 사유가 아니다.
    */
   timeoutMs?: number;
+  /**
+   * 추론(thinking) 강도 (#60 실측 — 기본 high는 생성 시간 편차가 통제 불능: 같은 입력이
+   * 353s~600s+). 구조화 계약 출력에 깊은 추론은 과잉인 호출만 낮춘다. timeoutMs와 달리
+   * **출력 품질에 영향**하므로, 이후 값 변경은 semver 증가와 함께 한다.
+   */
+  effort?: 'low' | 'medium' | 'high';
 }
 
 export class PromptRegistryError extends Error {}

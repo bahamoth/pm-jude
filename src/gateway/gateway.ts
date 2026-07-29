@@ -141,6 +141,7 @@ export class LlmGateway {
           promptBody: version.body,
           input,
           ...(images && images.length > 0 ? { images } : {}),
+          ...(version.effort ? { effort: version.effort } : {}),
           signal: controller.signal,
         })
         .then(resolve, reject)
