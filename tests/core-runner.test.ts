@@ -1217,6 +1217,38 @@ describe('코어 러너 — 장문 첨부 압축 (#58, ADR-0014)', () => {
     expect(requirementsInput.attachments[0]?.text).toBe(longText);
   });
 
+  it('목표를 조금 넘는 압축본은 절단하지 않고 그대로 쓴다 — 절단은 후반 섹션을 구조적으로 날린다', async () => {
+    const slightlyOver = '가'.repeat(120); // 목표 100의 1.2배 — 실측 편차 범위(15~19%)
+    const { runner, backend, store, stage } = makeAttachmentRunner(
+      [condensationOf(slightlyOver), clarificationResponse],
+      { condense: { targetChars: 100, budgetChars: 200 } },
+    );
+    const uploadId = stage('prd.md', longText, 'text/markdown');
+
+    const { sessionId } = await runner.handleIntake({ ...intake, uploadIds: [uploadId] });
+
+    expect(backend.requests).toHaveLength(2); // 압축 1회 + 명확화 — 재시도 없음
+    const row = store.listAttachments(sessionId)[0];
+    expect(row?.condensedText).toBe(slightlyOver); // 잘리지 않고 온전하다
+    expect(row?.condensedText).not.toContain('잘렸다');
+  });
+
+  it('재시도는 더 강한 목표로 요청한다 — 같은 목표를 되풀이하면 같은 초과가 반복된다', async () => {
+    const wayOver = '가'.repeat(300); // 목표 100의 3배 — 허용 범위 밖
+    const { runner, backend, stage } = makeAttachmentRunner(
+      [condensationOf(wayOver), condensationOf('짧게 다시 압축'), clarificationResponse],
+      { condense: { targetChars: 100, budgetChars: 200 } },
+    );
+    const uploadId = stage('prd.md', longText, 'text/markdown');
+
+    await runner.handleIntake({ ...intake, uploadIds: [uploadId] });
+
+    const first = backend.requests[0]?.input as { targetChars: number };
+    const retry = backend.requests[1]?.input as { targetChars: number };
+    expect(first.targetChars).toBe(100);
+    expect(retry.targetChars).toBeLessThan(100); // 재시도는 더 짧게 요구한다
+  });
+
   it('압축 출력이 목표를 넘으면 1회 재시도하고, 그래도 넘으면 명시 마커와 함께 절단한다', async () => {
     const overlong = 'x'.repeat(200);
     const { runner, backend, store, stage } = makeAttachmentRunner(

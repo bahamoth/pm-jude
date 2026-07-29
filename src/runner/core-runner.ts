@@ -180,6 +180,14 @@ export const MAX_NOTION_PAGES_PER_SESSION = 5;
  * 장문 첨부 압축·생성 조립 예산 기본값 (#58, ADR-0014 결정 7) — 결정 대기 수치 (PRD §12).
  * budgetChars = 세션당 첨부 상한(10) × targetChars — 전 파일이 압축되면 산술적으로 예산 안이다.
  */
+/**
+ * 압축본 길이의 허용 배수 (#64) — 목표를 이 배수 이내로 넘긴 결과는 그대로 쓴다.
+ * 실측에서 초과가 15~19%로 반복됐고, 절단은 원문 후반을 통째로 날리므로 손실이 더 크다.
+ */
+const CONDENSE_TOLERANCE = 1.5;
+/** 재시도 시 요구하는 목표 배수 — 같은 목표를 되풀이하면 같은 초과가 돌아온다 (#64). */
+const CONDENSE_RETRY_FACTOR = 0.7;
+
 export const DEFAULT_CONDENSE_LIMITS = {
   /** 압축본의 최대 길이 — 실측(#64): 6k는 89.6% 밀착, 12k는 19% 초과 — 절단 시 후반 섹션(개선분 핵심)이 잘린다. */
   targetChars: 16_000,
@@ -795,17 +803,35 @@ export class IntakeRunner<A> {
     }
   }
 
-  /** 압축 1회 실행 — 목표 초과 출력은 1회 재시도 후 명시 마커와 함께 절단 (ADR-0014 결정 5). */
+  /**
+   * 압축 1회 실행 (ADR-0014 결정 5, #64 실측 개정).
+   *
+   * 목표(targetChars)는 「얼마나 줄일지」의 지시이고 실제 상한은 총량 예산(budgetChars)이다.
+   * 절단은 **뒤를 자르므로** 원문 후반(비기능 요구·거버넌스·릴리스·미결)이 구조적으로
+   * 사라진다 — 실측(#64)에서 잘려나갈 구간이 정확히 개선의 핵심이었다. 그래서:
+   *
+   * - 목표를 조금 넘는 것(허용 배수 이내)은 그대로 쓴다. 실측 편차가 15~19%로 반복된다.
+   * - 재시도는 **더 강한 목표**로 요청한다 — 같은 목표를 되풀이하면 같은 초과가 돌아온다.
+   * - 절단은 허용 배수를 넘긴 경우의 최후 수단이고, 잘렸다는 사실을 본문에 남긴다.
+   */
   private async condenseOne(filename: string, text: string): Promise<string | null> {
     const { targetChars } = this.condense;
-    const input = { filename, text, targetChars };
+    const tolerated = Math.floor(targetChars * CONDENSE_TOLERANCE);
     try {
-      let { output } = await this.gateway.complete<CondensationOutput>(CONDENSATION_V1, input);
-      if (output.condensed.length > targetChars) {
-        ({ output } = await this.gateway.complete<CondensationOutput>(CONDENSATION_V1, input));
+      let { output } = await this.gateway.complete<CondensationOutput>(CONDENSATION_V1, {
+        filename,
+        text,
+        targetChars,
+      });
+      if (output.condensed.length > tolerated) {
+        ({ output } = await this.gateway.complete<CondensationOutput>(CONDENSATION_V1, {
+          filename,
+          text,
+          targetChars: Math.floor(targetChars * CONDENSE_RETRY_FACTOR),
+        }));
       }
-      if (output.condensed.length > targetChars) {
-        return `${output.condensed.slice(0, targetChars)}\n[압축본이 목표 길이를 넘어 잘렸다]`;
+      if (output.condensed.length > tolerated) {
+        return `${output.condensed.slice(0, tolerated)}\n[압축본이 목표 길이를 넘어 잘렸다]`;
       }
       return output.condensed;
     } catch {
