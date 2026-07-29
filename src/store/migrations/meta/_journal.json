@@ -50,6 +50,13 @@
       "when": 1785288622116,
       "tag": "0006_long-source-notion",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1785298516263,
+      "tag": "0007_conversation-budget",
+      "breakpoints": true
     }
   ]
 }

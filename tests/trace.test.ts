@@ -213,8 +213,9 @@ describe('trace-data — 저장소 export의 조형', () => {
       payload: { extractorVersion: 'pdf-text@0.1.0', error: '스캔본' },
       ...axes,
     });
-    // 장문 압축본 (#58, ADR-0014) — 저장소 쓰기가 새로 생기면 trace가 함께 렌더링한다 (상시 지시)
+    // 장문 압축본 (#58 #60, ADR-0014) — 저장소 쓰기가 새로 생기면 trace가 함께 렌더링한다 (상시 지시)
     store.setCondensed({ id: ok.id, condensedText: '압축된 기획 핵심' });
+    store.setUtteranceCondensed({ id: utteranceId, condensedText: '압축된 발화' });
 
     const data = buildTraceData(store.exportSessions(), store.listVersionRegistry(), GENERATED_AT);
 
@@ -244,6 +245,12 @@ describe('trace-data — 저장소 export의 조형', () => {
         }),
       ]),
     );
+    // 발화 압축도 길이만 남는다 (#60) — 압축 본문은 데이터 아일랜드에 싣지 않는다
+    expect(data.sessions[0]?.utterances[0]).toMatchObject({
+      seq: 1,
+      condensedChars: '압축된 발화'.length,
+    });
+    expect(JSON.stringify(data)).not.toContain('압축된 발화');
     // 파일명은 export 단계에서 이미 빠져 있다 (요청자 이름을 담는 일이 잦다)
     expect(JSON.stringify(data)).not.toContain('기획서.txt');
 

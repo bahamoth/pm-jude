@@ -1,0 +1,1 @@
+ALTER TABLE `utterance` ADD `condensed_text` text;
