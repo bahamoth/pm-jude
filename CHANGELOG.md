@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.13.0](https://github.com/bahamoth/pm-jude/compare/v0.12.0...v0.13.0) (2026-07-29)
+
+
+### Features
+
+* [#54](https://github.com/bahamoth/pm-jude/issues/54) — web-ui 목업 뷰어 (샌드박스 iframe·코멘트·테마 선정·최종 확인) ([0b0112f](https://github.com/bahamoth/pm-jude/commit/0b0112f423dc7f8ffdef680b15109c07f8869869))
+* [#54](https://github.com/bahamoth/pm-jude/issues/54) — 목업 반복 코어 루프 (UI 분류·생성·어노테이션·테마 선정·역주입) ([9f16534](https://github.com/bahamoth/pm-jude/commit/9f1653481e3458fa43396a87063bed3d1cd4c85d))
+* [#54](https://github.com/bahamoth/pm-jude/issues/54) — 웹 어댑터 목업 표면 + trace 확장 ([8b18e7f](https://github.com/bahamoth/pm-jude/commit/8b18e7f82b486d84debe3ee88c1e39f6599ea545))
+
+
+### Bug Fixes
+
+* [#54](https://github.com/bahamoth/pm-jude/issues/54) — /code-review 2축 반영 ([00db202](https://github.com/bahamoth/pm-jude/commit/00db202460aa1759dae9c7e674fd94d4749f66ea))
+
 ## [0.12.0](https://github.com/bahamoth/pm-jude/compare/v0.11.0...v0.12.0) (2026-07-28)
 
 
