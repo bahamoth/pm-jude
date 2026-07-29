@@ -1740,16 +1740,22 @@
     "title": "이터레이션 규율 전환 — 하드 상한 제거, 정량 개선 지표 + 비용 가시성",
     "state": "open",
     "labels": [
-      "needs-triage"
+      "ready-for-agent"
     ],
     "type": "task",
-    "assignee": null,
+    "assignee": "claude",
     "parent": null,
     "blockedBy": [],
     "created": "2026-07-29",
     "updated": "2026-07-29",
     "body": "## 운영자 지시 (2026-07-29)\n\n요구사항 정제에 소모되는 토큰을 상한으로 제약하지 않는다. 대신 ① 사용자에게 누적 토큰·비용을 경고로 보여주고, ② **이터레이션마다 개선 여부가 정량적으로 확인 가능**해야 한다. 명확화 왕복·목업 반복 전부 동일 원칙. 목표는 베스트 품질 — 무제한 반복의 정당화 조건은 반복마다 개선이 측정된다는 것.\n\n## 설계 골자\n\n**하드 상한 → 소프트 체크포인트 + 개선 정체 감지.**\n\n1. **이터레이션 스코어카드** — 라운드/버전마다 정량 지표와 직전 대비 델타를 요청자·운영자에게 표시.\n   - 명확화: 완결성 루브릭 점수(이미 completeness_check 신호에 기록), 슬롯 충족 수, 잔여 모호성 수. 실증: 세션 49597175에서 라운드 간 점수 78→72 하락 — 같은 질문 반복(#61)의 정량 결과인데 현재 아무도 못 본다.\n   - 목업: 버전별 어노테이션 수·재지적률(같은 요소 재지적 = 미개선).\n2. **개선 정체가 에스컬레이션 권고 트리거** — 고정 횟수(maxRounds 3·maxMockupIterations 3) 대신 \"K회 연속 개선 없음\"이 승격 판정/에스컬레이션을 **권고**(차단 아님). 요청자는 계속 진행·승격·에스컬레이션을 선택. 원칙 5(출구 보장)는 선택지 상시 제공으로 유지.\n3. **세션 누적 비용 가시성** — 선행 작업: 게이트웨이 사용량(토큰·costUsd)의 세션 귀속 저장. 현재 UsageLogger는 콘솔 전용이고 sessionId를 모른다 — 러너가 세션 컨텍스트를 로거에 공급하는 설계 필요(complete() 옵션 vs 컨텍스트 래핑). 세션 API·web-ui에 누적 비용 + 경고 임계(설정) 표시.\n\n## PRD 정합 (개정 필요)\n\n- F2c 왕복 상한·F4 반복 상한의 의미 변화(하드→소프트 권고 트리거) — 원칙 5의 이행 방식 변경\n- §12-3(왕복 상한 수치)·§12-7(목업 상한)·§12-8(토큰 폭주 상한) — 상한 수치 결정이 정체 감지 K·경고 임계 결정으로 대체\n- F11 신호에 이터레이션 델타 지표 추가\n\n## 미결 (설계 논의)\n\n- 정체 판정 K값과 \"개선\"의 정의(점수 +N 이상? 슬롯 +1?), 경고 임계(비용 기준 권장 — 운영자 확인 대기)\n- 게이트웨이 폭주 방지 상한(F14·원칙 4)은 유지 — 이 티켓은 **제품 루프의 상한**만 다룬다(호출 1회 봉투와 구분)\n- #61(질문 심화)과 상호의존: 반복이 개선되려면 질문이 심화되어야 한다 — #61 선행 권장\n\n## Out of Scope\n\n- F12 평가 도구 연동, Slack 표면.",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-29",
+        "body": "1단계(계측) 랜딩 — PR #47. 측정 없이는 규율을 못 바꾸므로 계측부터 세웠다: ① 게이트웨이 complete()에 sessionId 옵션 + 러너가 로거를 감싸 세션에 누적(기존 UsageLogger는 sessionId를 몰라 비용 귀속이 불가능했다), ② session에 total_tokens·total_cost_usd·llm_call_count(마이그레이션 0008), 세션 API·trace 노출, ③ completeness_check 신호에 scoreDelta·improved — 세션 49597175가 78→72로 하락했는데 아무도 못 봤던 것이 이제 정량으로 남는다. 개선 판정 5점은 PRD §12-21 등재.\n\n**남은 2단계(소프트 체크포인트)**: 하드 상한(maxRounds·maxMockupIterations) 제거 → 정체 감지 기반 권고로 전환, 요청자 대면 카피(계속/승격/에스컬레이션 선택지), 비용 경고 임계. 상태 머신과 카피 변경이 따르므로 별도 단위로 진행한다."
+      }
+    ]
   },
   {
     "id": 62,
@@ -1798,18 +1804,24 @@
   {
     "id": 65,
     "title": "API 사용량 한도 응답이 스키마 위반으로 오인된다 — 로그 판독 방해",
-    "state": "open",
+    "state": "closed",
     "labels": [
-      "needs-triage"
+      "ready-for-agent"
     ],
     "type": "bug",
-    "assignee": null,
+    "assignee": "claude",
     "parent": null,
     "blockedBy": [],
     "created": "2026-07-29",
     "updated": "2026-07-29",
     "body": "## Problem Statement\n\nAgent SDK가 사용량 한도 도달 시 안내 문구(\"You've reached your usage limit…\")를 **result/success 메시지로** 반환한다. 게이트웨이는 이를 정상 응답으로 받아 JSON 파싱에 실패하고 outcome='invalid_output'으로 로깅한 뒤 재시도하며, 재시도도 같은 결과라 InvalidStructuredOutputError로 끝난다.\n\n관측(2026-07-29, #61 A/B 스크립트): `SyntaxError: Unexpected token 'Y', \"You've rea\"... is not valid JSON`.\n\n**해악은 오진이다.** 로그에는 \"구조화 출력이 스키마를 통과하지 못함\"만 남아 운영자·에이전트가 프롬프트 결함으로 오해한다. 실제로는 계정 한도이고 프롬프트는 무관하다. 재시도 1회도 낭비된다.\n\n## Solution (초안)\n\n백엔드 어댑터(src/gateway/agent-sdk-backend.ts)가 result 텍스트를 그대로 넘기기 전에 한도·차단 안내 패턴을 식별해 전용 오류로 승격한다. 게이트웨이는 이 오류를 재시도 없이 즉시 전파하고 usage 로그에 별도 outcome(예: 'blocked')으로 남긴다. 패턴 매칭은 취약하므로 SDK가 제공하는 구조적 신호(subtype·error 필드·SDKRateLimitEvent 등)를 먼저 조사할 것 — sdk.d.ts에 SDKRateLimitEvent 타입이 존재한다.\n\n## Testing Decisions\n\n- 기존 게이트웨이 심 확장: 한도 응답을 돌려주는 가짜 백엔드 → 재시도 없이 전용 오류, usage 로그 outcome 확인.\n\n## Out of Scope\n\n- 한도 회복 대기·자동 재개, 비용 예산 관리(#63).",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-29",
+        "body": "PR #47 랜딩 — 종결. SDK 조사 결과 구조적 신호가 있었다: SDKResultSuccess에 is_error·api_error_status 필드가 있고 한도 안내가 그 경로로 온다(별도 rate_limit_event도 존재). classifyResultMessage 순수 함수로 ok/blocked/failed를 가르고, BackendBlockedError는 게이트웨이가 재시도 없이 전파하며 outcome:blocked로 로깅한다. 테스트 6건."
+      }
+    ]
   }
 ]
 </script>
