@@ -213,6 +213,8 @@ describe('trace-data — 저장소 export의 조형', () => {
       payload: { extractorVersion: 'pdf-text@0.1.0', error: '스캔본' },
       ...axes,
     });
+    // 장문 압축본 (#58, ADR-0014) — 저장소 쓰기가 새로 생기면 trace가 함께 렌더링한다 (상시 지시)
+    store.setCondensed({ id: ok.id, condensedText: '압축된 기획 핵심' });
 
     const data = buildTraceData(store.exportSessions(), store.listVersionRegistry(), GENERATED_AT);
 
@@ -233,12 +235,21 @@ describe('trace-data — 저장소 export의 조형', () => {
       data.sessions[0]?.slotStates.find((slotState) => slotState.slotKey === 'target-user')
         ?.evidenceAttachmentId,
     ).toBe(ok.id);
+    // 압축 여부는 길이로 남는다 — 본문이 아니라 압축 비율이 판독 대상 (#58)
+    expect(data.sessions[0]?.attachments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ extractionStatus: 'ok', condensedChars: '압축된 기획 핵심'.length }),
+      ]),
+    );
     // 파일명은 export 단계에서 이미 빠져 있다 (요청자 이름을 담는 일이 잦다)
     expect(JSON.stringify(data)).not.toContain('기획서.txt');
 
     const html = renderTraceHtml(data);
     expect(html).toContain('첨부 자료');
     expect(html).toContain('pdf-text@0.1.0');
+    // 압축본 길이가 데이터 아일랜드에 실리고, 렌더러가 압축·출처 열을 그린다 (#58)
+    expect(html).toContain('"condensedChars": 9');
+    expect(html).toContain('압축·출처');
   });
 
   it('requirements 문서 버전이 요약·세션·HTML에 실린다 (#53, AGENTS.md 동반 지침)', async () => {

@@ -525,6 +525,8 @@ describe('첨부 자료 (F1-Attach, ADR-0011)', () => {
         extractionStatus: 'ok',
         extractionError: null,
         extractorVersion: 'ooxml@0.1.0',
+        condensedChars: null, // 압축본은 길이만 — 본문은 export에 싣지 않는다 (#58)
+        sourceUrl: null, // 직접 업로드 — 페치 출처 없음 (#57)
         createdAt: attachment.createdAt,
       },
     ]);

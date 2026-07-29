@@ -9,6 +9,7 @@ import {
   IntakeRunner,
   TEMP_REQUIRED_SLOTS,
   UploadRejectedError,
+  UtteranceRejectedError,
   type AttachmentLimits,
   type ChannelPort,
   type ClarificationRoundPayload,
@@ -44,6 +45,8 @@ export interface WebServerDeps {
   /** 디자인 시스템 선정 후보 (F4, #54) — 없으면 내장 프리셋. */
   themes?: ThemeRegistry;
   maxMockupIterations?: number;
+  /** 요청자 발화 길이 상한 (#58, ADR-0014). 기본은 러너의 10k자. */
+  maxUtteranceChars?: number;
 }
 
 /** 질문별 「모르겠다」 1클릭 버튼(US-5) 렌더링에 필요한 최소 구조 — 내부 슬롯 매핑은 내보내지 않는다. */
@@ -987,6 +990,13 @@ export function createWebServer(deps: WebServerDeps): Server {
       // 업로드 거부는 사유를 그대로 요청자에게 전한다 — 무엇이 왜 거부됐는지 알아야 다시 올린다
       if (error instanceof UploadRejectedError) {
         if (!res.headersSent) sendJson(res, 400, { code: 'upload_rejected', error: error.message });
+        else res.end();
+        return;
+      }
+      // 발화 길이 거부도 같다 — 대안(첨부·링크)까지 담긴 안내가 그대로 간다 (#58)
+      if (error instanceof UtteranceRejectedError) {
+        if (!res.headersSent)
+          sendJson(res, 400, { code: 'utterance_rejected', error: error.message });
         else res.end();
         return;
       }

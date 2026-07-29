@@ -150,6 +150,10 @@ export const attachment = sqliteTable(
     extractionError: text('extraction_error'),
     /** 추출 시점의 추출기 버전. 버전 축은 5축을 유지하고 이 값은 메타로만 남는다 (ADR-0011). */
     extractorVersion: text('extractor_version'),
+    /** 장문 첨부의 압축본 — 생성 호출 전용 파생물. 원문(extracted_text)은 그대로 남는다 (ADR-0014). */
+    condensedText: text('condensed_text'),
+    /** 페치 산출물의 출처 URL (ADR-0013 — 노션 커넥터). 직접 업로드는 null. */
+    sourceUrl: text('source_url'),
     createdAt: text('created_at').notNull(),
     extractedAt: text('extracted_at'),
   },
