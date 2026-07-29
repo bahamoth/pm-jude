@@ -900,11 +900,20 @@ export class IntakeRunner<A> {
    * 재시도 요청을 거부할 때 쓴다. 판정이 죽으면 요청자 발화만 남고 응답이 없으므로,
    * 마지막 발화가 요청자면 미완 라운드다.
    */
-  pendingRound(threadKey: string): 'clarification' | 'judgement' | null {
+  pendingRound(threadKey: string): 'clarification' | 'judgement' | 'mockup' | null {
     const session = this.deps.store.findSessionByThreadKey(threadKey);
     if (!session) return null;
     if (session.status === 'intake') return 'clarification';
     if (session.status === 'closed') return null; // 종결 세션의 재개는 입력이 하는 일 (#30)
+    // 문서·UI 분류까지 갔는데 목업이 없다 — 목업 생성이 죽은 미완 라운드 (#62, G-10).
+    // 마지막 발화가 에이전트(문서)라 아래 규칙으로는 잡히지 않는 유일한 미완 상태다.
+    if (
+      session.status === 'documented' &&
+      session.isUiRequest === true &&
+      !this.deps.store.latestMockup(session.id)
+    ) {
+      return 'mockup';
+    }
     const last = this.deps.store.listUtterances(session.id).at(-1);
     return last?.authorType === 'requester' ? 'judgement' : null;
   }
@@ -921,6 +930,16 @@ export class IntakeRunner<A> {
     if (!session) return null;
     if (pending === 'clarification') {
       await this.startClarification(event);
+      return this.outcomeOf(session.id);
+    }
+    if (pending === 'mockup') {
+      // 문서는 이미 게시됐다 — 죽은 목업 생성만 다시 돌린다 (#62)
+      await this.enterMockupStage(
+        session.id,
+        event,
+        this.versionAxesOf(session),
+        this.documentVersionOf(session.id),
+      );
       return this.outcomeOf(session.id);
     }
     return this.processReply(event, {
