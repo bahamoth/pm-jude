@@ -8,6 +8,7 @@ import {
   REQUESTION_CLASSIFICATION_V0,
   type RequestionClassification,
 } from '../analysis/requestion-classification-v0';
+import { loadConfig } from '../config';
 import { AgentSdkBackend } from '../gateway/agent-sdk-backend';
 import { LlmGateway } from '../gateway/gateway';
 import { setupBackendLog } from '../log/setup';
@@ -29,7 +30,8 @@ const { values, positionals } = parseArgs({
   allowPositionals: true,
 });
 
-setupBackendLog('retro'); // 이후의 모든 콘솔 출력이 data/logs/retro.log에도 남는다 (#55)
+const config = loadConfig();
+setupBackendLog('retro', config.log.file); // 이후의 모든 콘솔 출력이 data/logs/retro.log에도 남는다 (#55)
 
 const command = positionals[0];
 const ARCHIVE_DEFAULT = 'data/retro/archive.json';
@@ -51,7 +53,7 @@ interface ClassificationsFile {
 }
 
 if (command === 'extract') {
-  const apiKey = process.env.LINEAR_API_KEY;
+  const apiKey = config.linear.apiKey;
   if (!apiKey || !values.team) {
     console.error('사용법: LINEAR_API_KEY=... pnpm retro extract --team <KEY> [--months 9]');
     process.exit(1);
@@ -80,10 +82,12 @@ if (command === 'extract') {
     issues: LinearArchiveIssue[];
   };
   const gateway = new LlmGateway({
-    backend: new AgentSdkBackend(values.model ? { model: values.model } : {}),
+    backend: new AgentSdkBackend(
+      (values.model ?? config.llm.model) ? { model: (values.model ?? config.llm.model)! } : {},
+    ),
     registry: createAnalysisRegistry(),
   });
-  const modelVersion = values.model ?? 'agent-sdk-default';
+  const modelVersion = values.model ?? config.llm.model ?? 'agent-sdk-default';
   const items: ClassificationsFile['items'] = [];
   for (const issue of archive.issues) {
     if (issue.comments.length === 0) {

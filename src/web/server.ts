@@ -50,6 +50,10 @@ export interface WebServerDeps {
   maxUtteranceChars?: number;
   /** 노션 페이지 소스 (#57, ADR-0013). 없으면 노션 URL은 텍스트로 남는다. */
   notion?: NotionPageSource;
+  /** 장문 첨부 압축 수치 (#58, ADR-0014). */
+  condense?: { targetChars?: number; budgetChars?: number };
+  /** 게이트웨이 전역 상한 (#59, ADR-0015). */
+  llm?: { timeoutMs?: number; maxConcurrency?: number };
 }
 
 /** 질문별 「모르겠다」 1클릭 버튼(US-5) 렌더링에 필요한 최소 구조 — 내부 슬롯 매핑은 내보내지 않는다. */

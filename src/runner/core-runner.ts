@@ -318,6 +318,8 @@ export interface IntakeRunnerDeps<A> {
    * 페치 산출물이 첨부로 저장되기 때문이다. 없으면 노션 URL은 텍스트로 남는다(현행 동작).
    */
   notion?: NotionPageSource;
+  /** 게이트웨이 전역 상한 주입 (#59, ADR-0015) — 프롬프트 버전 선언이 있으면 그쪽이 우선(#56). */
+  llm?: { timeoutMs?: number; maxConcurrency?: number };
 }
 
 function formatQuestions(output: ClarificationOutput, language: 'ko' | 'en'): string {
@@ -399,6 +401,10 @@ export class IntakeRunner<A> {
       backend: deps.backend,
       registry: deps.registry,
       ...(deps.usageLogger ? { usageLogger: deps.usageLogger } : {}),
+      ...(deps.llm?.timeoutMs !== undefined ? { timeoutMs: deps.llm.timeoutMs } : {}),
+      ...(deps.llm?.maxConcurrency !== undefined
+        ? { maxConcurrency: deps.llm.maxConcurrency }
+        : {}),
     });
     this.teamLanguage = deps.teamLanguage ?? 'ko';
     this.maxRounds = deps.maxRounds ?? 3;

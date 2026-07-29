@@ -1,0 +1,36 @@
+{
+  "web": { "port": 8787 },
+  "db": {
+    "path": "./data/pm-jude.db",
+    "fakePath": "./data/pm-jude-fake.db"
+  },
+  "attachments": {
+    "path": "./data/attachments",
+    "maxBytesPerFile": 20971520,
+    "maxPerSession": 10,
+    "maxSessionTextChars": 200000
+  },
+  "llm": {
+    "model": null,
+    "fakeBackend": false,
+    "timeoutMs": 120000,
+    "maxConcurrency": 2
+  },
+  "intake": {
+    "teamLanguage": "ko",
+    "maxRounds": 3,
+    "maxUtteranceChars": 10000
+  },
+  "mockup": {
+    "maxIterations": 3,
+    "themeDir": null
+  },
+  "condense": {
+    "targetChars": 6000,
+    "budgetChars": 60000
+  },
+  "notion": { "apiKey": null },
+  "slack": { "botToken": null, "appToken": null },
+  "linear": { "apiKey": null },
+  "log": { "file": null }
+}

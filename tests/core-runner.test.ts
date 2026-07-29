@@ -192,6 +192,7 @@ function makeRunner(
     maxUtteranceChars?: number;
     condense?: { targetChars?: number; budgetChars?: number };
     notion?: NotionPageSource;
+    llm?: { timeoutMs?: number; maxConcurrency?: number };
   },
 ) {
   store = SessionStore.open(':memory:');
@@ -210,6 +211,7 @@ function makeRunner(
       : {}),
     ...(options?.condense ? { condense: options.condense } : {}),
     ...(options?.notion ? { notion: options.notion } : {}),
+    ...(options?.llm ? { llm: options.llm } : {}),
     ...(options?.attachments
       ? {
           attachmentStore: options.attachments.store,
@@ -1312,5 +1314,28 @@ describe('코어 러너 — 노션 커넥터 배선 (#57, ADR-0013)', () => {
     expect(row?.extractionStatus).toBe('failed');
     expect(row?.extractionError).toContain('공유');
     expect(port.posted.length).toBeGreaterThanOrEqual(2); // 접수 확인 + 질문 — 라운드 생존
+  });
+});
+
+describe('코어 러너 — 게이트웨이 상한 주입 (#59, ADR-0015)', () => {
+  it('deps.llm의 타임아웃 상한이 게이트웨이에 닿는다 — 설정으로 조정 가능한 폭주 방지', async () => {
+    const store2 = SessionStore.open(':memory:');
+    try {
+      const port = new FakePort();
+      const backend: LlmBackend = { run: () => new Promise(() => {}) }; // 영원히 무응답
+      const runner = new IntakeRunner<string>({
+        store: store2,
+        backend,
+        registry: createDefaultRegistry(),
+        modelVersion: 'claude-sonnet-5',
+        port,
+        llm: { timeoutMs: 25 },
+      });
+
+      // 라운드 백그라운드가 게이트웨이 타임아웃으로 죽는다 — 25ms 상한이 적용된 증거
+      await expect(runner.handleIntake(intake)).rejects.toThrow(/25ms/);
+    } finally {
+      store2.close();
+    }
   });
 });
