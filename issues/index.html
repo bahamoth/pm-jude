@@ -1545,6 +1545,22 @@
         "body": "구현 완료 — PR #40 (feat/54-mockup-loop). 코어 루프(UI 분류·목업 생성·어노테이션 반복·테마 선정·역주입) + 웹 어댑터(CSP sandbox 서빙·선정 API) + web-ui 뷰어 + trace 확장 + PRD v1.7 개정. /code-review 2축 리뷰 반영(스펙 US-9 미리보기·확정 분리, 테마 리셋 안내, 페르소나 cheer 제거, 중복 추출). 루트 206 + web-ui 32 테스트 그린. 머지 후 이 이슈를 종결한다."
       }
     ]
+  },
+  {
+    "id": 55,
+    "title": "백엔드 로그 파일화 — 롤링 로테이트 + 에이전트 문서화",
+    "state": "open",
+    "labels": [
+      "ready-for-agent"
+    ],
+    "type": "task",
+    "assignee": "claude",
+    "parent": null,
+    "blockedBy": [],
+    "created": "2026-07-29",
+    "updated": "2026-07-29",
+    "body": "## Problem Statement\n\n백엔드 로그([usage] 사용량, [web] 라운드 실패 등)가 콘솔에만 흐르고 사라진다. LLM 에이전트가 타임아웃 같은 런타임 실패를 조사하려면 운영자가 콘솔 출력을 복사해 붙여줘야 한다 — 에이전트가 스스로 읽을 수 있는 영속 로그가 없다.\n\n## Solution\n\n콘솔 출력을 유지하면서 같은 내용을 롤링 로테이트 파일에 병행 기록한다(tee). 엔트리포인트별 파일(`data/logs/web.log`, `slack.log`, `intake.log`, `retro.log`)로 프로세스 간 로테이션 경합을 피하고, 기본 경로·정책을 AGENTS.md에 기술해 에이전트가 세션 시작 시점부터 로그 위치를 안다.\n\n## Implementation Decisions\n\n- 신규 `src/log/` 모듈: 롤링 파일 sink(`maxBytes` 초과 시 `web.log → web.log.1 → …` 시프트, `maxFiles` 초과분 삭제, 부모 디렉터리 자동 생성. 기본 5MB × 5개).\n- 콘솔 티: `console.log/warn/error`를 감싸 기존 stdout/stderr 출력을 그대로 두고 ISO 타임스탬프 라인을 sink에 추가 기록. 운영자가 보는 콘솔 출력은 변하지 않는다.\n- 배선: 백엔드 CLI 엔트리포인트 4곳(web·slack·intake·retro) 시작부 1줄. `PMJUDE_LOG_FILE`로 경로 오버라이드.\n- `data/`는 gitignore 대상 — 로그가 리포에 들어가지 않는다.\n- AGENTS.md에 Backend logs 섹션(영어) 추가.\n\n## Testing Decisions\n\n- 시임 2곳 확정(운영자 확인 2026-07-29): (1) 롤링 sink의 write/로테이션 동작 — 임시 디렉터리 파일시스템 검증, (2) 콘솔 티의 원본 출력 유지 + sink 기록 동작. 엔트리포인트 배선은 얇은 코드로 두고 단위 테스트 제외.\n\n## Out of Scope\n\n- 구조화(JSONL) 로그 포맷, 로그 레벨 체계, 외부 로그 수집기 연동.\n- web-ui(Next.js) 쪽 로그 — 백엔드 프로세스만 대상.\n- 게이트웨이 120s 타임아웃 상한 자체의 조정(별도 결정).",
+    "comments": []
   }
 ]
 </script>
