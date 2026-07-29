@@ -2,7 +2,7 @@ import type { LlmBackend } from '../gateway/backend';
 import { LlmGateway, type UsageLogger } from '../gateway/gateway';
 import {
   BACK_INJECTION_V0,
-  CLARIFICATION_V2,
+  CLARIFICATION_V3,
   COMPLETENESS_V1,
   CONDENSATION_V1,
   MOCKUP_V0,
@@ -46,7 +46,7 @@ export const TEMP_REQUIRED_SLOTS = [
 
 /** 카탈로그의 프롬프트 버전과 임시 임계치·슬롯 스키마를 DB 버전 레지스트리에 아이덤포턴트하게 동기화한다. */
 export function ensureVersionAxes(store: SessionStore, registry: PromptRegistry) {
-  const clarification = registry.get(CLARIFICATION_V2);
+  const clarification = registry.get(CLARIFICATION_V3);
   const promptVersionId =
     store.findVersionId('prompt', clarification.name, clarification.semver) ??
     store.registerPromptVersion({
@@ -1095,6 +1095,8 @@ export class IntakeRunner<A> {
         llmScore: verdict.llmScore,
         ruleFailures: verdict.rule.failures,
         llmUnfilledSlotKeys: verdict.llmUnfilledSlotKeys,
+        // 심화 질문의 재료이자 판독 근거 — 버려지면 무엇이 왜 남았는지 사후에 알 수 없다 (#61)
+        remainingAmbiguities: completeness.output.remainingAmbiguities,
       },
       modelVersion: this.deps.modelVersion,
       ...versionAxes,
@@ -1107,11 +1109,16 @@ export class IntakeRunner<A> {
     if (options.correction) {
       // 슬롯 정정의 되물음 (#30, §6 계약) — 왕복 상한에 산입하지 않고, 완성된 문서를
       // 보류로 파괴하지 않는다. 남은 공백(정정 슬롯)을 겨냥한 라운드만 연다.
-      await this.runClarificationRound(session.id, event, language, { countRound: false });
+      await this.runClarificationRound(session.id, event, language, {
+        countRound: false,
+        judgement: completeness.output,
+      });
       return this.outcomeOf(session.id);
     }
     if (session.roundCount < this.roundBudgetOf(session.id)) {
-      await this.runClarificationRound(session.id, event, language);
+      await this.runClarificationRound(session.id, event, language, {
+        judgement: completeness.output,
+      });
       return this.outcomeOf(session.id);
     }
     // 상한 도달 — 남은 미충족 슬롯의 승격 가능 판정이 먼저다 (F2c ①②, G-9).
@@ -1349,8 +1356,9 @@ export class IntakeRunner<A> {
     sessionId: string,
     event: IntakeEvent<A>,
     language: 'ko' | 'en',
-    options: { countRound: boolean } = { countRound: true },
+    options: { countRound?: boolean; judgement?: CompletenessV1Output } = {},
   ): Promise<void> {
+    const countRound = options.countRound ?? true; // 정정 되물음만 상한 미산입 (#30, §6 계약)
     const { store } = this.deps;
     const session = store.getSession(sessionId);
     if (!session) throw new Error(`세션 조회 실패: ${sessionId}`);
@@ -1360,15 +1368,31 @@ export class IntakeRunner<A> {
     const stateBySlot = new Map(
       store.listSlotStates(sessionId).map((slot) => [slot.slotKey, slot.state]),
     );
-    const result = await this.gateway.complete<ClarificationOutput>(CLARIFICATION_V2, {
+    const context = this.buildConversation(sessionId);
+    const result = await this.gateway.complete<ClarificationOutput>(CLARIFICATION_V3, {
       request,
       requesterLanguage: language,
+      // 슬롯은 3상태 그대로 간다 (#61) — 승격을 unfilled로 뭉개면 요청자가 「모르겠다」고
+      // 답한 항목을 다시 묻게 된다
       requiredSlots: TEMP_REQUIRED_SLOTS.map((slot) => ({
         ...slot,
-        state: stateBySlot.get(slot.key) === 'filled' ? 'filled' : 'unfilled',
+        state: stateBySlot.get(slot.key) ?? 'unfilled',
       })),
+      // 무엇을 이미 물었고 무엇을 답받았는가 — 없으면 매 라운드가 첫 라운드가 된다 (#61)
+      conversation: context.conversation,
+      // 심화의 재료: 직전 판정이 각 슬롯을 그렇게 본 근거와 남은 모호성. 첫 라운드는 null.
+      judgement: options.judgement
+        ? {
+            slots: options.judgement.slots.map(({ slotKey, verdict, rationale }) => ({
+              slotKey,
+              verdict,
+              rationale,
+            })),
+            remainingAmbiguities: options.judgement.remainingAmbiguities,
+          }
+        : null,
       // 자료를 함께 준다 — 이미 답이 있는 것을 되물으면 첨부가 왕복을 늘리는 셈이 된다
-      attachments: this.buildConversation(sessionId).attachments,
+      attachments: context.attachments,
     });
 
     for (const question of result.output.questions) {
@@ -1397,12 +1421,12 @@ export class IntakeRunner<A> {
       sessionId,
       type: 'clarification_round',
       payload: {
-        round: options.countRound ? session.roundCount + 1 : session.roundCount,
+        round: countRound ? session.roundCount + 1 : session.roundCount,
         questionCount: result.output.questions.length,
         // 질문 발화의 순번 — 이 라운드가 이미 답을 받았는지 판별하는 기준점 (G-10 라운드 정합)
         utteranceSeq: posted.seq,
         // 정정 되물음은 상한 미산입 (#30) — 관측을 위해 표식만 남긴다
-        ...(options.countRound ? {} : { correction: true }),
+        ...(countRound ? {} : { correction: true }),
         // 질문 구조를 신호에 영속 — 세션 재개 시 어댑터가 질문별 UI를 복원한다 (F11 관측 겸용)
         questions: result.output.questions,
       },
@@ -1411,7 +1435,7 @@ export class IntakeRunner<A> {
     });
     store.updateSessionState(sessionId, {
       status: 'clarifying',
-      ...(options.countRound ? { roundCount: session.roundCount + 1 } : {}),
+      ...(countRound ? { roundCount: session.roundCount + 1 } : {}),
     });
   }
 
