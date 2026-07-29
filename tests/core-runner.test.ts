@@ -1147,7 +1147,9 @@ describe('코어 러너 — 발화 길이 상한 (#58, ADR-0014)', () => {
 
 describe('코어 러너 — 장문 첨부 압축 (#58, ADR-0014)', () => {
   const condensationOf = (text: string) => JSON.stringify({ condensed: text });
-  const longText = '대상 사용자: 영업팀 매니저. 월별 매출 추이와 팀별 비교가 필요하다. '.repeat(10).trim();
+  const longText = '대상 사용자: 영업팀 매니저. 월별 매출 추이와 팀별 비교가 필요하다. '
+    .repeat(10)
+    .trim();
 
   it('생성 예산 초과 세션은 장문 첨부가 압축되고 — 판정은 전문, requirements는 표시된 압축본을 받는다', async () => {
     const { runner, backend, store, stage } = makeAttachmentRunner(
@@ -1174,10 +1176,14 @@ describe('코어 러너 — 장문 첨부 압축 (#58, ADR-0014)', () => {
     // 판정 호출(명확화·완결성)은 원문 전문을 유지한다 (ADR-0014 결정 1)
     const clarifyInput = backend.requests[1]?.input as { attachments: Array<{ text: string }> };
     expect(clarifyInput.attachments[0]?.text).toBe(longText);
-    const completenessInput = backend.requests[2]?.input as { attachments: Array<{ text: string }> };
+    const completenessInput = backend.requests[2]?.input as {
+      attachments: Array<{ text: string }>;
+    };
     expect(completenessInput.attachments[0]?.text).toBe(longText);
     // 생성 호출(requirements)은 압축본을 압축 표시와 함께 받는다 (ADR-0014 결정 2)
-    const requirementsInput = backend.requests[3]?.input as { attachments: Array<{ text: string }> };
+    const requirementsInput = backend.requests[3]?.input as {
+      attachments: Array<{ text: string }>;
+    };
     expect(requirementsInput.attachments[0]?.text).toContain('압축된 PRD 핵심');
     expect(requirementsInput.attachments[0]?.text).toContain('압축본');
     expect(requirementsInput.attachments[0]?.text).not.toContain(longText);
@@ -1205,7 +1211,9 @@ describe('코어 러너 — 장문 첨부 압축 (#58, ADR-0014)', () => {
     });
 
     expect(store.listAttachments(sessionId)[0]?.condensedText).toBeNull();
-    const requirementsInput = backend.requests[2]?.input as { attachments: Array<{ text: string }> };
+    const requirementsInput = backend.requests[2]?.input as {
+      attachments: Array<{ text: string }>;
+    };
     expect(requirementsInput.attachments[0]?.text).toBe(longText);
   });
 
@@ -1244,10 +1252,12 @@ describe('코어 러너 — 노션 커넥터 배선 (#57, ADR-0013)', () => {
       title: 'Live Titles PRD',
       markdown: '# PRD\n대상 사용자: 라이브 운영팀',
     });
-    const { runner, backend, store, stage: _stage } = makeAttachmentRunner(
-      [clarificationResponse],
-      { notion },
-    );
+    const {
+      runner,
+      backend,
+      store,
+      stage: _stage,
+    } = makeAttachmentRunner([clarificationResponse], { notion });
 
     const { sessionId } = await runner.handleIntake({
       ...intake,
@@ -1275,10 +1285,13 @@ describe('코어 러너 — 노션 커넥터 배선 (#57, ADR-0013)', () => {
 
   it('같은 페이지 링크는 라운드가 거듭돼도 다시 페치되지 않는다', async () => {
     const notion = new FakeNotionSource({ status: 'ok', title: 'PRD', markdown: '# 본문' });
-    const { runner } = makeAttachmentRunner([clarificationResponse, unrefinedCompletenessResponse, clarificationResponse], {
-      notion,
-      maxRounds: 3,
-    });
+    const { runner } = makeAttachmentRunner(
+      [clarificationResponse, unrefinedCompletenessResponse, clarificationResponse],
+      {
+        notion,
+        maxRounds: 3,
+      },
+    );
 
     await runner.handleIntake({ ...intake, text: `기능 요청 ${pageUrl}` });
     await runner.handleReply({ ...intake, text: `다시 봐 주세요 ${pageUrl}` });

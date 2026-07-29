@@ -629,7 +629,9 @@ export class IntakeRunner<A> {
       return parsed.kind === 'page' ? `page:${parsed.pageId}` : `url:${url}`;
     };
     const existing = store.listAttachments(sessionId);
-    const seen = new Set(existing.filter((row) => row.sourceUrl).map((row) => keyFor(row.sourceUrl!)));
+    const seen = new Set(
+      existing.filter((row) => row.sourceUrl).map((row) => keyFor(row.sourceUrl!)),
+    );
     let fetched = existing.filter((row) => row.sourceUrl != null).length;
 
     const record = (input: {
@@ -734,7 +736,9 @@ export class IntakeRunner<A> {
     if (!session) return;
 
     const candidates = rows
-      .filter((row) => !row.condensedText && (row.extractedText?.length ?? 0) > this.condense.targetChars)
+      .filter(
+        (row) => !row.condensedText && (row.extractedText?.length ?? 0) > this.condense.targetChars,
+      )
       .sort((a, b) => (b.extractedText?.length ?? 0) - (a.extractedText?.length ?? 0));
     for (const row of candidates) {
       if (projected <= this.condense.budgetChars) break;

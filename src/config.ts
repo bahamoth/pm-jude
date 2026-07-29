@@ -16,7 +16,10 @@ import { z } from 'zod';
 
 const configSchema = z
   .object({
-    web: z.object({ port: z.number().int().positive().default(8787) }).strict().prefault({}),
+    web: z
+      .object({ port: z.number().int().positive().default(8787) })
+      .strict()
+      .prefault({}),
     db: z
       .object({
         path: z.string().default('./data/pm-jude.db'),
@@ -28,7 +31,11 @@ const configSchema = z
     attachments: z
       .object({
         path: z.string().default('./data/attachments'),
-        maxBytesPerFile: z.number().int().positive().default(20 * 1024 * 1024),
+        maxBytesPerFile: z
+          .number()
+          .int()
+          .positive()
+          .default(20 * 1024 * 1024),
         maxPerSession: z.number().int().positive().default(10),
         maxSessionTextChars: z.number().int().positive().default(200_000),
       })
@@ -67,7 +74,10 @@ const configSchema = z
       })
       .strict()
       .prefault({}),
-    notion: z.object({ apiKey: z.string().nullable().default(null) }).strict().prefault({}),
+    notion: z
+      .object({ apiKey: z.string().nullable().default(null) })
+      .strict()
+      .prefault({}),
     slack: z
       .object({
         botToken: z.string().nullable().default(null),
@@ -75,7 +85,10 @@ const configSchema = z
       })
       .strict()
       .prefault({}),
-    linear: z.object({ apiKey: z.string().nullable().default(null) }).strict().prefault({}),
+    linear: z
+      .object({ apiKey: z.string().nullable().default(null) })
+      .strict()
+      .prefault({}),
     log: z
       .object({
         /** null이면 엔트리포인트별 기본 경로 (data/logs/<name>.log — #55). */

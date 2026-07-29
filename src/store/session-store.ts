@@ -286,11 +286,7 @@ export class SessionStore {
         createdAt: now(),
       })
       .run();
-    const row = this.db
-      .select()
-      .from(schema.attachment)
-      .where(eq(schema.attachment.id, id))
-      .get();
+    const row = this.db.select().from(schema.attachment).where(eq(schema.attachment.id, id)).get();
     if (!row) throw new Error(`첨부 기록 직후 조회 실패: ${id}`);
     return row;
   }
