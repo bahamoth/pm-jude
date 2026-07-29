@@ -122,6 +122,8 @@ export const requirementsPromptV2: PromptVersion<RequirementsOutput> = {
   body,
   outputSchema: requirementsOutputSchema,
   regressionPassed: false, // F12 — 골든셋 회귀 통과 전까지 false
-  timeoutMs: 600_000, // v1 실측 계승 (#60) — medium에서 138s, 여유 포함
+  // 실측 궤적(#64): 문서가 정밀해지며 생성 시간이 늘었다 — v3 279s → v4 430s → v5 519s.
+  // 600s는 여유가 15%뿐이라 상향한다. 입력 크기가 아니라 출력 정밀도가 시간을 만든다.
+  timeoutMs: 900_000,
   effort: 'medium', // A안 — high 복귀(B안)는 v2 재평가 후 판단 (#64)
 };
