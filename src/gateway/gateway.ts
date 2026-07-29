@@ -5,7 +5,7 @@ import type { PromptRegistry, PromptVersion } from '../prompts/registry';
 export interface UsageLogEntry {
   promptRef: string;
   attempt: number;
-  outcome: 'ok' | 'invalid_output' | 'timeout';
+  outcome: 'ok' | 'invalid_output' | 'timeout' | 'blocked';
   usage?: BackendUsage;
   durationMs: number;
 }
@@ -36,6 +36,15 @@ export class InvalidStructuredOutputError extends Error {}
 
 /** 백엔드 호출이 타임아웃 상한을 초과했다. */
 export class GatewayTimeoutError extends Error {}
+
+/**
+ * 백엔드가 응답 대신 차단 안내를 돌려줬다 (#65) — 사용량 한도, 정책 거부 등.
+ *
+ * 프롬프트·스키마와 무관하므로 **재시도하지 않는다**. 이 구분이 없으면 한도 안내가
+ * JSON 파싱에 실패해 invalid_output으로 로깅되고, 로그를 읽는 쪽은 프롬프트 결함으로
+ * 오진한다 — 실제로 그렇게 오진한 적이 있다(2026-07-29).
+ */
+export class BackendBlockedError extends Error {}
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_MAX_CONCURRENCY = 2;
@@ -78,6 +87,9 @@ export class LlmGateway {
         } catch (error) {
           if (error instanceof GatewayTimeoutError) {
             this.log({ promptRef, attempt, outcome: 'timeout', durationMs: Date.now() - started });
+          } else if (error instanceof BackendBlockedError) {
+            // 재시도하지 않는다 — 한도는 다시 물어도 같은 답이고, 로그가 프롬프트 결함으로 읽히면 안 된다
+            this.log({ promptRef, attempt, outcome: 'blocked', durationMs: Date.now() - started });
           }
           throw error;
         }

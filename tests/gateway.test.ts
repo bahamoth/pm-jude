@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
+  BackendBlockedError,
   GatewayTimeoutError,
   InvalidStructuredOutputError,
   LlmGateway,
@@ -246,5 +247,32 @@ describe('LLM 게이트웨이 complete()', () => {
     await expect(gateway.complete('clarification@0.1.0', {})).rejects.toThrow(GatewayTimeoutError);
     expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({ attempt: 1, outcome: 'timeout' });
+  });
+});
+
+describe('백엔드 차단 응답 (#65)', () => {
+  it('차단 오류는 재시도 없이 즉시 전파된다 — 한도는 다시 물어도 같은 답이다', async () => {
+    const backend = new FakeBackend();
+    backend.enqueue(() => Promise.reject(new BackendBlockedError('사용량 한도 도달')));
+    backend.enqueueText('{"answer":"이건 호출되면 안 된다"}');
+    const gateway = new LlmGateway({ backend, registry: makeRegistry() });
+
+    await expect(gateway.complete('clarification@0.1.0', {})).rejects.toThrow(BackendBlockedError);
+    expect(backend.requests).toHaveLength(1); // 재시도 없음
+  });
+
+  it('차단은 invalid_output이 아니라 blocked로 로깅된다 — 프롬프트 결함으로 오진되지 않게', async () => {
+    const backend = new FakeBackend();
+    backend.enqueue(() => Promise.reject(new BackendBlockedError('사용량 한도 도달')));
+    const entries: UsageLogEntry[] = [];
+    const gateway = new LlmGateway({
+      backend,
+      registry: makeRegistry(),
+      usageLogger: { log: (entry) => entries.push(entry) },
+    });
+
+    await expect(gateway.complete('clarification@0.1.0', {})).rejects.toThrow(BackendBlockedError);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ attempt: 1, outcome: 'blocked' });
   });
 });
