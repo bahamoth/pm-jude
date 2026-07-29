@@ -1441,3 +1441,98 @@ describe('코어 러너 — 생성 뷰의 대화 예산 (#60, ADR-0014 확장)',
     expect(requirementsInput.clarifications[0]?.answer).toBe(longAnswer);
   });
 });
+
+describe('코어 러너 — 명확화 라운드 간 심화 (#61, F2b)', () => {
+  /** 1건 승격·1건 미충족 — 미정제라 다음 라운드가 열린다. */
+  const partiallyPromotedResponse = JSON.stringify({
+    slots: [
+      slot('target-user', 'filled', '「영업팀 매니저」라고 확답'),
+      slot('purpose', 'unfilled', '어떤 문제를 푸는지 아직 답이 없다'),
+      slot('data-source', 'promoted', '요청자가 「모르겠어요 — 개발팀이 정해 주세요」를 택함'),
+    ],
+    remainingAmbiguities: ['매출을 어느 기간 단위로 보는지가 갈린다'],
+    rubric: { score: 55, rationale: '핵심 목적이 비어 있다' },
+  } satisfies CompletenessV1Output);
+
+  it('다음 라운드 질문 생성이 대화 이력과 직전 판정 근거를 받는다 — 같은 질문을 되풀이하지 않게', async () => {
+    const { runner, backend } = makeRunner([
+      clarificationResponse,
+      partiallyPromotedResponse,
+      clarificationResponse,
+    ]);
+    await runner.handleIntake(intake);
+    await runner.handleReply({ ...intake, text: '영업팀 매니저요' });
+
+    const second = backend.requests[2]?.input as {
+      conversation: Array<{ question: string; answer: string }>;
+      judgement: {
+        remainingAmbiguities: string[];
+        slots: Array<{ slotKey: string; rationale: string }>;
+      };
+    };
+    // 이미 무엇을 물었고 무엇을 답했는지 — 없으면 모델은 매 라운드를 1라운드처럼 시작한다
+    expect(second.conversation).toEqual([expect.objectContaining({ answer: '영업팀 매니저요' })]);
+    expect(second.conversation[0]?.question).toContain('이 대시보드는 주로 누가 보게 되나요?');
+    // 심화의 재료 — 판정이 남긴 잔여 모호성과 슬롯별 근거
+    expect(second.judgement.remainingAmbiguities).toEqual([
+      '매출을 어느 기간 단위로 보는지가 갈린다',
+    ]);
+    expect(second.judgement.slots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          slotKey: 'purpose',
+          rationale: '어떤 문제를 푸는지 아직 답이 없다',
+        }),
+      ]),
+    );
+  });
+
+  it('승격된 슬롯은 promoted로 전달된다 — 「모르겠다」고 답한 것을 다시 묻지 않게', async () => {
+    const { runner, backend } = makeRunner([
+      clarificationResponse,
+      partiallyPromotedResponse,
+      clarificationResponse,
+    ]);
+    await runner.handleIntake(intake);
+    await runner.handleReply({ ...intake, text: '영업팀 매니저요' });
+
+    const second = backend.requests[2]?.input as {
+      requiredSlots: Array<{ key: string; state: string }>;
+    };
+    const byKey = new Map(second.requiredSlots.map((s) => [s.key, s.state]));
+    expect(byKey.get('data-source')).toBe('promoted'); // unfilled로 뭉개지면 재질문을 부른다
+    expect(byKey.get('target-user')).toBe('filled');
+    expect(byKey.get('purpose')).toBe('unfilled');
+  });
+
+  it('첫 라운드는 판정 이력이 없으므로 대화도 판정 근거도 비어 있다', async () => {
+    const { runner, backend } = makeRunner([clarificationResponse]);
+
+    await runner.handleIntake(intake);
+
+    const first = backend.requests[0]?.input as {
+      conversation: unknown[];
+      judgement: unknown;
+    };
+    expect(first.conversation).toEqual([]);
+    expect(first.judgement).toBeNull();
+  });
+
+  it('잔여 모호성이 판정 신호에 남는다 — 버려지면 판독도 심화도 불가능하다', async () => {
+    const { runner, store } = makeRunner([
+      clarificationResponse,
+      partiallyPromotedResponse,
+      clarificationResponse,
+    ]);
+    await runner.handleIntake(intake);
+    await runner.handleReply({ ...intake, text: '영업팀 매니저요' });
+
+    const session = store.findSessionByThreadKey(intake.threadKey)!;
+    const check = store
+      .listSignals(session.id)
+      .find((signal) => signal.type === 'completeness_check');
+    expect(check?.payload).toMatchObject({
+      remainingAmbiguities: ['매출을 어느 기간 단위로 보는지가 갈린다'],
+    });
+  });
+});

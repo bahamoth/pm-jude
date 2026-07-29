@@ -6,6 +6,7 @@ import { condensationPromptV1 } from './condensation-v1';
 import { clarificationPromptV0 } from './clarification-v0';
 import { clarificationPromptV1 } from './clarification-v1';
 import { clarificationPromptV2 } from './clarification-v2';
+import { clarificationPromptV3 } from './clarification-v3';
 import { completenessPromptV0 } from './completeness-v0';
 import { completenessPromptV1 } from './completeness-v1';
 import { mockupPromptV0 } from './mockup-v0';
@@ -19,8 +20,9 @@ import { uiClassificationPromptV0 } from './ui-classification-v0';
 export const CLARIFICATION_V0 = 'clarification@0.1.0';
 /** Jude의 목소리를 얹은 판 (ADR-0010). */
 export const CLARIFICATION_V1 = 'clarification@0.2.0';
-/** 현행 — 첨부 자료를 읽고 이미 답이 있는 것을 묻지 않는 판 (F1-Attach, ADR-0011). */
 export const CLARIFICATION_V2 = 'clarification@0.3.0';
+/** 현행 — 대화 이력·판정 근거를 받아 라운드마다 깊어지는 판 (#61, F2b). */
+export const CLARIFICATION_V3 = 'clarification@0.4.0';
 export const COMPLETENESS_V0 = 'completeness@0.1.0';
 /** 현행 — 슬롯 판정에 출처(대화/첨부)가 붙는 판 (F2c, ADR-0011 결정 8). */
 export const COMPLETENESS_V1 = 'completeness@0.2.0';
@@ -50,6 +52,7 @@ export function createDefaultRegistry(): PromptRegistry {
   registry.register(clarificationPromptV0);
   registry.register(clarificationPromptV1);
   registry.register(clarificationPromptV2);
+  registry.register(clarificationPromptV3);
   registry.register(completenessPromptV0);
   registry.register(completenessPromptV1);
   registry.register(promotionPromptV0);

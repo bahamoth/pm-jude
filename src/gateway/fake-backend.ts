@@ -2,7 +2,7 @@ import type { PromptRegistry } from '../prompts/registry';
 import {
   ATTACHMENT_EXTRACTION_V0,
   BACK_INJECTION_V0,
-  CLARIFICATION_V2,
+  CLARIFICATION_V3,
   COMPLETENESS_V1,
   MOCKUP_V0,
   PROMOTION_V0,
@@ -19,7 +19,7 @@ import type { BackendRequest, BackendResponse, LlmBackend } from './backend';
  * 시나리오: 1라운드 답변까지는 미정제(다음 라운드 유도), 2번째 답변부터 정제 완료.
  */
 export function createFakeBackend(registry: PromptRegistry): LlmBackend {
-  const clarificationBody = registry.get(CLARIFICATION_V2).body;
+  const clarificationBody = registry.get(CLARIFICATION_V3).body;
   const completenessBody = registry.get(COMPLETENESS_V1).body;
   const promotionBody = registry.get(PROMOTION_V0).body;
   const requirementsBody = registry.get(REQUIREMENTS_V2).body;
