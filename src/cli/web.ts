@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { NotionConnector } from '../connect/notion';
 import { createDefaultExtractorRegistry } from '../extract/registry';
 import { AgentSdkBackend } from '../gateway/agent-sdk-backend';
 import { createFakeBackend } from '../gateway/fake-backend';
@@ -57,6 +58,10 @@ const server = createWebServer({
   attachmentStore: new AttachmentStore(attachmentsRoot),
   // 추출기는 러너의 게이트웨이를 받는다 — 이미지 추출도 같은 폭주 상한 아래 놓인다
   createExtractors: createDefaultExtractorRegistry,
+  // 노션 커넥터 (#57, ADR-0013) — 토큰 없으면 꺼짐, URL은 텍스트로 남는다
+  ...(process.env.NOTION_API_KEY
+    ? { notion: new NotionConnector({ token: process.env.NOTION_API_KEY }) }
+    : {}),
   themes,
   ...(process.env.PMJUDE_MAX_MOCKUP_ITERATIONS
     ? { maxMockupIterations: Number(process.env.PMJUDE_MAX_MOCKUP_ITERATIONS) }

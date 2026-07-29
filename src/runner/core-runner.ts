@@ -16,6 +16,7 @@ import {
   judgeCompleteness,
   runRuleLayer,
 } from '../prompts/completeness-v0';
+import { detectNotionUrls, parseNotionUrl, type NotionPageSource } from '../connect/notion';
 import type { CompletenessV1Output } from '../prompts/completeness-v1';
 import type { CondensationOutput } from '../prompts/condensation-v0';
 import type { PromotionOutput } from '../prompts/promotion-v0';
@@ -172,6 +173,9 @@ export class UtteranceRejectedError extends Error {}
 /** 발화 길이 상한 기본값 — 결정 대기 수치 (ADR-0014 결정 7, PRD §12). */
 export const DEFAULT_MAX_UTTERANCE_CHARS = 10_000;
 
+/** 세션당 노션 페이지 페치 상한 (#57, ADR-0013 결정 3) — 크롤이 라운드를 인질로 잡지 않게. */
+export const MAX_NOTION_PAGES_PER_SESSION = 5;
+
 /**
  * 장문 첨부 압축·생성 조립 예산 기본값 (#58, ADR-0014 결정 7) — 결정 대기 수치 (PRD §12).
  * budgetChars = 세션당 첨부 상한(10) × targetChars — 전 파일이 압축되면 산술적으로 예산 안이다.
@@ -309,6 +313,11 @@ export interface IntakeRunnerDeps<A> {
   maxUtteranceChars?: number;
   /** 장문 첨부 압축 목표·생성 조립 예산 (#58, ADR-0014). 기본 6k/60k자 — 결정 대기 수치. */
   condense?: { targetChars?: number; budgetChars?: number };
+  /**
+   * 노션 페이지 소스 (#57, ADR-0013). attachmentStore와 함께 있어야 동작한다 —
+   * 페치 산출물이 첨부로 저장되기 때문이다. 없으면 노션 URL은 텍스트로 남는다(현행 동작).
+   */
+  notion?: NotionPageSource;
 }
 
 function formatQuestions(output: ClarificationOutput, language: 'ko' | 'en'): string {
@@ -595,6 +604,108 @@ export class IntakeRunner<A> {
   }
 
   /**
+   * 노션 링크 인제스트 (#57, ADR-0013) — 요청자 발화의 노션 URL을 페치해 markdown 첨부로
+   * 붙인다. 라운드 백그라운드의 첫 단계(추출 앞)라 게이트웨이 봉투와 무관하고, 이후는
+   * F1-Attach 규율(추출·예산·근거 참조)이 그대로 적용된다.
+   *
+   * 실패는 결과다(P-U3): 데이터베이스 링크·미공유·페치 오류는 사유를 단 실패 첨부로 남아
+   * 요청자가 본다. 같은 페이지는 라운드가 거듭돼도 다시 페치하지 않는다(source_url 대조).
+   */
+  private async ingestNotionLinks(sessionId: string): Promise<void> {
+    const notion = this.deps.notion;
+    const { store, attachmentStore } = this.deps;
+    if (!notion || !attachmentStore) return;
+    const session = store.getSession(sessionId);
+    if (!session) return;
+
+    const keyFor = (url: string): string => {
+      const parsed = parseNotionUrl(url);
+      return parsed.kind === 'page' ? `page:${parsed.pageId}` : `url:${url}`;
+    };
+    const existing = store.listAttachments(sessionId);
+    const seen = new Set(existing.filter((row) => row.sourceUrl).map((row) => keyFor(row.sourceUrl!)));
+    let fetched = existing.filter((row) => row.sourceUrl != null).length;
+
+    const record = (input: {
+      utteranceId: string;
+      url: string;
+      filename: string;
+      markdown?: string;
+      error?: string;
+    }): void => {
+      const bytes = Buffer.from(input.markdown ?? '', 'utf8');
+      const stored = attachmentStore.put(bytes);
+      const row = store.addFetchedAttachment({
+        sessionId,
+        utteranceId: input.utteranceId,
+        filename: input.filename,
+        mime: 'text/markdown',
+        bytes: bytes.length,
+        sha256: stored.sha256,
+        storageRef: stored.storageRef,
+        sourceUrl: input.url,
+        extraction: input.error ? { status: 'failed', error: input.error } : { status: 'pending' },
+      });
+      store.recordSignal({
+        sessionId,
+        type: 'notion_fetch',
+        payload: { attachmentId: row.id, status: input.error ? 'failed' : 'ok', url: input.url },
+        modelVersion: this.deps.modelVersion,
+        ...this.versionAxesOf(session),
+      });
+    };
+
+    for (const utterance of store.listUtterances(sessionId)) {
+      if (utterance.authorType !== 'requester') continue;
+      for (const url of detectNotionUrls(utterance.originalText)) {
+        const parsed = parseNotionUrl(url);
+        if (parsed.kind === 'invalid') continue; // ID 없는 노션 링크(로그인 화면 등) — 자료 참조가 아니다
+        const key = keyFor(url);
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        if (parsed.kind === 'database') {
+          record({
+            utteranceId: utterance.id,
+            url,
+            filename: 'notion-database.md',
+            error:
+              '노션 데이터베이스 링크다 — 개별 페이지 링크가 필요하다 (페이지를 열고 공유 → 링크 복사)',
+          });
+          continue;
+        }
+        if (fetched >= MAX_NOTION_PAGES_PER_SESSION) {
+          record({
+            utteranceId: utterance.id,
+            url,
+            filename: `notion-${parsed.pageId.slice(0, 8)}.md`,
+            error: `요청 하나에 노션 페이지는 ${String(MAX_NOTION_PAGES_PER_SESSION)}개까지 가져온다`,
+          });
+          continue;
+        }
+        fetched += 1;
+        const result = await notion.fetchPage(parsed.pageId);
+        if (result.status === 'ok') {
+          const safeTitle = result.title.replace(/[\\/:*?"<>|]/g, '-').trim();
+          record({
+            utteranceId: utterance.id,
+            url,
+            filename: `${safeTitle || `notion-${parsed.pageId.slice(0, 8)}`}.md`,
+            markdown: result.markdown,
+          });
+        } else {
+          record({
+            utteranceId: utterance.id,
+            url,
+            filename: `notion-${parsed.pageId.slice(0, 8)}.md`,
+            error: result.error,
+          });
+        }
+      }
+    }
+  }
+
+  /**
    * 장문 첨부 압축 (#58, ADR-0014) — 생성 호출에 실릴 첨부 텍스트 총량이 예산을 넘으면
    * 큰 것부터 압축본을 만든다. 예산 이내의 세션은 아무것도 압축되지 않고(흔한 경우의
    * 충실도 보존), 압축본이 있어도 판정 호출은 계속 원문 전문을 받는다.
@@ -687,6 +798,7 @@ export class IntakeRunner<A> {
     const session = this.deps.store.findSessionByThreadKey(event.threadKey);
     if (!session || (session.status !== 'intake' && session.status !== 'clarifying')) return;
     // 자료를 먼저 읽는다 — 읽지 않은 채 질문을 만들면 자료에 있는 것을 되묻게 된다
+    await this.ingestNotionLinks(session.id);
     await this.extractPendingAttachments(session.id);
     await this.condenseLongAttachments(session.id);
     await this.runClarificationRound(session.id, event, this.sessionLanguageOf(session.id, event));
@@ -827,6 +939,7 @@ export class IntakeRunner<A> {
       this.attachUploads(session.id, utterance.id, event);
     }
     // 판정 전에 자료를 읽는다 — 방금 붙인 것도 이 라운드의 근거가 되어야 한다
+    await this.ingestNotionLinks(session.id);
     await this.extractPendingAttachments(session.id);
     await this.condenseLongAttachments(session.id);
 

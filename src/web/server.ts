@@ -14,6 +14,7 @@ import {
   type ChannelPort,
   type ClarificationRoundPayload,
 } from '../runner/core-runner';
+import type { NotionPageSource } from '../connect/notion';
 import type { ExtractorRegistry } from '../extract/registry';
 import { renderMockupHtml } from '../mockup/render';
 import { ThemeRegistry } from '../mockup/theme-registry';
@@ -47,6 +48,8 @@ export interface WebServerDeps {
   maxMockupIterations?: number;
   /** 요청자 발화 길이 상한 (#58, ADR-0014). 기본은 러너의 10k자. */
   maxUtteranceChars?: number;
+  /** 노션 페이지 소스 (#57, ADR-0013). 없으면 노션 URL은 텍스트로 남는다. */
+  notion?: NotionPageSource;
 }
 
 /** 질문별 「모르겠다」 1클릭 버튼(US-5) 렌더링에 필요한 최소 구조 — 내부 슬롯 매핑은 내보내지 않는다. */
