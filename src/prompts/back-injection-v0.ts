@@ -46,5 +46,5 @@ export const backInjectionPromptV0: PromptVersion<BackInjectionOutput> = {
   body,
   outputSchema: backInjectionOutputSchema,
   regressionPassed: false, // F12 — 골든셋 회귀 통과 전까지 false
-  timeoutMs: 300_000, // requirements vN+1 전체 재생성 — 장문 (#56)
+  timeoutMs: 600_000, // requirements vN+1 전체 재생성 — 같은 문서 계약의 실측 353s에 준함 (#60)
 };

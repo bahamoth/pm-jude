@@ -41,4 +41,5 @@ export const condensationPromptV0: PromptVersion<CondensationOutput> = {
   body,
   outputSchema: condensationOutputSchema,
   regressionPassed: false, // F12 — 골든셋 회귀 통과 전까지 false
+  timeoutMs: 300_000, // 장문 입력을 읽는 호출 — 실측 117s로 기본 120s에 근접 (#60, 세션 49597175)
 };
