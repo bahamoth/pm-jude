@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { createDefaultExtractorRegistry } from '../extract/registry';
 import { AgentSdkBackend } from '../gateway/agent-sdk-backend';
 import { createFakeBackend } from '../gateway/fake-backend';
+import { setupBackendLog } from '../log/setup';
 import { ThemeRegistry } from '../mockup/theme-registry';
 import { createDefaultRegistry } from '../prompts/catalog';
 import { AttachmentStore } from '../store/attachment-store';
@@ -13,6 +14,8 @@ import { createWebServer } from '../web/server';
 //   실행: pnpm web   (기본 http://127.0.0.1:8787 — PMJUDE_WEB_PORT로 변경)
 //   UI 개발·데모: PMJUDE_FAKE_BACKEND=1 pnpm web  (LLM 자격 증명 불필요, 결정론적 시나리오)
 // 간이 식별만 있는 로컬 PoC 서버라 루프백에만 바인딩한다.
+
+setupBackendLog('web'); // 이후의 모든 콘솔 출력이 data/logs/web.log에도 남는다 (#55)
 
 const fake = process.env.PMJUDE_FAKE_BACKEND === '1';
 const dbPath = resolve(
