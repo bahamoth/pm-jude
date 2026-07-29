@@ -112,4 +112,5 @@ export const completenessPromptV1: PromptVersion<CompletenessV1Output> = {
   body,
   outputSchema: completenessV1OutputSchema,
   regressionPassed: false, // F12 — 골든셋 회귀 통과 전까지 false
+  timeoutMs: 300_000, // 슬롯 판정 장문 출력 — 실측 79s로 기본 120s에 근접 (#56)
 };

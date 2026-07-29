@@ -9,6 +9,12 @@ export interface PromptVersion<TOutput = unknown> {
   outputSchema: ZodType<TOutput>;
   /** F12 배포 게이트 플래그. 강제는 Phase 2 발효지만 필드는 지금부터 존재한다. */
   regressionPassed: boolean;
+  /**
+   * 이 버전의 백엔드 호출 상한(ms) — 선언 시 게이트웨이 전역 상한보다 우선한다 (#56).
+   * 장문 생성 프롬프트만 선언한다. 프롬프트 계약(본문·스키마)이 아닌 실행 봉투이므로
+   * 값 조정은 semver 증가 사유가 아니다.
+   */
+  timeoutMs?: number;
 }
 
 export class PromptRegistryError extends Error {}
@@ -39,6 +45,14 @@ export class PromptRegistry {
     if (!SEMVER_PATTERN.test(version.semver)) {
       throw new InvalidPromptVersionError(
         `semver는 major.minor.patch 형식이어야 한다: "${version.semver}"`,
+      );
+    }
+    if (
+      version.timeoutMs !== undefined &&
+      (!Number.isInteger(version.timeoutMs) || version.timeoutMs <= 0)
+    ) {
+      throw new InvalidPromptVersionError(
+        `timeoutMs는 양의 정수여야 한다: ${String(version.timeoutMs)}`,
       );
     }
     const ref = `${version.name}@${version.semver}`;

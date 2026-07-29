@@ -70,4 +70,5 @@ export const requirementsPromptV1: PromptVersion<RequirementsOutput> = {
   body,
   outputSchema: requirementsOutputSchema,
   regressionPassed: false, // F12 — 골든셋 회귀 통과 전까지 false
+  timeoutMs: 300_000, // 장문 문서 생성 — 기본 120s를 실측 초과해 라운드가 죽었다 (#56, 2026-07-29 로그)
 };
