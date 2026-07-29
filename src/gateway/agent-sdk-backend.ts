@@ -76,7 +76,7 @@ export class AgentSdkBackend implements LlmBackend {
       // 진행 로그 — 콘솔 티(#55)를 타고 data/logs/*.log에 남는다. 15초에 1줄로 소음 억제.
       const started = Date.now();
       let textChars = 0;
-      let thinkingChars = 0;
+      let eventCount = 0;
       let lastProgressAt = started;
 
       for await (const message of stream) {
@@ -85,15 +85,16 @@ export class AgentSdkBackend implements LlmBackend {
             type: string;
             delta?: { type?: string; text?: string; thinking?: string };
           };
+          eventCount += 1;
           if (event.type === 'content_block_delta') {
             textChars += event.delta?.text?.length ?? 0;
-            thinkingChars += event.delta?.thinking?.length ?? 0;
           }
           if (Date.now() - lastProgressAt >= 15_000) {
             lastProgressAt = Date.now();
             const seconds = Math.round((Date.now() - started) / 1000);
+            // 추론(thinking)은 스트림에 실리지 않아 셀 수 없다 — 생사 신호는 이벤트 수신 수다
             console.error(
-              `[backend] 생성 진행 ${String(seconds)}s — 본문 ${String(textChars)}자 · 추론 ${String(thinkingChars)}자`,
+              `[backend] 생성 진행 ${String(seconds)}s — 본문 ${String(textChars)}자 · 스트림 이벤트 ${String(eventCount)}건`,
             );
           }
           continue;

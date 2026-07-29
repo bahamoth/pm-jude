@@ -357,3 +357,31 @@ describe('F4 — 디자인 시스템 선정과 역주입', () => {
     expect(port.posted.at(-1)?.text).toContain('requirements 문서 v2');
   });
 });
+
+describe('목업 생성 실패의 재시도 경로 (G-10, #62)', () => {
+  it('문서 게시 후 목업 생성이 죽으면 pendingRound가 mockup이고, 재시도가 목업을 만든다', async () => {
+    const responses = [
+      clarificationResponse,
+      refinedCompletenessResponse,
+      requirementsResponse,
+      uiYesResponse,
+      // 목업 응답 없음 — 생성 단계에서 라운드가 죽는다
+    ];
+    const made = makeRunner(responses);
+    await made.runner.handleIntake(intake);
+    await expect(made.runner.handleReply(answer)).rejects.toThrow();
+
+    const session = made.store.findSessionByThreadKey(intake.threadKey)!;
+    expect(session.status).toBe('documented'); // 문서와 UI 분류는 살아남았다
+    expect(made.store.listMockups(session.id)).toEqual([]);
+    // 미완 라운드로 인정된다 — 마지막 발화가 에이전트(문서)여도 목업이 비어 있으면 미완이다
+    expect(made.runner.pendingRound(intake.threadKey)).toBe('mockup');
+
+    responses.push(mockupResponse('재시도 v1')); // ScriptedBackend는 같은 배열을 소비한다
+    const outcome = await made.runner.retryRound(intake);
+
+    expect(outcome?.status).toBe('mockup');
+    expect(made.store.listMockups(session.id)).toHaveLength(1);
+    expect(made.runner.pendingRound(intake.threadKey)).toBeNull(); // 회복 후 미완 없음
+  });
+});
