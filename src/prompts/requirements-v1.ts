@@ -73,4 +73,5 @@ export const requirementsPromptV1: PromptVersion<RequirementsOutput> = {
   // 실측(#60, 세션 49597175): 압축 반영 입력 9.7k자에서도 353s — 문서 17.7k자에 출력
   // 30.7k토큰, 즉 추론(thinking)이 출력 예산의 태반이다. 300s는 원리적으로 부족했다.
   timeoutMs: 600_000,
+  effort: 'medium', // 구조화 계약 출력 — 기본 high의 추론 편차(353s~600s+)가 실측 원인 (#60)
 };

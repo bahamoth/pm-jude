@@ -170,6 +170,25 @@ describe('LLM 게이트웨이 complete()', () => {
     expect(backend.requests[0]?.signal.aborted).toBe(true);
   });
 
+  it('프롬프트 버전이 선언한 effort가 백엔드 요청에 실린다 (#60)', async () => {
+    const backend = new FakeBackend();
+    backend.enqueueText('{"answer":"완료"}');
+    const registry = makeRegistry();
+    registry.register({
+      name: 'requirements',
+      semver: '0.1.0',
+      body: '요구사항 문서를 생성하라',
+      outputSchema: answerSchema,
+      regressionPassed: false,
+      effort: 'medium',
+    });
+    const gateway = new LlmGateway({ backend, registry });
+
+    await gateway.complete('requirements@0.1.0', {});
+
+    expect(backend.requests[0]?.effort).toBe('medium');
+  });
+
   it('동시 실행 상한을 넘는 호출은 앞 호출이 끝날 때까지 백엔드에 도달하지 않는다', async () => {
     const backend = new FakeBackend();
     let releaseFirst!: (response: BackendResponse) => void;

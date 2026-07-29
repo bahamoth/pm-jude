@@ -66,11 +66,45 @@ export class AgentSdkBackend implements LlmBackend {
           allowedTools: [],
           maxTurns: 1,
           abortController: controller,
+          // 생성 진행을 로그로 볼 수 있게 스트림 이벤트를 켠다 (#60) — 긴 호출의 관측 가능성
+          includePartialMessages: true,
+          ...(request.effort ? { effort: request.effort } : {}),
           ...(this.options.model ? { model: this.options.model } : {}),
         },
       });
 
+      // 진행 로그 — 콘솔 티(#55)를 타고 data/logs/*.log에 남는다. 15초에 1줄로 소음 억제.
+      const started = Date.now();
+      let textChars = 0;
+      let thinkingChars = 0;
+      let lastProgressAt = started;
+
       for await (const message of stream) {
+        if (message.type === 'stream_event') {
+          const event = message.event as {
+            type: string;
+            delta?: { type?: string; text?: string; thinking?: string };
+          };
+          if (event.type === 'content_block_delta') {
+            textChars += event.delta?.text?.length ?? 0;
+            thinkingChars += event.delta?.thinking?.length ?? 0;
+          }
+          if (Date.now() - lastProgressAt >= 15_000) {
+            lastProgressAt = Date.now();
+            const seconds = Math.round((Date.now() - started) / 1000);
+            console.error(
+              `[backend] 생성 진행 ${String(seconds)}s — 본문 ${String(textChars)}자 · 추론 ${String(thinkingChars)}자`,
+            );
+          }
+          continue;
+        }
+        // 조용한 API 재시도가 긴 호출의 숨은 원인이 되지 않게 드러낸다
+        if (message.type === 'system' && message.subtype === 'api_retry') {
+          console.error(
+            `[backend] API 재시도 ${String(message.attempt)}/${String(message.max_retries)} — ${String(message.retry_delay_ms)}ms 대기 (HTTP ${String(message.error_status ?? '?')})`,
+          );
+          continue;
+        }
         if (message.type !== 'result') continue;
         if (message.subtype !== 'success') {
           throw new Error(`Agent SDK 실행 실패: ${message.subtype}`);
