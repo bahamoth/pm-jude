@@ -249,6 +249,52 @@ export class SessionStore {
     });
   }
 
+  /**
+   * 페치 산출물 첨부 (#57, ADR-0013) — 커넥터가 가져온 페이지를 발화에 붙인다.
+   * 업로드 스테이징을 거치지 않는다: 스테이징은 세션 확정 전 업로드를 받아두는 장치이고,
+   * 페치는 세션 안 발화의 URL에서 출발하므로 붙일 곳이 이미 정해져 있다.
+   * 실패한 페치도 행으로 남는다(extraction_status='failed') — 요청자가 사유를 본다(P-U3).
+   */
+  addFetchedAttachment(input: {
+    sessionId: string;
+    utteranceId: string;
+    filename: string;
+    mime: string;
+    bytes: number;
+    sha256: string;
+    storageRef: string;
+    sourceUrl: string;
+    extraction: { status: 'pending' } | { status: 'failed'; error: string };
+  }): typeof schema.attachment.$inferSelect {
+    const id = randomUUID();
+    this.db
+      .insert(schema.attachment)
+      .values({
+        id,
+        sessionId: input.sessionId,
+        utteranceId: input.utteranceId,
+        filename: input.filename,
+        mime: input.mime,
+        bytes: input.bytes,
+        sha256: input.sha256,
+        storageRef: input.storageRef,
+        sourceUrl: input.sourceUrl,
+        extractionStatus: input.extraction.status,
+        ...(input.extraction.status === 'failed'
+          ? { extractionError: input.extraction.error, extractedAt: now() }
+          : {}),
+        createdAt: now(),
+      })
+      .run();
+    const row = this.db
+      .select()
+      .from(schema.attachment)
+      .where(eq(schema.attachment.id, id))
+      .get();
+    if (!row) throw new Error(`첨부 기록 직후 조회 실패: ${id}`);
+    return row;
+  }
+
   listAttachments(sessionId: string): Array<typeof schema.attachment.$inferSelect> {
     return this.db
       .select()

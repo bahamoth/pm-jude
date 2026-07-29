@@ -21,6 +21,7 @@ import {
   type ChannelPort,
   type ClarificationRoundPayload,
 } from '../src/runner/core-runner';
+import type { NotionFetchResult, NotionPageSource } from '../src/connect/notion';
 import { SessionStore } from '../src/store/session-store';
 import {
   nonUiClassificationResponse,
@@ -190,6 +191,7 @@ function makeRunner(
     limits?: Partial<AttachmentLimits>;
     maxUtteranceChars?: number;
     condense?: { targetChars?: number; budgetChars?: number };
+    notion?: NotionPageSource;
   },
 ) {
   store = SessionStore.open(':memory:');
@@ -207,6 +209,7 @@ function makeRunner(
       ? { maxUtteranceChars: options.maxUtteranceChars }
       : {}),
     ...(options?.condense ? { condense: options.condense } : {}),
+    ...(options?.notion ? { notion: options.notion } : {}),
     ...(options?.attachments
       ? {
           attachmentStore: options.attachments.store,
@@ -226,6 +229,7 @@ function makeAttachmentRunner(
     limits?: Partial<AttachmentLimits>;
     extractor?: Extractor;
     condense?: { targetChars?: number; budgetChars?: number };
+    notion?: NotionPageSource;
   },
 ) {
   const blobs = new AttachmentStore(mkdtempSync(join(tmpdir(), 'pm-jude-core-attach-')));
@@ -235,6 +239,7 @@ function makeAttachmentRunner(
     ...(options?.maxRounds !== undefined ? { maxRounds: options.maxRounds } : {}),
     ...(options?.limits ? { limits: options.limits } : {}),
     ...(options?.condense ? { condense: options.condense } : {}),
+    ...(options?.notion ? { notion: options.notion } : {}),
     attachments: { store: blobs, extractors },
   });
   /** 파일을 저장소에 넣고 스테이징까지 마친다 — 어댑터(#49)가 할 일의 최소 재현. */
@@ -1216,5 +1221,96 @@ describe('코어 러너 — 장문 첨부 압축 (#58, ADR-0014)', () => {
     const row = store.listAttachments(sessionId)[0];
     expect(row?.condensedText?.startsWith('x'.repeat(50))).toBe(true);
     expect(row?.condensedText).toContain('잘렸다');
+  });
+});
+
+describe('코어 러너 — 노션 커넥터 배선 (#57, ADR-0013)', () => {
+  class FakeNotionSource implements NotionPageSource {
+    calls: string[] = [];
+    constructor(private readonly result: NotionFetchResult) {}
+    fetchPage(pageId: string): Promise<NotionFetchResult> {
+      this.calls.push(pageId);
+      return Promise.resolve(this.result);
+    }
+  }
+
+  const pageUrl = 'https://app.notion.com/p/prd-39766007e77080c6a0bbc2572c136295?source=copy_link';
+
+  it('발화의 노션 링크가 페치되어 markdown 첨부로 붙고, 추출을 거쳐 명확화 입력에 실린다', async () => {
+    const notion = new FakeNotionSource({
+      status: 'ok',
+      title: 'Live Titles PRD',
+      markdown: '# PRD\n대상 사용자: 라이브 운영팀',
+    });
+    const { runner, backend, store, stage: _stage } = makeAttachmentRunner(
+      [clarificationResponse],
+      { notion },
+    );
+
+    const { sessionId } = await runner.handleIntake({
+      ...intake,
+      text: `Live Title UA 관리 기능. ${pageUrl}`,
+    });
+
+    expect(notion.calls).toEqual(['39766007-e770-80c6-a0bb-c2572c136295']);
+    const row = store.listAttachments(sessionId)[0];
+    expect(row).toMatchObject({
+      filename: 'Live Titles PRD.md',
+      mime: 'text/markdown',
+      sourceUrl: pageUrl,
+      extractionStatus: 'ok',
+      extractedText: '# PRD\n대상 사용자: 라이브 운영팀',
+    });
+    // 페치 산출물이 판정 입력에 첨부로 실린다 — 이후는 F1-Attach 규율 그대로
+    const clarifyInput = backend.requests[0]?.input as {
+      attachments: Array<{ filename: string; text: string }>;
+    };
+    expect(clarifyInput.attachments[0]).toMatchObject({
+      filename: 'Live Titles PRD.md',
+      text: '# PRD\n대상 사용자: 라이브 운영팀',
+    });
+  });
+
+  it('같은 페이지 링크는 라운드가 거듭돼도 다시 페치되지 않는다', async () => {
+    const notion = new FakeNotionSource({ status: 'ok', title: 'PRD', markdown: '# 본문' });
+    const { runner } = makeAttachmentRunner([clarificationResponse, unrefinedCompletenessResponse, clarificationResponse], {
+      notion,
+      maxRounds: 3,
+    });
+
+    await runner.handleIntake({ ...intake, text: `기능 요청 ${pageUrl}` });
+    await runner.handleReply({ ...intake, text: `다시 봐 주세요 ${pageUrl}` });
+
+    expect(notion.calls).toHaveLength(1);
+  });
+
+  it('?v=만 있는 데이터베이스 링크는 사유를 단 실패 첨부로 남는다 — 조용히 무시되지 않는다', async () => {
+    const notion = new FakeNotionSource({ status: 'ok', title: '안 옴', markdown: '안 옴' });
+    const { runner, store } = makeAttachmentRunner([clarificationResponse], { notion });
+    const dbUrl =
+      'https://app.notion.com/p/board-38366007e770801b9e00d3a4483310e7?v=29466007e77080659824000c94fa5643';
+
+    const { sessionId } = await runner.handleIntake({ ...intake, text: `백로그: ${dbUrl}` });
+
+    expect(notion.calls).toHaveLength(0); // 페치 시도 자체가 없다
+    const row = store.listAttachments(sessionId)[0];
+    expect(row?.extractionStatus).toBe('failed');
+    expect(row?.extractionError).toContain('페이지 링크');
+    expect(row?.sourceUrl).toBe(dbUrl);
+  });
+
+  it('페치 실패(미공유 등)는 사유를 단 실패 첨부로 남고 라운드는 계속된다 (P-U3)', async () => {
+    const notion = new FakeNotionSource({
+      status: 'failed',
+      error: '노션 페이지를 찾을 수 없다 — 통합을 공유해 달라',
+    });
+    const { runner, store, port } = makeAttachmentRunner([clarificationResponse], { notion });
+
+    const { sessionId } = await runner.handleIntake({ ...intake, text: `기능 요청 ${pageUrl}` });
+
+    const row = store.listAttachments(sessionId)[0];
+    expect(row?.extractionStatus).toBe('failed');
+    expect(row?.extractionError).toContain('공유');
+    expect(port.posted.length).toBeGreaterThanOrEqual(2); // 접수 확인 + 질문 — 라운드 생존
   });
 });
