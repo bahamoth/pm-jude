@@ -1582,7 +1582,13 @@
     "created": "2026-07-29",
     "updated": "2026-07-29",
     "body": "## Problem Statement\n\n게이트웨이 상한 120s(DEFAULT_TIMEOUT_MS)가 모든 프롬프트 호출에 일률 적용된다. 장문 생성인 requirements@0.2.0이 반복적으로 120s를 초과해 GatewayTimeoutError로 라운드가 죽는다(2026-07-29 운영 로그 — completeness는 5.5k 토큰 출력에 79s, 약 70토큰/초이므로 문서 전체를 내는 requirements는 구조적으로 상한을 넘는다). 폭주 방지와 정상 장문 생성 차단이 한 숫자에 뭉뚱그려져 있다.\n\n## Solution\n\n프롬프트 버전이 자기 상한을 선언한다 — PromptVersion에 선택 필드 timeoutMs 추가, 게이트웨이는 version.timeoutMs ?? options.timeoutMs ?? 120s 순으로 적용. 장문 생성 프롬프트(completeness-v1·requirements-v1·mockup-v0·back-injection-v0)만 300s를 선언하고, 단문 호출(clarification·promotion·ui-classification·attachment-extraction)은 120s 기본을 유지해 폭주 방지의 의미를 보존한다.\n\n## Implementation Decisions\n\n- 상한 선언 위치는 프롬프트 모듈 — 출력 크기를 아는 주체가 프롬프트 자신이다. 게이트웨이 옵션 promptRef별 오버라이드 방식은 배선 지점마다 설정 반복이 생겨 배제.\n- 버전 불변 원칙과의 관계: timeoutMs는 프롬프트 계약(본문·스키마)이 아니라 실행 봉투(운영 파라미터)로 본다 — 기존 semver 유지, 신호 귀속 불변.\n- 구 버전(v0 계열)은 런타임에서 참조되지 않으므로 무변경.\n- 레지스트리가 timeoutMs > 0 정수를 검증한다(등록 시점 거부 — 기존 name/semver 검증과 같은 정신).\n- 타임아웃 재시도는 도입하지 않는다(비용 폭주 트레이드오프 — 별도 결정으로 남김).\n\n## Testing Decisions\n\n- 신설 심 0개 — 기존 게이트웨이 스위트(tests/gateway.test.ts) 확장: 버전 선언 상한이 전역 옵션보다 우선 적용, 선언 상한 초과 시 GatewayTimeoutError. 레지스트리 검증은 기존 등록 검증 테스트 계열에 추가.\n\n## Out of Scope\n\n- 타임아웃 1회 재시도, 비활성(inactivity) 타임아웃, 백엔드 스트리밍 소비 개선.",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-29",
+        "body": "구현 완료 — PR #42에 이슈 단위 커밋으로 합류(규칙 2 — 열린 PR 브랜치를 키움). PromptVersion.timeoutMs + 게이트웨이 우선 적용(version ?? options ?? 120s) + 장문 4종(completeness-v1·requirements-v1·mockup-v0·back-injection-v0) 300s 선언 + 레지스트리 양의 정수 검증. 게이트웨이 스위트 확장 2건 + 레지스트리 검증 1건, 전체 213 테스트 그린. 머지 후 이 이슈를 종결한다."
+      }
+    ]
   }
 ]
 </script>
