@@ -120,6 +120,56 @@ describe('LLM 게이트웨이 complete()', () => {
     expect(backend.requests[0]?.signal.aborted).toBe(true);
   });
 
+  it('프롬프트 버전이 선언한 timeoutMs가 게이트웨이 전역 상한보다 우선한다', async () => {
+    const backend = new FakeBackend();
+    backend.enqueue(
+      () =>
+        new Promise<BackendResponse>((resolve) =>
+          setTimeout(
+            () =>
+              resolve({
+                outputText: '{"answer":"장문 완료"}',
+                usage: { inputTokens: 1, outputTokens: 1 },
+              }),
+            50,
+          ),
+        ),
+    );
+    const registry = makeRegistry();
+    registry.register({
+      name: 'requirements',
+      semver: '0.1.0',
+      body: '요구사항 문서를 생성하라',
+      outputSchema: answerSchema,
+      regressionPassed: false,
+      timeoutMs: 500,
+    });
+    // 전역 상한 10ms — 버전 선언이 우선하지 않으면 50ms 백엔드는 반드시 실패한다
+    const gateway = new LlmGateway({ backend, registry, timeoutMs: 10 });
+
+    await expect(gateway.complete('requirements@0.1.0', {})).resolves.toMatchObject({
+      output: { answer: '장문 완료' },
+    });
+  });
+
+  it('버전 선언 상한을 넘긴 호출은 그 상한을 명시한 GatewayTimeoutError로 실패한다', async () => {
+    const backend = new FakeBackend();
+    backend.enqueue(() => new Promise(() => {})); // 영원히 응답하지 않는 백엔드
+    const registry = makeRegistry();
+    registry.register({
+      name: 'requirements',
+      semver: '0.1.0',
+      body: '요구사항 문서를 생성하라',
+      outputSchema: answerSchema,
+      regressionPassed: false,
+      timeoutMs: 25,
+    });
+    const gateway = new LlmGateway({ backend, registry }); // 전역 기본(120s)만으로는 안 끝날 테스트
+
+    await expect(gateway.complete('requirements@0.1.0', {})).rejects.toThrow('25ms');
+    expect(backend.requests[0]?.signal.aborted).toBe(true);
+  });
+
   it('동시 실행 상한을 넘는 호출은 앞 호출이 끝날 때까지 백엔드에 도달하지 않는다', async () => {
     const backend = new FakeBackend();
     let releaseFirst!: (response: BackendResponse) => void;

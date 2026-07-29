@@ -1,5 +1,5 @@
 import type { BackendImage, BackendResponse, BackendUsage, LlmBackend } from './backend';
-import type { PromptRegistry } from '../prompts/registry';
+import type { PromptRegistry, PromptVersion } from '../prompts/registry';
 
 /** 백엔드 호출 1회의 비용/사용량 기록 (F14 운영 규약). */
 export interface UsageLogEntry {
@@ -20,7 +20,7 @@ export interface GatewayOptions {
   usageLogger?: UsageLogger;
   /** 파싱·스키마 검증 실패 시 재시도 횟수. 기본 1회(총 2회 시도). */
   maxParseRetries?: number;
-  /** 백엔드 호출 1회의 상한(ms). 기본 120초. */
+  /** 백엔드 호출 1회의 기본 상한(ms). 기본 120초. 프롬프트 버전이 자체 timeoutMs를 선언하면 그쪽이 우선한다 (#56). */
   timeoutMs?: number;
   /** 동시에 진행되는 complete() 상한. 기본 2. */
   maxConcurrency?: number;
@@ -74,7 +74,7 @@ export class LlmGateway {
         const started = Date.now();
         let response: BackendResponse;
         try {
-          response = await this.runWithTimeout(version.body, input, options.images);
+          response = await this.runWithTimeout(version, input, options.images);
         } catch (error) {
           if (error instanceof GatewayTimeoutError) {
             this.log({ promptRef, attempt, outcome: 'timeout', durationMs: Date.now() - started });
@@ -124,11 +124,12 @@ export class LlmGateway {
   }
 
   private runWithTimeout(
-    promptBody: string,
+    version: PromptVersion,
     input: unknown,
     images?: readonly BackendImage[],
   ): Promise<BackendResponse> {
-    const timeoutMs = this.options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    // 버전 선언 상한이 전역 기본보다 우선한다 (#56) — 장문 생성만 넓은 봉투를 갖는다
+    const timeoutMs = version.timeoutMs ?? this.options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const controller = new AbortController();
     return new Promise<BackendResponse>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -137,7 +138,7 @@ export class LlmGateway {
       }, timeoutMs);
       this.options.backend
         .run({
-          promptBody,
+          promptBody: version.body,
           input,
           ...(images && images.length > 0 ? { images } : {}),
           signal: controller.signal,

@@ -58,4 +58,5 @@ export const mockupPromptV0: PromptVersion<MockupOutput> = {
   body,
   outputSchema: mockupOutputSchema,
   regressionPassed: false, // F12 — 골든셋 회귀 통과 전까지 false
+  timeoutMs: 300_000, // self-contained HTML 전체 생성 — 파이프라인에서 가장 긴 출력 (#56)
 };

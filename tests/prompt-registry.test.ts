@@ -74,4 +74,21 @@ describe('프롬프트 레지스트리 v0', () => {
       ).toThrow(InvalidPromptVersionError);
     }
   });
+
+  it('timeoutMs가 양의 정수가 아닌 등록은 InvalidPromptVersionError로 거부한다', () => {
+    const registry = new PromptRegistry();
+
+    for (const timeoutMs of [0, -1, 1.5, Number.NaN]) {
+      expect(() =>
+        registry.register({
+          name: 'requirements',
+          semver: '0.1.0',
+          body: '본문',
+          outputSchema,
+          regressionPassed: false,
+          timeoutMs,
+        }),
+      ).toThrow(InvalidPromptVersionError);
+    }
+  });
 });
