@@ -98,6 +98,11 @@ const ko = {
   'chip.onHold': '보류 — 언제든 재개',
   'chip.closed': '종결',
 
+  'mockupArchive.title': '확정된 화면 목업 보기',
+  'mockupArchive.lede':
+    '승인하신 화면이에요. 구현의 기준은 문서이고, 이 목업은 참고용으로 남겨 둡니다.',
+  'mockupArchive.themeDelegated': '분위기는 개발팀 몫',
+
   'mockup.title': '화면 목업',
   'mockup.lede': '말씀하신 내용을 화면으로 만들어 봤어요. 직접 눌러 보면서 확인해 주세요.',
   'mockup.version': '목업 v{version}',
@@ -298,6 +303,11 @@ const en: Record<Key, string> = {
   'chip.mockup': 'Mockup ready — take a look',
   'chip.onHold': 'On hold — resume anytime',
   'chip.closed': 'Closed',
+
+  'mockupArchive.title': 'View the approved mockup',
+  'mockupArchive.lede':
+    'This is the screen you approved. The document is what gets built — the mockup stays for reference.',
+  'mockupArchive.themeDelegated': 'Look left to the team',
 
   'mockup.title': 'Screen mockup',
   'mockup.lede': "I've turned your request into a screen. Click around and see if it matches.",

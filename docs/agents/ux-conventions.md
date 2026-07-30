@@ -54,7 +54,8 @@ Each rule exists because it was missed at least once. The "why" column records t
 | Rule | Why |
 |---|---|
 | A finished state still shows what can be done next. "Done" is not a dead end. | #66: the completed session showed a large "confirmed" notice and the only way to change the document was a small button inside a slot card — the operator concluded there was no way at all. |
-| If data exists, there is a path to see it. Do not render a branch that hides content the session still holds. | #66: an approved mockup stayed in the database with no route to view it, because the panel only existed in the `mockup` status branch. |
+| If data exists, there is a path to see it. Do not render a branch that hides content the session still holds. | #66: an approved mockup stayed in the database — served by the API — with no route to view it, because the panel only existed in the `mockup` status branch. Fixed with a read-only archive card in the `documented` branch. |
+| Content that is no longer being acted on is shown **read-only and collapsed**, not removed. | The approved mockup keeps no comment box, theme picker, or approve button: that work is finished and the document is what gets built. But it must still be findable. |
 | Show the unit of change the user is choosing (selection count, quoted text, target version) before they commit. | Users should not have to guess the blast radius of a correction. |
 | When the **acted-on unit differs from the selected range**, highlight the real unit and say so. | #66: the smallest editable unit is a block, so dragging half a paragraph still rewrites the whole item. Nothing showed that, so the operator reasonably expected only the dragged words to change. The affected blocks now get a ring, and a note points to in-place editing for word-level changes. |
 

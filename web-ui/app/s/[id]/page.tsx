@@ -10,6 +10,7 @@ import { DocumentView, type DocumentCorrectionRequest } from '@/components/docum
 import { HoldCard } from '@/components/hold-card';
 import { Jude, type JudeHandle } from '@/components/jude';
 import { JourneyStepper } from '@/components/journey-stepper';
+import { MockupArchive } from '@/components/mockup-archive';
 import { MockupPanel } from '@/components/mockup-panel';
 import { QuestionWizard } from '@/components/question-wizard';
 import { RetryCard } from '@/components/retry-card';
@@ -362,6 +363,8 @@ export default function SessionPage() {
             onCorrect={onCorrectDocument}
             submitting={busy || failed}
           />
+          {/* 확정된 목업 열람 (#66) — 승인 뒤에도 자기가 고른 화면을 다시 볼 수 있어야 한다 */}
+          {detail.mockup && <MockupArchive lang={lang} sessionId={sessionId} />}
           <AttachmentList lang={lang} sessionId={sessionId} attachments={attachments} />
           {completed ? (
             <Alert>
