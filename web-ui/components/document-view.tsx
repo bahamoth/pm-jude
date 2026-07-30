@@ -109,17 +109,16 @@ export function DocumentView({
     if (path) startInlineEdit([path]);
   };
 
-  // 팝오버를 선택 지점 옆에 붙인다 — 고칠 곳과 입력하는 곳이 멀면 무엇을 고치는지 놓친다
+  // 팝오버를 선택 지점 옆에 붙인다 — 고칠 곳과 입력하는 곳이 멀면 무엇을 고치는지 놓친다.
+  // 좌표는 viewport 기준이고 position: fixed다 — 문서 레이아웃과 스크롤 영역을 건드리지 않는다.
   useLayoutEffect(() => {
-    if (!selection || !bodyRef.current) return;
-    const box = bodyRef.current.getBoundingClientRect();
+    if (!selection) return;
     const size = popoverRef.current?.getBoundingClientRect();
     setAnchor(
       anchorPosition(
         selection.rect,
-        { top: box.top, left: box.left, width: box.width, height: box.height },
-        { width: size?.width ?? 340, height: size?.height ?? 180 },
-        window.innerHeight,
+        { width: size?.width ?? 340, height: size?.height ?? 200 },
+        { width: window.innerWidth, height: window.innerHeight },
       ),
     );
   }, [selection]);
@@ -136,17 +135,25 @@ export function DocumentView({
       if (popoverRef.current?.contains(target)) return; // 팝오버 안의 클릭은 조작이다
       close();
     };
+    // fixed 좌표는 스크롤하면 낡는다 — 따라다니게 만드는 대신 닫는다(선택 맥락도 흐려진다)
+    const onScrollOrResize = () => close();
     document.addEventListener('keydown', onKey);
     // 캡처 단계에서 받는다 — 문서 본문의 클릭 핸들러가 먼저 새 선택을 열어버리지 않게
     document.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('scroll', onScrollOrResize, true);
+    window.addEventListener('resize', onScrollOrResize);
     return () => {
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('scroll', onScrollOrResize, true);
+      window.removeEventListener('resize', onScrollOrResize);
     };
   }, [selection]);
+  // 포커스는 위치가 정해진 뒤에 준다. preventScroll이 없으면 브라우저가 입력창을 보이게
+  // 하려고 문서를 스크롤한다 — 문서 하단에서 특히 크게 튄다.
   useEffect(() => {
-    if (selection) inputRef.current?.focus();
-  }, [selection]);
+    if (selection && anchor) inputRef.current?.focus({ preventScroll: true });
+  }, [selection, anchor]);
 
   const submit = () => {
     if (!selection || !text.trim()) return;
@@ -192,7 +199,7 @@ export function DocumentView({
         ref={bodyRef}
         onMouseUp={captureSelection}
         onTouchEnd={captureSelection}
-        className="relative grid gap-2.5 text-[15px] leading-relaxed"
+        className="grid gap-2.5 text-[15px] leading-relaxed"
       >
         {fullyPromoted && (
           <div className="rounded-lg border border-dashed p-3 text-sm">
@@ -319,7 +326,11 @@ export function DocumentView({
           <div
             ref={popoverRef}
             style={{ top: anchor?.top ?? 0, left: anchor?.left ?? 0 }}
-            className="absolute z-20 w-[min(22rem,calc(100%-1rem))] rounded-lg border bg-popover p-3 shadow-lg"
+            // 좌표는 렌더 후에야 잰다 — 그 사이 (0,0)에 보이면 화면이 튀고 포커스가 위로 끌려간다.
+            // DOM에는 두어 크기를 재고, 위치가 정해질 때까지만 숨긴다.
+            className={`fixed z-50 w-[min(22rem,calc(100vw-1rem))] rounded-lg border bg-popover p-3 shadow-lg${
+              anchor ? '' : ' invisible'
+            }`}
             // 팝오버 안의 클릭·선택이 바깥의 선택 캡처를 다시 트리거하지 않게 막는다
             onMouseUp={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}

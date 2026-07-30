@@ -23,11 +23,12 @@ export function InlineEditor({ lang, initial, submitting, onCommit, onCancel }: 
   const wrapRef = useRef<HTMLSpanElement>(null);
   const [text, setText] = useState(initial);
 
-  // 열리면 바로 쓸 수 있게 — 커서는 끝에 둔다(고치려는 것은 대개 문장 뒷부분이다)
+  // 열리면 바로 쓸 수 있게 — 커서는 끝에 둔다(고치려는 것은 대개 문장 뒷부분이다).
+  // preventScroll: 편집기는 이미 보이는 자리에 있다 — 브라우저가 다시 스크롤할 이유가 없다.
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
-    node.focus();
+    node.focus({ preventScroll: true });
     node.setSelectionRange(node.value.length, node.value.length);
   }, []);
 
