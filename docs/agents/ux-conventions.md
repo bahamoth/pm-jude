@@ -27,6 +27,14 @@ Each rule exists because it was missed at least once. The "why" column records t
 | Text is edited **in place** — the element becomes editable. Do not lift text into a modal or a side panel to change it. | #66: editing inside the popover meant reading in one place and typing in another. |
 | An editor opens with the **current value**, cursor at the end. Never an empty box the user has to retype. | Retyping a sentence to change three words is work the product should absorb. |
 | Editors grow with their content. No inner scrollbars on a field the user is composing in. | Scope items run several lines; a one-line box hides what is being edited. |
+| An editing surface covers the unit the user **selected**, not the unit that was easy to implement. | #66: direct editing was capped at one block because multi-block editing needs text→array re-mapping. Line-per-item mapping was the answer — and it made add/remove fall out for free. |
+
+## Gestures
+
+| Rule | Why |
+|---|---|
+| One gesture per intent. If a gesture already reaches an action, do not also offer that action as a choice elsewhere. | #66: double-tap already opened the in-place editor, yet the popover still asked "instruct or edit" — a step that cost a click and explained nothing. The popover became instruction-only, with in-place editing as a hint on it. |
+| A range selection outranks a click inside it. | Clicking to confirm a drag selection must not collapse it into a single-element pick. |
 
 ## Keyboard
 

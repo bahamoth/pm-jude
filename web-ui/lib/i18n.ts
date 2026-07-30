@@ -181,7 +181,7 @@ const ko = {
   'doc.correctMultiEditNote': '여러 곳을 선택했어요 — 직접 고치기는 한 곳씩 해 주세요.',
   'doc.correctBack': '뒤로',
   'doc.inlineCommit': '적용',
-  'doc.inlineHint': 'Enter 적용 · Shift+Enter 줄바꿈 · Esc 취소',
+  'doc.inlineHint': 'Enter 적용 · Shift+Enter 줄바꿈(줄을 늘리면 항목이 추가돼요) · Esc 취소',
   'doc.correctModeEditInline': '여기서 직접 고치기',
 
   'retry.title': '여기서 멈췄어요',
@@ -368,7 +368,8 @@ const en: Record<Key, string> = {
     'You checked every item I pinned down. This is the end of the journey for now, and the document goes to the team.',
 
   // Partial document correction (#66)
-  'doc.correctHint': 'Drag over what to fix, or tap an item. Double-tap to edit it in place.',
+  'doc.correctHint':
+    'Tap to tell me what to change, or double-tap to edit it yourself. Drag across a list to edit several lines at once.',
   'doc.correctSelected': '{count} selected',
   'doc.correctModeInstruct': 'Tell me',
   'doc.correctModeEdit': 'Edit directly',
@@ -379,7 +380,7 @@ const en: Record<Key, string> = {
   'doc.correctMultiEditNote': 'Multiple parts selected — direct editing works one at a time.',
   'doc.correctBack': 'Back',
   'doc.inlineCommit': 'Apply',
-  'doc.inlineHint': 'Enter to apply · Shift+Enter for a new line · Esc to cancel',
+  'doc.inlineHint': 'Enter to apply · Shift+Enter for a new line (adds an item) · Esc to cancel',
   'doc.correctModeEditInline': 'Edit right here',
 
   'retry.title': 'It stopped here',
