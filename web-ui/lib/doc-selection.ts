@@ -71,3 +71,29 @@ export function selectionFromElement(element: HTMLElement): DocSelection | null 
     rect: { top: box.top, left: box.left, width: box.width, height: box.height },
   };
 }
+
+/** 줄 단위로 함께 편집할 수 있는 배열 경로 (#66) — 코어 src/document/path.ts와 같은 목록. */
+const LINE_ARRAY_PATHS = [
+  'users',
+  'dataSources',
+  'scope.inScope',
+  'scope.outOfScope',
+  'openIssues',
+];
+
+/**
+ * 선택한 주소들이 한 배열의 형제인지 — 그렇다면 여러 줄을 한 번에 고칠 수 있다.
+ * `scope.inScope[0]`·`scope.inScope[2]` → `scope.inScope`. 이종 요소가 섞이면 null.
+ */
+export function commonArrayPath(paths: readonly string[]): string | null {
+  if (paths.length === 0) return null;
+  const groups = new Set(
+    paths.map((path) => {
+      const match = /^(.+)\[\d+\](?:\.[A-Za-z][A-Za-z0-9]*)?$/.exec(path);
+      return match?.[1] ?? path;
+    }),
+  );
+  if (groups.size !== 1) return null;
+  const [group] = [...groups];
+  return group && LINE_ARRAY_PATHS.includes(group) ? group : null;
+}

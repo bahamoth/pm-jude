@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pathsInRange } from './doc-selection';
+import { commonArrayPath, pathsInRange } from './doc-selection';
 
 /**
  * 드래그 선택 → 문서 주소 (#66, ADR-0016 결정 2).
@@ -41,5 +41,35 @@ describe('pathsInRange', () => {
 
   it('주소가 하나도 없는 범위는 빈 배열 — 정정 대상이 없다', () => {
     expect(pathsInRange([{ path: undefined }], 0, 0)).toEqual([]);
+  });
+});
+
+describe('commonArrayPath — 형제 항목 판별 (#66)', () => {
+  it('같은 배열의 항목들은 그 배열 경로로 묶인다 — 여러 줄을 한 번에 고칠 수 있다', () => {
+    expect(commonArrayPath(['scope.inScope[0]', 'scope.inScope[2]'])).toBe('scope.inScope');
+    expect(commonArrayPath(['users[1]'])).toBe('users');
+    expect(commonArrayPath(['openIssues[0].question', 'openIssues[1].question'])).toBe(
+      'openIssues',
+    );
+  });
+
+  it('이종 요소가 섞이면 null — 줄 수가 바뀌었을 때 무엇이 변한 건지 정할 수 없다', () => {
+    expect(commonArrayPath(['problem', 'users[0]'])).toBeNull();
+    expect(commonArrayPath(['scope.inScope[0]', 'scope.outOfScope[0]'])).toBeNull();
+  });
+
+  it('스토리·수용기준은 줄 단위 배열이 아니다 — 한 줄이 한 항목이 아니다', () => {
+    expect(commonArrayPath(['stories[0].story'])).toBeNull();
+    expect(
+      commonArrayPath([
+        'stories[0].acceptanceCriteria[0].ears',
+        'stories[0].acceptanceCriteria[1].ears',
+      ]),
+    ).toBeNull();
+  });
+
+  it('단일 필드는 배열이 아니다', () => {
+    expect(commonArrayPath(['problem'])).toBeNull();
+    expect(commonArrayPath([])).toBeNull();
   });
 });

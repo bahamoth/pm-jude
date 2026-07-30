@@ -71,8 +71,57 @@ function segmentsOf(path: string): Array<string | number> {
   return segments;
 }
 
+/**
+ * 줄 단위로 다룰 수 있는 배열 경로 (#66) — 한 줄이 한 항목인 것만.
+ *
+ * 스토리·수용기준은 여기 없다: 한 줄이 한 항목이 아니라 story/ears/gwt가 겹쳐 있어,
+ * 줄 수가 바뀌었을 때 무엇이 추가·삭제된 것인지 정해지지 않는다.
+ */
+const LINE_ARRAY_PATHS = [
+  'users',
+  'dataSources',
+  'scope.inScope',
+  'scope.outOfScope',
+  'openIssues',
+];
+
+export function isLineArrayPath(path: string): boolean {
+  return LINE_ARRAY_PATHS.includes(path);
+}
+
+/** 배열 경로의 현재 값 — 항목을 줄바꿈으로 이어 한 편집 대상으로 만든다. */
+function readLineArray(content: RequirementsOutput, path: string): string {
+  switch (path) {
+    case 'users':
+      return content.users.join('\n');
+    case 'dataSources':
+      return content.dataSources.join('\n');
+    case 'scope.inScope':
+      return content.scope.inScope.join('\n');
+    case 'scope.outOfScope':
+      return content.scope.outOfScope.join('\n');
+    case 'openIssues':
+      return content.openIssues.map((issue) => issue.question).join('\n');
+    default:
+      throw new UnknownDocumentPathError(`문서에 없는 주소: ${path}`);
+  }
+}
+
+/** 줄을 항목으로 — 빈 줄은 세지 않는다(편집 중 생긴 여백이 빈 요구가 되지 않게). */
+function linesToItems(text: string, path: string): string[] {
+  const items = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  if (items.length === 0) {
+    throw new Error(`정정 텍스트가 비어 있다: ${path}`);
+  }
+  return items;
+}
+
 /** 주소가 가리키는 현재 값. 화면에 보이는 그 문자열이다. */
 export function readDocumentPath(content: RequirementsOutput, path: string): string {
+  if (isLineArrayPath(path)) return readLineArray(content, path);
   const segments = segmentsOf(path);
   const fail = (): never => {
     throw new UnknownDocumentPathError(`문서에 없는 주소: ${path}`);
@@ -131,7 +180,9 @@ export function applyDocumentCorrections(
 ): RequirementsOutput {
   if (corrections.length === 0) return content;
   for (const correction of corrections) {
-    if (!correction.text.trim()) {
+    if (isLineArrayPath(correction.path)) {
+      linesToItems(correction.text, correction.path); // 항목이 하나도 없으면 여기서 멈춘다
+    } else if (!correction.text.trim()) {
       throw new Error(`정정 텍스트가 비어 있다: ${correction.path}`);
     }
     readDocumentPath(content, correction.path); // 주소 검증 — 틀리면 여기서 멈춘다
@@ -139,6 +190,31 @@ export function applyDocumentCorrections(
 
   const next: RequirementsOutput = structuredClone(content);
   for (const { path, text } of corrections) {
+    // 배열 경로는 줄 단위로 항목을 다시 만든다 — 줄이 늘면 추가, 줄면 삭제 (#66)
+    if (isLineArrayPath(path)) {
+      const items = linesToItems(text, path);
+      switch (path) {
+        case 'users':
+          next.users = items;
+          break;
+        case 'dataSources':
+          next.dataSources = items;
+          break;
+        case 'scope.inScope':
+          next.scope.inScope = items;
+          break;
+        case 'scope.outOfScope':
+          next.scope.outOfScope = items;
+          break;
+        default:
+          // 오픈이슈는 질문만 줄 단위다 — slotKey·담당자는 편집 대상이 아니라 자리를 지킨다
+          next.openIssues = items.map((question, i) => {
+            const existing = content.openIssues[i];
+            return existing ? { ...existing, question } : { slotKey: '', question, assignee: null };
+          });
+      }
+      continue;
+    }
     const value = text.trim();
     const [head, ...rest] = segmentsOf(path);
     switch (head) {

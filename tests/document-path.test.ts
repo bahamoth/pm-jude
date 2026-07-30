@@ -129,3 +129,62 @@ describe('applyDocumentCorrections', () => {
     expect(() => applyDocumentCorrections(doc, [{ path: 'problem', text: '   ' }])).toThrow(/비어/);
   });
 });
+
+describe('배열 경로 — 줄 단위 다중 편집 (#66)', () => {
+  it('배열 경로는 항목을 줄바꿈으로 이어 읽는다 — 화면의 여러 줄이 한 편집 대상이 된다', () => {
+    expect(readDocumentPath(doc, 'scope.inScope')).toBe('월별 추이\n팀별 비교');
+    expect(readDocumentPath(doc, 'users')).toBe('영업팀 매니저\n영업사원');
+  });
+
+  it('줄 수를 늘리면 항목이 추가된다 — 편집으로 항목을 더할 수 있다', () => {
+    const next = applyDocumentCorrections(doc, [
+      { path: 'scope.inScope', text: '월별 추이\n팀별 비교\n기간 필터' },
+    ]);
+
+    expect(next.scope.inScope).toEqual(['월별 추이', '팀별 비교', '기간 필터']);
+  });
+
+  it('줄을 지우면 항목이 사라진다 — 편집으로 항목을 뺄 수 있다', () => {
+    const next = applyDocumentCorrections(doc, [{ path: 'scope.inScope', text: '월별 추이' }]);
+
+    expect(next.scope.inScope).toEqual(['월별 추이']);
+  });
+
+  it('빈 줄은 항목으로 세지 않는다 — 편집 중 생긴 여백이 빈 요구가 되지 않게', () => {
+    const next = applyDocumentCorrections(doc, [
+      { path: 'users', text: '영업 리드\n\n  \n영업사원' },
+    ]);
+
+    expect(next.users).toEqual(['영업 리드', '영업사원']);
+  });
+
+  it('전부 지우면 거부한다 — 섹션을 통째로 비우는 것은 편집이 아니다', () => {
+    expect(() => applyDocumentCorrections(doc, [{ path: 'users', text: '\n \n' }])).toThrow(/비어/);
+  });
+
+  it('오픈이슈 배열은 질문만 줄 단위로 다룬다 — slotKey·담당자는 편집 대상이 아니다', () => {
+    const next = applyDocumentCorrections(doc, [
+      { path: 'openIssues', text: '권한 범위를 누가 정하나?' },
+    ]);
+
+    expect(next.openIssues).toEqual([
+      { slotKey: 'auth', question: '권한 범위를 누가 정하나?', assignee: null },
+    ]);
+  });
+
+  it('오픈이슈를 늘리면 slotKey 없는 항목이 생긴다 — 요청자가 추가한 미결이다', () => {
+    const next = applyDocumentCorrections(doc, [
+      { path: 'openIssues', text: '권한 범위는?\n보존 기간은?' },
+    ]);
+
+    expect(next.openIssues).toHaveLength(2);
+    expect(next.openIssues[1]).toMatchObject({ question: '보존 기간은?', assignee: null });
+  });
+
+  it('스토리·수용기준 배열은 줄 단위로 다루지 않는다 — 한 줄이 한 항목이 아니다', () => {
+    expect(() => readDocumentPath(doc, 'stories')).toThrow(UnknownDocumentPathError);
+    expect(() => applyDocumentCorrections(doc, [{ path: 'stories', text: '아무 문장' }])).toThrow(
+      UnknownDocumentPathError,
+    );
+  });
+});

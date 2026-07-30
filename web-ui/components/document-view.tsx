@@ -8,7 +8,12 @@ import { Separator } from '@/components/ui/separator';
 import { InlineEditor } from '@/components/inline-editor';
 import { Textarea } from '@/components/ui/textarea';
 import { anchorPosition, type AnchorResult } from '@/lib/anchor';
-import { readSelectionPaths, selectionFromElement, type DocSelection } from '@/lib/doc-selection';
+import {
+  commonArrayPath,
+  readSelectionPaths,
+  selectionFromElement,
+  type DocSelection,
+} from '@/lib/doc-selection';
 import type { DocLine } from '@/lib/document';
 import { t, type Lang } from '@/lib/i18n';
 
@@ -35,13 +40,6 @@ interface Props {
 // requirements 문서 열람 (US-9·10) — 문서를 구조대로 표시한다.
 // 교정 대상 라인에는 data-doc-path로 요소 주소를 심는다 (#66, ADR-0016) — 드래그 선택이
 // 선택 범위가 걸친 주소를 이 속성에서 읽어 부분 정정의 대상으로 삼는다.
-/** 화면에 그려진 그 줄의 현재 텍스트 — 직접 편집은 빈 칸이 아니라 지금 문장에서 시작한다. */
-function currentTextOf(container: HTMLElement | null, path: string | undefined): string {
-  if (!container || !path) return '';
-  const element = container.querySelector<HTMLElement>(`[data-doc-path="${path}"]`);
-  return element?.textContent?.replace(/^•\s*/, '').replace(/^–\s*/, '').trim() ?? '';
-}
-
 export function DocumentView({
   lang,
   lines,
@@ -55,29 +53,29 @@ export function DocumentView({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [selection, setSelection] = useState<DocSelection | null>(null);
   const [anchor, setAnchor] = useState<AnchorResult | null>(null);
-  // 선택 직후에는 모드를 고르는 상태다 — 무엇으로 고칠지 정하기 전에 입력창을 띄우지 않는다
-  const [mode, setMode] = useState<'instruct' | 'edit' | null>(null);
   const [text, setText] = useState('');
   // 인플레이스 편집 중인 주소 — 그 줄이 편집기로 바뀐다 (#66 UX)
   const [editingPath, setEditingPath] = useState<string | null>(null);
   const correctable = onCorrect !== undefined && lines.some((line) => line.path);
 
-  const open = (picked: DocSelection | null, presetText = '') => {
+  const open = (picked: DocSelection | null) => {
     if (!picked) return;
     setSelection(picked);
-    setMode(null);
-    setText(presetText);
+    setText('');
   };
   const close = () => {
     setSelection(null);
     setAnchor(null);
-    setMode(null);
     setText('');
   };
-  /** 그 자리에서 고치기로 전환 — 팝오버는 닫고 해당 줄을 편집기로 바꾼다. */
-  const startInlineEdit = (path: string) => {
+  /**
+   * 그 자리에서 고치기 — 팝오버를 닫고 대상을 편집기로 바꾼다.
+   * 한 배열의 형제 항목들이면 그 배열 전체를 줄 단위로 편집한다(줄이 늘면 추가, 줄면 삭제).
+   */
+  const startInlineEdit = (paths: readonly string[]) => {
+    const arrayPath = commonArrayPath(paths);
     close();
-    setEditingPath(path);
+    setEditingPath(arrayPath ?? paths[0] ?? null);
   };
   const commitInline = (path: string, value: string) => {
     setEditingPath(null);
@@ -95,11 +93,17 @@ export function DocumentView({
     if (!window.getSelection()?.isCollapsed) return;
     open(selectionFromElement(event.currentTarget));
   };
-  /** 더블클릭은 모드 선택을 건너뛴다 — 고칠 문장을 아는 사람에게 클릭 두 번을 아낀다. */
+  /** 더블클릭은 그 자리에서 바로 고치기다 — 지시할 필요가 없는 사람의 경로. */
   const editLine = (event: React.MouseEvent<HTMLElement>) => {
     if (!correctable) return;
+    // 드래그로 형제 항목을 여럿 잡아둔 상태면 그 범위를 함께 편집한다
+    const picked = readSelectionPaths(bodyRef.current);
+    if (picked && commonArrayPath(picked.paths)) {
+      startInlineEdit(picked.paths);
+      return;
+    }
     const path = event.currentTarget.dataset.docPath;
-    if (path) startInlineEdit(path);
+    if (path) startInlineEdit([path]);
   };
 
   // 팝오버를 선택 지점 옆에 붙인다 — 고칠 곳과 입력하는 곳이 멀면 무엇을 고치는지 놓친다
@@ -115,7 +119,7 @@ export function DocumentView({
         window.innerHeight,
       ),
     );
-  }, [selection, mode]);
+  }, [selection]);
 
   // 닫는 길은 셋이다 — 명시적 취소 버튼, ESC, 그리고 바깥 클릭. 어느 하나만 두면 갇힌다.
   useEffect(() => {
@@ -138,20 +142,25 @@ export function DocumentView({
     };
   }, [selection]);
   useEffect(() => {
-    if (mode) inputRef.current?.focus();
-  }, [mode]);
+    if (selection) inputRef.current?.focus();
+  }, [selection]);
 
-  const multiEdit = mode === 'edit' && (selection?.paths.length ?? 0) > 1;
   const submit = () => {
-    if (!selection || !mode || !text.trim() || multiEdit) return;
+    if (!selection || !text.trim()) return;
     onCorrect?.({
-      mode,
+      mode: 'instruct',
       paths: selection.paths,
       text: text.trim(),
       ...(selection.quotedText ? { quotedText: selection.quotedText } : {}),
     });
     close();
   };
+
+  // 배열을 편집 중이면 그 항목 줄들 — 편집기 하나로 합쳐 보여준다
+  const groupLines =
+    editingPath && !editingPath.endsWith(']') && !/\]\.[A-Za-z]+$/.test(editingPath)
+      ? lines.filter((line) => line.path?.startsWith(`${editingPath}[`))
+      : [];
 
   return (
     <Card>
@@ -177,19 +186,37 @@ export function DocumentView({
           </div>
         )}
         {lines.map((line, i) => {
-          // 편집 중인 줄은 그 자리에서 편집기가 된다 — 종류와 무관하게 같은 경로 (#66 UX)
-          if (line.path && line.path === editingPath) {
-            return (
-              <span key={i} className={line.kind === 'sub' ? 'block pl-6' : 'block'}>
-                <InlineEditor
-                  lang={lang}
-                  initial={line.text}
-                  submitting={submitting}
-                  onCommit={(value) => commitInline(line.path!, value)}
-                  onCancel={() => setEditingPath(null)}
-                />
-              </span>
-            );
+          // 편집 중인 대상은 그 자리에서 편집기가 된다 (#66 UX).
+          // 배열을 편집하면 그 항목 줄들이 편집기 하나로 합쳐진다 — 줄이 늘면 추가, 줄면 삭제.
+          if (editingPath && line.path) {
+            if (line.path === editingPath) {
+              return (
+                <span key={i} className={line.kind === 'sub' ? 'block pl-6' : 'block'}>
+                  <InlineEditor
+                    lang={lang}
+                    initial={line.text}
+                    submitting={submitting}
+                    onCommit={(value) => commitInline(editingPath, value)}
+                    onCancel={() => setEditingPath(null)}
+                  />
+                </span>
+              );
+            }
+            if (groupLines.length > 0 && line.path === groupLines[0]?.path) {
+              return (
+                <span key={i} className="block">
+                  <InlineEditor
+                    lang={lang}
+                    initial={groupLines.map((entry) => entry.text).join('\n')}
+                    submitting={submitting}
+                    onCommit={(value) => commitInline(editingPath, value)}
+                    onCancel={() => setEditingPath(null)}
+                  />
+                </span>
+              );
+            }
+            // 같은 배열의 나머지 줄은 편집기에 흡수됐다
+            if (groupLines.some((entry) => entry.path === line.path)) return null;
           }
           switch (line.kind) {
             case 'title':
@@ -289,70 +316,40 @@ export function DocumentView({
               </button>
             </div>
 
-            {mode === null ? (
-              // 무엇으로 고칠지 먼저 고른다 — 선택 바로 옆에서 두 경로가 갈린다
-              <div className="grid gap-1.5">
-                <Button size="sm" className="justify-start" onClick={() => setMode('instruct')}>
-                  {t(lang, 'doc.correctModeInstruct')}
+            {/* 팝오버는 지시 전용이다 — 직접 고치기는 더블클릭으로 그 자리에서 한다 */}
+            <div className="grid gap-2">
+              {selection.quotedText && (
+                <p className="line-clamp-2 rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                  “{selection.quotedText}”
+                </p>
+              )}
+              <Textarea
+                ref={inputRef}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    submit();
+                  }
+                }}
+                placeholder={t(lang, 'doc.correctInstructPlaceholder')}
+                rows={2}
+                className="text-sm"
+              />
+              <div className="flex items-center justify-between gap-2">
+                <Button size="sm" disabled={submitting || !text.trim()} onClick={submit}>
+                  {t(lang, 'doc.correctApply')}
                 </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="justify-start"
-                  disabled={selection.paths.length > 1}
-                  onClick={() => {
-                    // 팝오버 안에서 고치지 않는다 — 문서의 그 줄이 편집기가 된다
-                    const target = selection.paths[0];
-                    if (target) startInlineEdit(target);
-                  }}
+                <button
+                  type="button"
+                  onClick={() => startInlineEdit(selection.paths)}
+                  className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
                 >
                   {t(lang, 'doc.correctModeEditInline')}
-                </Button>
-                {selection.paths.length > 1 && (
-                  <p className="text-[11px] text-muted-foreground">
-                    {t(lang, 'doc.correctMultiEditNote')}
-                  </p>
-                )}
+                </button>
               </div>
-            ) : (
-              <div className="grid gap-2">
-                {selection.quotedText && (
-                  <p className="line-clamp-2 rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">
-                    “{selection.quotedText}”
-                  </p>
-                )}
-                <Textarea
-                  ref={inputRef}
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  onKeyDown={(e) => {
-                    // 지시는 한 줄이 보통이라 Enter로 보낸다 (Shift+Enter 줄바꿈)
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      submit();
-                    }
-                  }}
-                  placeholder={t(lang, 'doc.correctInstructPlaceholder')}
-                  rows={2}
-                  className="text-sm"
-                />
-                <div className="flex items-center gap-2">
-                  <Button size="sm" disabled={submitting || !text.trim()} onClick={submit}>
-                    {t(lang, 'doc.correctApply')}
-                  </Button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMode(null);
-                      setText('');
-                    }}
-                    className="text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    {t(lang, 'doc.correctBack')}
-                  </button>
-                </div>
-              </div>
-            )}
+            </div>
           </div>
         )}
       </CardContent>
