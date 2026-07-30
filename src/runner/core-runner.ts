@@ -368,13 +368,18 @@ function formatDocument(
   visualDirection?: VisualDirection,
 ): string {
   const { content } = doc;
+  // 배열은 항목마다 한 줄이다 (#66) — 쉼표로 이어 붙이면 어디서 끊기는지 읽을 수 없다
   const lines = [
     // 문서 버전은 정정 재생성마다 올라간다 — 정본 ERD requirements_doc vN·역주입(F4)의 전제 (G-11)
     `*requirements 문서 v${String(version)}*`,
     `*문제* — ${content.problem}`,
-    `*사용자* — ${content.users.join(', ')}`,
-    `*스코프* — 포함: ${content.scope.inScope.join(', ')}` +
-      (content.scope.outOfScope.length ? ` / 제외: ${content.scope.outOfScope.join(', ')}` : ''),
+    '*사용자*',
+    ...content.users.map((user) => `• ${user}`),
+    '*스코프 — 포함*',
+    ...content.scope.inScope.map((item) => `• ${item}`),
+    ...(content.scope.outOfScope.length
+      ? ['*스코프 — 제외*', ...content.scope.outOfScope.map((item) => `• ${item}`)]
+      : []),
     '*유저스토리·수용기준*',
   ];
   for (const story of content.stories) {
@@ -386,7 +391,9 @@ function formatDocument(
       );
     }
   }
-  lines.push(`*데이터 소스* — ${content.dataSources.join(', ') || '미확정 (오픈이슈 참조)'}`);
+  lines.push('*데이터 소스*');
+  if (content.dataSources.length === 0) lines.push('미확정 (오픈이슈 참조)');
+  else lines.push(...content.dataSources.map((source) => `• ${source}`));
   if (visualDirection) {
     // 요청자 확인을 거친 시각 언어의 기록 — 구현 수단 선택은 개발팀 재량 (F4 선정)
     lines.push(
