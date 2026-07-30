@@ -109,6 +109,23 @@ export function confirmSlotOk(sessionId: string, slotKey: string): Promise<Reply
   );
 }
 
+/**
+ * 문서 부분 교정 (#66, ADR-0016) — 지목한 주소만 고친다.
+ * 직접 편집은 LLM이 없어 동기 200(문서 vN+1 즉시), 자연어 지시는 백그라운드 202.
+ */
+export function correctDocument(
+  sessionId: string,
+  correction:
+    | { mode: 'edit'; paths: string[]; replacement: string; quotedText?: string }
+    | { mode: 'instruct'; paths: string[]; instruction: string; quotedText?: string },
+): Promise<ReplyOutcome | Accepted> {
+  return request(`/api/sessions/${encodeURIComponent(sessionId)}/document/corrections`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(correction),
+  });
+}
+
 /** 아니에요 + 정정(202) — 재판정이 백그라운드로 돈다. */
 export function correctSlot(
   sessionId: string,
