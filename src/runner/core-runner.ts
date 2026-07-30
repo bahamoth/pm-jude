@@ -1852,9 +1852,14 @@ export class IntakeRunner<A> {
   }
 
   /**
-   * 목업 어노테이션 접수 (F4) — mockup 세션에서만. 코멘트를 영속·전사 보존(원칙 7)하고,
-   * 반복 예산이 남았으면 vN+1을 재생성한다. 상한 도달이면 재생성 없이 미수렴 표기와 사유
-   * 회신으로 루프를 닫는다(원칙 5) — 코멘트 자체는 기록되어 판독 큐(F13) 몫으로 남는다.
+   * 목업 어노테이션 접수 (F4) — 코멘트를 영속·전사 보존(원칙 7)하고, 반복 예산이 남았으면
+   * vN+1을 재생성한다. 상한 도달이면 재생성 없이 미수렴 표기와 사유 회신으로 구간을 닫는다
+   * (원칙 5) — 코멘트 자체는 기록되어 판독 큐(F13) 몫으로 남는다.
+   *
+   * 세션 상태를 보지 않는다 (#67): 승인·에스컬레이션으로 닫힌 목업에 코멘트가 오면 그것이
+   * 재개 요청이고, 새 구간의 첫 판이 생성된다. 문서와 같은 원칙이다 — 요청자가 화면 기대를
+   * 맞추는 수단이 「한 번 승인했으니 끝」으로 잠기면 어긋남을 고칠 길이 사라진다(ADR-0016).
+   * 재개는 세션 상태를 되돌리지 않는다: 완주와 문서는 그대로 서 있다.
    */
   async annotateMockup(
     event: IntakeEvent<A>,
@@ -1862,7 +1867,7 @@ export class IntakeRunner<A> {
   ): Promise<ReplyOutcome | null> {
     const { store } = this.deps;
     const session = store.findSessionByThreadKey(event.threadKey);
-    if (!session || session.status !== 'mockup') return null;
+    if (!session) return null;
     const current = store.latestMockup(session.id);
     if (!current || comments.length === 0) return null;
     const language = this.sessionLanguageOf(session.id, event);
@@ -1921,9 +1926,24 @@ export class IntakeRunner<A> {
     return this.outcomeOf(session.id);
   }
 
-  /** 지금까지 소모한 재생성 횟수 — v1은 반복이 아니다 (F4 반복 상한). */
+  /**
+   * 현재 반복 구간에서 소모한 재생성 횟수 (F4 반복 상한).
+   *
+   * 구간은 마지막으로 닫힌 판(승인·에스컬레이션) 다음부터다 — 상한은 한 구간 안의 왕복을
+   * 제한하고, 요청자가 닫힌 목업에 코멘트를 남기면 새 구간이 열린다 (#67). 누적으로 세면
+   * 상한 도달이 영구 잠금이 되어 고칠 길이 사라진다.
+   *
+   * 첫 구간의 v1만 반복에서 빠진다 — 요청자가 요청해서 나온 판이 아니기 때문이다. 재개 구간의
+   * 첫 판은 코멘트로 만들어진 것이므로 1회차로 센다.
+   */
   mockupIterationsUsed(sessionId: string): number {
-    return Math.max(0, this.deps.store.listMockups(sessionId).length - 1);
+    const mockups = this.deps.store.listMockups(sessionId);
+    let closedAt = -1;
+    for (const [index, mockup] of mockups.entries()) {
+      if (mockup.convergence === 'approved' || mockup.convergence === 'escalated') closedAt = index;
+    }
+    const inSegment = mockups.length - 1 - closedAt;
+    return closedAt < 0 ? Math.max(0, inSegment - 1) : inSegment;
   }
 
   /** 반복 예산 — 어댑터가 남은 횟수를 미리 고지할 근거 (P-U1). */
@@ -1940,6 +1960,8 @@ export class IntakeRunner<A> {
    * 디자인 시스템 선정 (F4, #54) — 레이아웃이 수렴한 목업에 요청자가 테마 하나를 고르거나
    * 「개발팀이 정하는 게 좋겠다」로 위임한다(승격과 같은 정신 — 답할 수 없는 선택을 강요하지
    * 않는다). LLM 호출이 없다: 테마는 서빙 렌더러가 토큰 교체로 입힌다.
+   *
+   * 열려 있는 판이면 세션 상태와 무관하게 받는다 (#67) — 재개 구간은 documented에서 진행된다.
    */
   async selectMockupTheme(
     event: IntakeEvent<A>,
@@ -1947,7 +1969,7 @@ export class IntakeRunner<A> {
   ): Promise<ReplyOutcome | null> {
     const { store } = this.deps;
     const session = store.findSessionByThreadKey(event.threadKey);
-    if (!session || session.status !== 'mockup') return null;
+    if (!session) return null;
     const current = store.latestMockup(session.id);
     if (!current || current.convergence !== 'iterating') return null;
     const language = this.sessionLanguageOf(session.id, event);
@@ -1982,11 +2004,14 @@ export class IntakeRunner<A> {
    * requirements vN+1로 흡수한다. 흡수 후 목업은 폐기 가능해야 한다: 목업에만 존재하는 확정
    * 사항이 남으면 그 정보는 공식적으로 아무 데도 없다 (F6은 목업을 「구현 기준 아님」으로 보낸다).
    * 시각 방향 미결정 승인은 없다 — 선정 또는 위임이 먼저다.
+   *
+   * 재승인도 같은 경로다 (#67) — 재개 구간의 판을 승인하면 역주입이 다시 일어나 문서 vN+1이
+   * 나온다. 세션 상태는 보지 않는다: 열려 있는 판인지만 본다.
    */
   async approveMockup(event: IntakeEvent<A>): Promise<ReplyOutcome | null> {
     const { store } = this.deps;
     const session = store.findSessionByThreadKey(event.threadKey);
-    if (!session || session.status !== 'mockup') return null;
+    if (!session) return null;
     const current = store.latestMockup(session.id);
     if (!current || current.convergence !== 'iterating') return null;
     if (!current.selectedTheme && !current.themeDelegated) return null;

@@ -38,7 +38,7 @@ import type { UploadedFile } from '@/lib/types';
 import { rememberSession } from '@/lib/local-sessions';
 import { t, sessionLang, useLang, type Lang } from '@/lib/i18n';
 import { judeState, type JudeState } from '@/lib/jude-geometry';
-import { fullyPromoted, isLastRound, journeyStep, roundFailed } from '@/lib/stage';
+import { fullyPromoted, isLastRound, journeyStep, mockupCardMode, roundFailed } from '@/lib/stage';
 import { ApiError, type SessionDetail } from '@/lib/types';
 import { watchProcessing } from '@/lib/watch-processing';
 
@@ -202,6 +202,46 @@ export default function SessionPage() {
   };
 
   const failed = roundFailed(pendingRound, processing || busy);
+  /**
+   * 목업 카드 (#54 · #66 · #67) — 열려 있는 판이면 반복 패널, 닫힌 판이면 열람 + 고치기 진입점.
+   *
+   * 세션 상태로 가르지 않는다: 재개 구간은 `documented`에서 진행되므로(승인이 여정을 되돌리지
+   * 않는다) 같은 상태에 두 모습이 다 나온다. 판이 열렸는지가 유일한 기준이다.
+   */
+  const mockupMode = mockupCardMode(detail.mockup);
+  const mockupCard =
+    detail.mockup === null || mockupMode === 'none' ? null : mockupMode === 'panel' ? (
+      <MockupPanel
+        key={`${String(detail.mockup.latestVersion)}-${String(detail.mockup.selectedTheme)}-${String(detail.mockup.themeDelegated)}`}
+        lang={lang}
+        sessionId={sessionId}
+        submitting={busy || failed}
+        onComment={(version, comments) =>
+          void act(() => sendMockupComments(sessionId, version, comments))
+        }
+        onSelectTheme={(selection) => {
+          // 선정은 동기 200 (LLM 없음) — 감시 없이 재조회로 충분하다
+          setError(null);
+          void selectMockupTheme(sessionId, selection)
+            .then(() => refetch())
+            .catch((e: unknown) =>
+              setError(e instanceof Error ? e.message : t(lang, 'session.actionFailed')),
+            );
+        }}
+        onApprove={() => void act(() => approveMockup(sessionId))}
+      />
+    ) : (
+      <MockupArchive
+        // 재승인으로 판이 바뀌면 다시 읽는다 — 카드가 자기 상태를 스스로 가져오기 때문이다
+        key={String(detail.mockup.latestVersion)}
+        lang={lang}
+        sessionId={sessionId}
+        submitting={busy || failed}
+        onRevise={(version, comments) =>
+          void act(() => sendMockupComments(sessionId, version, comments))
+        }
+      />
+    );
   // 정본은 저장 구조체 (#53). 저장 행이 없는 레거시 세션만 게시 텍스트 역파싱으로 폴백한다 —
   // 마지막 발화가 문서가 아닐 수 있으므로(#52 안내 회신) 문서 머리로 골라낸다.
   const docLines = storedDocument
@@ -295,25 +335,7 @@ export default function SessionPage() {
         )
       ) : session.status === 'mockup' ? (
         <div className="grid gap-4">
-          <MockupPanel
-            key={`${String(detail.mockup?.latestVersion)}-${String(detail.mockup?.selectedTheme)}-${String(detail.mockup?.themeDelegated)}`}
-            lang={lang}
-            sessionId={sessionId}
-            submitting={busy || failed}
-            onComment={(version, comments) =>
-              void act(() => sendMockupComments(sessionId, version, comments))
-            }
-            onSelectTheme={(selection) => {
-              // 선정은 동기 200 (LLM 없음) — 감시 없이 재조회로 충분하다
-              setError(null);
-              void selectMockupTheme(sessionId, selection)
-                .then(() => refetch())
-                .catch((e: unknown) =>
-                  setError(e instanceof Error ? e.message : t(lang, 'session.actionFailed')),
-                );
-            }}
-            onApprove={() => void act(() => approveMockup(sessionId))}
-          />
+          {mockupCard}
           {/* 목업을 보다 슬롯 값의 오류를 발견할 수 있다 — 정정 진입점 유지 (#51, US-16) */}
           <SlotReview
             lang={lang}
@@ -363,8 +385,8 @@ export default function SessionPage() {
             onCorrect={onCorrectDocument}
             submitting={busy || failed}
           />
-          {/* 확정된 목업 열람 (#66) — 승인 뒤에도 자기가 고른 화면을 다시 볼 수 있어야 한다 */}
-          {detail.mockup && <MockupArchive lang={lang} sessionId={sessionId} />}
+          {/* 승인 뒤에도 화면을 다시 보고 다시 고칠 수 있다 (#66 · #67) */}
+          {mockupCard}
           <AttachmentList lang={lang} sessionId={sessionId} attachments={attachments} />
           {completed ? (
             <Alert>

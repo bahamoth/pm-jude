@@ -889,6 +889,55 @@ describe('웹 어댑터 — 목업 반복·디자인 시스템 선정 (F4, #54)'
     expect(store.latestMockup(sessionId)?.convergence).toBe('approved');
   });
 
+  it('승인된 목업에도 코멘트가 통한다 — documented 세션에서 개선 반복이 재개된다 (#67)', async () => {
+    const { baseUrl, store } = await startServer(
+      new ScriptedBackend([
+        clarificationResponse,
+        refinedCompletenessResponse,
+        requirementsResponse,
+        uiYesResponse,
+        mockupResponse('v1'),
+        backInjectedResponse,
+        mockupResponse('v2 — 카드형'),
+      ]),
+    );
+    const sessionId = await openMockupSession(baseUrl);
+    await fetch(`${baseUrl}/api/sessions/${sessionId}/mockup/theme`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ delegated: true }),
+    });
+    await fetch(`${baseUrl}/api/sessions/${sessionId}/mockup/approval`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+    await waitFor(async () => {
+      const d = await json<{ session: { status: string }; processing: boolean }>(
+        await fetch(`${baseUrl}/api/sessions/${sessionId}`),
+      );
+      return !d.processing && d.session.status === 'documented' ? d : null;
+    });
+
+    const revised = await fetch(`${baseUrl}/api/sessions/${sessionId}/mockup/annotations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ mockupVersion: 1, comments: [{ text: '표를 카드로 바꿔 주세요' }] }),
+    });
+
+    expect(revised.status).toBe(202); // 승인이 코멘트 경로를 닫지 않는다
+    const state = await waitFor(async () => {
+      const s = await json<{ latestVersion: number; convergence: string; processing: boolean }>(
+        await fetch(`${baseUrl}/api/sessions/${sessionId}/mockup`),
+      );
+      return !s.processing && s.latestVersion === 2 ? s : null;
+    });
+    expect(state.convergence).toBe('iterating'); // 새 판은 다시 열려 테마·승인을 받을 수 있다
+    // 재개가 여정을 되돌리지 않는다 — 문서와 완주는 그대로다
+    expect(store.getSession(sessionId)?.status).toBe('documented');
+    expect(store.listRequirementsDocs(sessionId).length).toBe(2);
+  });
+
   it('스테일 목업 버전의 어노테이션은 409 — 다른 탭이 이미 다음 판으로 넘긴 경우', async () => {
     const { baseUrl } = await startServer(
       new ScriptedBackend([

@@ -834,7 +834,10 @@ export function createWebServer(deps: WebServerDeps): Server {
     });
   }
 
-  /** 어노테이션 접수 → 202 즉시, 재생성은 백그라운드 (F4). 스테일 판 코멘트는 409. */
+  /**
+   * 어노테이션 접수 → 202 즉시, 재생성은 백그라운드 (F4). 스테일 판 코멘트는 409.
+   * 세션 상태는 보지 않는다 (#67) — 승인·에스컬레이션으로 닫힌 판에 온 코멘트가 재개 요청이다.
+   */
   async function handleMockupAnnotations(
     req: IncomingMessage,
     res: ServerResponse,
@@ -846,7 +849,7 @@ export function createWebServer(deps: WebServerDeps): Server {
       return;
     }
     const latest = store.latestMockup(sessionId);
-    if (!latest || session.status !== 'mockup') {
+    if (!latest) {
       sendJson(res, 409, { error: '지금은 목업 코멘트를 받을 수 없어요.' });
       return;
     }
@@ -911,7 +914,8 @@ export function createWebServer(deps: WebServerDeps): Server {
       return;
     }
     const latest = store.latestMockup(sessionId);
-    if (!latest || session.status !== 'mockup' || latest.convergence !== 'iterating') {
+    // 재개 구간은 documented에서 진행된다 — 열린 판인지만 본다 (#67)
+    if (!latest || latest.convergence !== 'iterating') {
       sendJson(res, 409, { error: '지금은 목업을 승인할 수 없어요.' });
       return;
     }

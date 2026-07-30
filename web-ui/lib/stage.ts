@@ -64,6 +64,21 @@ export function roundFailed(pendingRound: PendingRound, processing: boolean): bo
   return !processing && pendingRound !== null;
 }
 
+/**
+ * 목업 카드를 어느 모습으로 낼지 (#54 · #66 · #67).
+ *
+ * 세션 상태가 아니라 **판이 열렸는지**가 기준이다. 승인·에스컬레이션으로 닫힌 판은 열람 +
+ * 고치기 진입점(archive)이고, 열린 판은 반복 패널(panel)이다. 재개 구간은 세션을 `mockup`으로
+ * 되돌리지 않고 `documented`에서 진행되므로 — 승인이 여정을 되돌리면 완주가 취소된 것처럼
+ * 읽힌다 — 같은 상태에서 두 모습이 다 나온다.
+ */
+export function mockupCardMode(
+  mockup: { convergence: string } | null,
+): 'panel' | 'archive' | 'none' {
+  if (mockup === null) return 'none';
+  return mockup.convergence === 'iterating' ? 'panel' : 'archive';
+}
+
 /** 전면 승격 문서 (#28 S-5) — 채워진 슬롯 없이 전부 개발팀 확인으로 넘어간 경우. */
 export function fullyPromoted(slots: readonly SlotView[]): boolean {
   return (
