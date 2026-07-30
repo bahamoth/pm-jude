@@ -26,6 +26,10 @@ Docs are tiered, not uniformly bilingual: T1 keeps paired `X.md` / `X.ko.md` fil
 
 Requester-facing copy speaks as **Jude**, a first-person colleague. The voice applies to the `clarification` prompt and `web-ui/` copy only — `completeness` is untouched and the `requirements` document stays neutral. See `docs/persona/jude.md`.
 
+### UX conventions
+
+Baseline interaction rules for `web-ui/` that an agent applies **without being asked** — dismissal paths, proximity of actions to their target, in-place editing, keyboard contract, legibility of finished states. Each rule records the failure that produced it. Deviating from one is a design decision that belongs in the PR body. See `docs/agents/ux-conventions.md`; add new rules there whenever the operator corrects an interaction.
+
 ### Session trace
 
 `pnpm trace` reads the session store and regenerates `data/trace.html` — a self-contained viewer (JSON data island convention) over sessions, transcripts, slot states, signals, and version axes. Operator standing directive: tracking visualization is a permanent companion concern — any change that adds or reshapes session-store writes must keep `src/trace/` rendering them (extend `buildTraceData` + tests in `tests/trace.test.ts`).

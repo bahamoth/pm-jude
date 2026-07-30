@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { InlineEditor } from '@/components/inline-editor';
 import { Textarea } from '@/components/ui/textarea';
 import { anchorPosition, type AnchorResult } from '@/lib/anchor';
 import { readSelectionPaths, selectionFromElement, type DocSelection } from '@/lib/doc-selection';
@@ -57,6 +58,8 @@ export function DocumentView({
   // 선택 직후에는 모드를 고르는 상태다 — 무엇으로 고칠지 정하기 전에 입력창을 띄우지 않는다
   const [mode, setMode] = useState<'instruct' | 'edit' | null>(null);
   const [text, setText] = useState('');
+  // 인플레이스 편집 중인 주소 — 그 줄이 편집기로 바뀐다 (#66 UX)
+  const [editingPath, setEditingPath] = useState<string | null>(null);
   const correctable = onCorrect !== undefined && lines.some((line) => line.path);
 
   const open = (picked: DocSelection | null, presetText = '') => {
@@ -71,6 +74,15 @@ export function DocumentView({
     setMode(null);
     setText('');
   };
+  /** 그 자리에서 고치기로 전환 — 팝오버는 닫고 해당 줄을 편집기로 바꾼다. */
+  const startInlineEdit = (path: string) => {
+    close();
+    setEditingPath(path);
+  };
+  const commitInline = (path: string, value: string) => {
+    setEditingPath(null);
+    onCorrect?.({ mode: 'edit', paths: [path], text: value });
+  };
 
   // 드래그 선택이든 항목 클릭이든 같은 경로다 — 클릭은 한 요소를 고른 선택이다 (#66)
   const captureSelection = () => {
@@ -82,6 +94,12 @@ export function DocumentView({
     // 드래그로 잡은 선택이 있으면 그쪽이 우선이다 — 클릭이 범위 선택을 덮지 않게
     if (!window.getSelection()?.isCollapsed) return;
     open(selectionFromElement(event.currentTarget));
+  };
+  /** 더블클릭은 모드 선택을 건너뛴다 — 고칠 문장을 아는 사람에게 클릭 두 번을 아낀다. */
+  const editLine = (event: React.MouseEvent<HTMLElement>) => {
+    if (!correctable) return;
+    const path = event.currentTarget.dataset.docPath;
+    if (path) startInlineEdit(path);
   };
 
   // 팝오버를 선택 지점 옆에 붙인다 — 고칠 곳과 입력하는 곳이 멀면 무엇을 고치는지 놓친다
@@ -99,14 +117,25 @@ export function DocumentView({
     );
   }, [selection, mode]);
 
-  // ESC로 닫고, 모드를 고르면 바로 입력에 커서가 간다 — 클릭 한 번을 아낀다
+  // 닫는 길은 셋이다 — 명시적 취소 버튼, ESC, 그리고 바깥 클릭. 어느 하나만 두면 갇힌다.
   useEffect(() => {
     if (!selection) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') close();
     };
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (popoverRef.current?.contains(target)) return; // 팝오버 안의 클릭은 조작이다
+      close();
+    };
     document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    // 캡처 단계에서 받는다 — 문서 본문의 클릭 핸들러가 먼저 새 선택을 열어버리지 않게
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onPointerDown, true);
+    };
   }, [selection]);
   useEffect(() => {
     if (mode) inputRef.current?.focus();
@@ -148,6 +177,20 @@ export function DocumentView({
           </div>
         )}
         {lines.map((line, i) => {
+          // 편집 중인 줄은 그 자리에서 편집기가 된다 — 종류와 무관하게 같은 경로 (#66 UX)
+          if (line.path && line.path === editingPath) {
+            return (
+              <span key={i} className={line.kind === 'sub' ? 'block pl-6' : 'block'}>
+                <InlineEditor
+                  lang={lang}
+                  initial={line.text}
+                  submitting={submitting}
+                  onCommit={(value) => commitInline(line.path!, value)}
+                  onCancel={() => setEditingPath(null)}
+                />
+              </span>
+            );
+          }
           switch (line.kind) {
             case 'title':
               return (
@@ -160,7 +203,7 @@ export function DocumentView({
               );
             case 'field':
               return (
-                <p key={i} data-doc-path={line.path} onClick={pickLine}>
+                <p key={i} data-doc-path={line.path} onClick={pickLine} onDoubleClick={editLine}>
                   <span className="font-semibold">{line.label}</span>
                   <span className="text-muted-foreground"> — </span>
                   {line.text}
@@ -180,6 +223,7 @@ export function DocumentView({
                   key={i}
                   data-doc-path={line.path}
                   onClick={pickLine}
+                  onDoubleClick={editLine}
                   className={`flex gap-2 pl-1${correctable && line.path ? ' cursor-pointer rounded hover:bg-muted/60' : ''}`}
                 >
                   <span className="text-primary">•</span>
@@ -192,6 +236,7 @@ export function DocumentView({
                   key={i}
                   data-doc-path={line.path}
                   onClick={pickLine}
+                  onDoubleClick={editLine}
                   className={`pl-6 text-sm${correctable && line.path ? ' cursor-pointer rounded hover:bg-muted/60' : ''}`}
                 >
                   – {line.text}
@@ -256,12 +301,12 @@ export function DocumentView({
                   className="justify-start"
                   disabled={selection.paths.length > 1}
                   onClick={() => {
-                    // 직접 고치기는 현재 문장을 그대로 띄워 놓고 손보게 한다
-                    setMode('edit');
-                    setText(currentTextOf(bodyRef.current, selection.paths[0]));
+                    // 팝오버 안에서 고치지 않는다 — 문서의 그 줄이 편집기가 된다
+                    const target = selection.paths[0];
+                    if (target) startInlineEdit(target);
                   }}
                 >
-                  {t(lang, 'doc.correctModeEdit')}
+                  {t(lang, 'doc.correctModeEditInline')}
                 </Button>
                 {selection.paths.length > 1 && (
                   <p className="text-[11px] text-muted-foreground">
@@ -271,7 +316,7 @@ export function DocumentView({
               </div>
             ) : (
               <div className="grid gap-2">
-                {mode === 'instruct' && selection.quotedText && (
+                {selection.quotedText && (
                   <p className="line-clamp-2 rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">
                     “{selection.quotedText}”
                   </p>
@@ -281,20 +326,14 @@ export function DocumentView({
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={(e) => {
-                    // 지시는 한 줄이 보통이라 Enter로 보낸다. 직접 편집은 줄바꿈이 필요해 ⌘/Ctrl+Enter.
-                    const send = mode === 'instruct' ? !e.shiftKey : e.metaKey || e.ctrlKey;
-                    if (e.key === 'Enter' && send) {
+                    // 지시는 한 줄이 보통이라 Enter로 보낸다 (Shift+Enter 줄바꿈)
+                    if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
                       submit();
                     }
                   }}
-                  placeholder={t(
-                    lang,
-                    mode === 'edit'
-                      ? 'doc.correctEditPlaceholder'
-                      : 'doc.correctInstructPlaceholder',
-                  )}
-                  rows={mode === 'edit' ? 5 : 2}
+                  placeholder={t(lang, 'doc.correctInstructPlaceholder')}
+                  rows={2}
                   className="text-sm"
                 />
                 <div className="flex items-center gap-2">
