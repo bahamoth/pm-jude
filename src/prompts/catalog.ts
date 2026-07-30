@@ -3,6 +3,7 @@ import { attachmentExtractionPromptV0 } from './attachment-extraction-v0';
 import { backInjectionPromptV0 } from './back-injection-v0';
 import { condensationPromptV0 } from './condensation-v0';
 import { condensationPromptV1 } from './condensation-v1';
+import { documentPatchPromptV0 } from './document-patch-v0';
 import { clarificationPromptV0 } from './clarification-v0';
 import { clarificationPromptV1 } from './clarification-v1';
 import { clarificationPromptV2 } from './clarification-v2';
@@ -45,6 +46,8 @@ export const BACK_INJECTION_V0 = 'back-injection@0.1.0';
 export const CONDENSATION_V0 = 'condensation@0.1.0';
 /** 현행 — 산문형 요구·미결 표기를 표와 동급 보존하는 판 (#64). */
 export const CONDENSATION_V1 = 'condensation@0.2.0';
+/** 문서 부분 교정 — 지목된 요소만 재생성한다 (#66, ADR-0016). */
+export const DOCUMENT_PATCH_V0 = 'document-patch@0.1.0';
 
 /** 리포지토리에 정의된 모든 프롬프트 버전이 등록된 레지스트리를 만든다. */
 export function createDefaultRegistry(): PromptRegistry {
@@ -65,5 +68,6 @@ export function createDefaultRegistry(): PromptRegistry {
   registry.register(backInjectionPromptV0);
   registry.register(condensationPromptV0);
   registry.register(condensationPromptV1);
+  registry.register(documentPatchPromptV0);
   return registry;
 }

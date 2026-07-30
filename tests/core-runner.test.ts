@@ -1580,3 +1580,137 @@ describe('코어 러너 — 세션 비용·지표 가시성 (#63)', () => {
     expect(checks[1]?.payload).toMatchObject({ llmScore: 30, scoreDelta: -5, improved: false });
   });
 });
+
+describe('코어 러너 — 문서 부분 교정 (#66, ADR-0016)', () => {
+  /** 문서까지 도달한 세션을 만든다 — 교정은 그 뒤의 일이다. */
+  async function reachDocumented(extra: string[] = []) {
+    const made = makeRunner([
+      clarificationResponse,
+      refinedCompletenessResponse,
+      requirementsResponse,
+      nonUiClassificationResponse,
+      ...extra,
+    ]);
+    await made.runner.handleIntake(intake);
+    await made.runner.handleReply({
+      ...intake,
+      text: '영업팀 매니저가 봅니다. 수작업 집계를 없애고 싶어요. 데이터는 모르겠어요 — 개발팀이 정해 주세요.',
+    });
+    return made;
+  }
+
+  it('직접 편집은 LLM 없이 지목한 요소만 바꾸고 문서 vN+1을 만든다', async () => {
+    const { runner, store, backend } = await reachDocumented();
+    const session = store.findSessionByThreadKey(intake.threadKey)!;
+    const before = store.latestRequirementsDoc(session.id)!;
+    const callsBefore = backend.requests.length;
+
+    const outcome = await runner.correctDocument(intake, {
+      mode: 'edit',
+      paths: ['problem'],
+      replacement: '영업 실적을 매일 확인할 수단이 없다',
+    });
+
+    expect(outcome?.status).toBe('documented');
+    expect(backend.requests).toHaveLength(callsBefore); // LLM 호출 없음
+    const after = store.latestRequirementsDoc(session.id)!;
+    expect(after.version).toBe(before.version + 1);
+    expect((after.content as { problem: string }).problem).toBe(
+      '영업 실적을 매일 확인할 수단이 없다',
+    );
+    // 나머지는 그대로다 — 부분 교정의 전부다
+    expect((after.content as { users: string[] }).users).toEqual(
+      (before.content as { users: string[] }).users,
+    );
+  });
+
+  it('자연어 지시는 지목 요소만 재생성한다 — 나머지는 출력 계약상 건드릴 수 없다', async () => {
+    const patchResponse = JSON.stringify({
+      replacements: [{ path: 'problem', text: '지시를 반영한 새 문제 서술' }],
+    });
+    const { runner, store, backend } = await reachDocumented([patchResponse]);
+    const session = store.findSessionByThreadKey(intake.threadKey)!;
+    const before = store.latestRequirementsDoc(session.id)!;
+
+    await runner.correctDocument(intake, {
+      mode: 'instruct',
+      paths: ['problem'],
+      instruction: '문제를 더 구체적으로 써 주세요',
+      quotedText: '영업 실적을 정리해 볼 수단이 없어',
+    });
+
+    // 프롬프트 입력에 지목 요소의 현재 값과 지시가 실린다
+    const input = backend.requests.at(-1)?.input as {
+      targets: Array<{ path: string; currentText: string }>;
+      instruction: string;
+      quotedText?: string;
+    };
+    expect(input.targets).toEqual([
+      expect.objectContaining({ path: 'problem', currentText: expect.any(String) }),
+    ]);
+    expect(input.instruction).toBe('문제를 더 구체적으로 써 주세요');
+    expect(input.quotedText).toBe('영업 실적을 정리해 볼 수단이 없어');
+
+    const after = store.latestRequirementsDoc(session.id)!;
+    expect(after.version).toBe(before.version + 1);
+    expect((after.content as { problem: string }).problem).toBe('지시를 반영한 새 문제 서술');
+  });
+
+  it('지목하지 않은 주소를 돌려주면 무시한다 — 나머지 불변은 코드가 지킨다', async () => {
+    const patchResponse = JSON.stringify({
+      replacements: [
+        { path: 'problem', text: '허용된 변경' },
+        { path: 'users[0]', text: '지목되지 않은 변경' },
+      ],
+    });
+    const { runner, store } = await reachDocumented([patchResponse]);
+    const session = store.findSessionByThreadKey(intake.threadKey)!;
+    const before = store.latestRequirementsDoc(session.id)!;
+
+    await runner.correctDocument(intake, {
+      mode: 'instruct',
+      paths: ['problem'],
+      instruction: '문제만 고쳐 주세요',
+    });
+
+    const after = store.latestRequirementsDoc(session.id)!;
+    expect((after.content as { problem: string }).problem).toBe('허용된 변경');
+    expect((after.content as { users: string[] }).users).toEqual(
+      (before.content as { users: string[] }).users,
+    );
+  });
+
+  it('종결된 세션도 교정할 수 있다 — 문서는 끊임없이 고칠 수 있어야 한다', async () => {
+    const { runner, store } = await reachDocumented();
+    const session = store.findSessionByThreadKey(intake.threadKey)!;
+    store.updateSessionState(session.id, { status: 'closed', terminalState: 'issue_created' });
+
+    const outcome = await runner.correctDocument(intake, {
+      mode: 'edit',
+      paths: ['problem'],
+      replacement: '종결 후에도 고쳐진 문제 서술',
+    });
+
+    expect(outcome).not.toBeNull();
+    const after = store.latestRequirementsDoc(session.id)!;
+    expect((after.content as { problem: string }).problem).toBe('종결 후에도 고쳐진 문제 서술');
+    // 종결 상태는 교정으로 뒤집히지 않는다 — 문서 정확성과 대화 진행은 다른 축이다
+    expect(store.getSession(session.id)?.terminalState).toBe('issue_created');
+  });
+
+  it('교정 이력이 신호로 남는다 — 무엇을 왜 고쳤는지가 판독 근거다', async () => {
+    const { runner, store } = await reachDocumented();
+    const session = store.findSessionByThreadKey(intake.threadKey)!;
+
+    await runner.correctDocument(intake, {
+      mode: 'edit',
+      paths: ['problem'],
+      replacement: '고친 문제',
+    });
+
+    const signal = store
+      .listSignals(session.id)
+      .find((entry) => entry.type === 'document_corrected');
+    expect(signal?.payload).toMatchObject({ mode: 'edit', paths: ['problem'] });
+  });
+});
