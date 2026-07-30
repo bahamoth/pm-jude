@@ -1,3 +1,4 @@
+import type { Rect } from './anchor';
 import type { DocLine } from './document';
 
 /**
@@ -24,20 +25,24 @@ export function pathsInRange(
   return paths;
 }
 
-/**
- * 현재 브라우저 선택이 걸친 문서 주소를 읽는다 — `data-doc-path`가 심긴 요소를 훑는다.
- * 선택이 없거나 문서 밖이면 빈 배열. 선택 원문도 함께 돌려준다(지시의 초점이 된다).
- */
-export function readSelectionPaths(container: HTMLElement | null): {
+/** 선택 결과 — 주소·인용문과 팝오버를 띄울 화면 좌표(viewport 기준). */
+export interface DocSelection {
   paths: string[];
   quotedText: string;
-} {
-  const empty = { paths: [], quotedText: '' };
-  if (!container) return empty;
+  rect: Rect;
+}
+
+/**
+ * 현재 브라우저 선택이 걸친 문서 주소를 읽는다 — `data-doc-path`가 심긴 요소를 훑는다.
+ * 선택이 없거나 문서 밖이면 null. 선택 원문과 좌표를 함께 돌려준다 — 정정 입력이 고칠 곳
+ * 바로 옆에서 열려야 하기 때문이다 (#66 UX).
+ */
+export function readSelectionPaths(container: HTMLElement | null): DocSelection | null {
+  if (!container) return null;
   const selection = window.getSelection();
-  if (!selection || selection.isCollapsed || selection.rangeCount === 0) return empty;
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null;
   const range = selection.getRangeAt(0);
-  if (!container.contains(range.commonAncestorContainer)) return empty;
+  if (!container.contains(range.commonAncestorContainer)) return null;
 
   const paths: string[] = [];
   for (const element of container.querySelectorAll<HTMLElement>('[data-doc-path]')) {
@@ -46,5 +51,23 @@ export function readSelectionPaths(container: HTMLElement | null): {
       if (path) paths.push(path);
     }
   }
-  return { paths, quotedText: selection.toString().trim() };
+  if (paths.length === 0) return null;
+  const box = range.getBoundingClientRect();
+  return {
+    paths,
+    quotedText: selection.toString().trim(),
+    rect: { top: box.top, left: box.left, width: box.width, height: box.height },
+  };
+}
+
+/** 요소 하나를 지목한 선택 — 항목 클릭은 그 줄을 고른 선택이다. */
+export function selectionFromElement(element: HTMLElement): DocSelection | null {
+  const path = element.dataset.docPath;
+  if (!path) return null;
+  const box = element.getBoundingClientRect();
+  return {
+    paths: [path],
+    quotedText: '',
+    rect: { top: box.top, left: box.left, width: box.width, height: box.height },
+  };
 }
