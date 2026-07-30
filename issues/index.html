@@ -1826,7 +1826,7 @@
   {
     "id": 66,
     "title": "문서 상시 부분 교정 — 요소 주소 체계 + 지시/편집 두 방식",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
@@ -1837,7 +1837,13 @@
     "created": "2026-07-30",
     "updated": "2026-07-30",
     "body": "## 운영자 지시 (2026-07-30)\n\n기존 설계가 잘못됐다. ① **문서는 끊임없이 교정이 가능해야 한다** — 완주·종결 이후에도. ② **문서는 특정 범위만 수정할 수 있어야 한다** — 전체는 대체로 만족하고 일부만 고칠 필요가 있다. ③ 수정 단위는 항목뿐 아니라 **드래그로 선택한 영역**도 되어야 한다. ④ 부분 수정은 **LLM 지시 방식과 텍스트 직접 편집 둘 다** 지원해야 한다.\n\n## 현재 결함 (코드 확인)\n\n- **정정 = 전체 재생성**: confirmSlot(false) → 슬롯 unfilled → processReply(correction) → 완결성 재판정 → deliverDocument로 **문서 전량 재생성**. 만족한 부분이 함께 바뀐다. 실증: #64 A/B에서 v3→v4 재생성 때 승인 워크플로 스토리가 소실됐다.\n- **종결 세션 정정 불가**: confirmSlot이 `status !== 'documented' && status !== 'mockup'`이면 즉시 반환. \"끊임없이 교정\"과 어긋난다.\n- **지목할 대상이 없다**: web-ui/lib/document.ts가 scope.inScope 8개 항목을 `join(', ')`으로 한 문자열로 뭉갠다. 줄바꿈·스타일이 안 먹는 원인이자, 부분 수정의 대상 주소가 없는 원인이다(운영자 가독성 지적과 같은 뿌리).\n\n## 설계\n\n**문서 요소 주소(path)** — 정정의 좌표. 예: `problem` / `users[1]` / `scope.inScope[2]` / `stories[4].story` / `stories[4].acceptanceCriteria[1].ears` / `dataSources[0]` / `openIssues[2].question`. 렌더가 이 path를 DOM data 속성으로 심고, 드래그 선택은 선택 범위가 걸친 path 집합 + 인용 텍스트로 환원된다.\n\n**정정 요청 계약**\n```\n{ paths: string[], quotedText?: string, mode: 'instruct' | 'edit',\n  instruction?: string,   // mode=instruct — 자연어 지시\n  replacement?: string }  // mode=edit — 요청자가 쓴 대체 텍스트\n```\n- `edit`: 코드가 결정론적으로 적용. LLM 없음. 형식 검증은 경고만(요청자가 쓴 문장을 막지 않는다).\n- `instruct`: 신설 프롬프트가 **지목된 요소만** 재생성한다. 문서 전체는 컨텍스트로 주되 나머지 요소의 변경을 금지한다.\n- 두 방식 모두 문서 vN+1을 만들고, 변경 이력(방식·요청자 입력·대상 path)을 영속한다.\n\n## 단계\n\n1. **요소 주소 + 요소 단위 렌더** — 가독성 해결 + 부분 수정의 전제. 배열 항목이 각자 한 줄이 된다.\n2. **종결 후 교정 허용** — 문서 정정에는 종결 잠금을 적용하지 않는다.\n3. **직접 편집(mode=edit)** — LLM 없는 결정론 경로.\n4. **자연어 지시(mode=instruct)** — document-patch 프롬프트 신설, 나머지 요소 불변 강제.\n5. **드래그 선택 UI** — Selection API → path 집합 + 인용.\n\n## 원칙 7과의 관계\n\n문서 단일 진실 원천은 유지된다. 바뀌는 것은 **문서가 슬롯만의 함수가 아니라는 것** — 슬롯 정정, 목업 역주입, 요청자의 직접 정정이 모두 문서를 갱신하는 입력이 된다. 요청자의 정정 입력은 발화로 남아 근거 규율(근거는 대화·첨부)을 지킨다. ADR로 기록한다.\n\n## Out of Scope\n\n- 승인된 목업 열람 경로 복원(별도 — documented 분기에 MockupPanel 부재)\n- 프롬프트의 용어 정의 보강(Optiflow·MVP·Level 체계 — #64 개정분 재생성으로 확인 후 판단)",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-30",
+        "body": "PR #48 rebase-merge로 랜딩 — 종결. 운영자 지시 4항(끊임없는 교정·특정 범위만·드래그 선택·지시와 직접 편집 병행) 전부 구현하고 실물 검증했다.\n\n**구조**: 문서 요소 주소 체계(problem·users[i]·scope.inScope[i]·stories[i].acceptanceCriteria[j].ears|gwt·dataSources[i]·openIssues[i].question)를 도입해 렌더·정정·선택이 같은 좌표를 쓴다. 운영자가 지적한 가독성 문제(줄바꿈·스타일 없음)와 부분 수정 불가가 같은 뿌리였다 — 배열을 join(', ')으로 뭉갠 것.\n\n**엔진**: src/document/path.ts(순수 함수·주소 하나라도 틀리면 전부 거부) + document-patch@0.1.0(출력이 지목 주소의 새 텍스트뿐이라 나머지 불변이 계약으로 보장된다) + correctDocument(상태를 보지 않는다 — 종결·이슈 생성 후에도 교정 가능, 교정이 세션 상태를 되돌리지도 않는다).\n\n**실물 검증(세션 49597175)**: 직접 편집 = users[0]만 변경·나머지 5섹션 바이트 동일·LLM 0회·v2→v3. 자연어 지시 = scope.inScope[1]에 'Level 체계를 분명히' → 10.5초에 4단계 체계 설명 삽입·나머지 전부 바이트 동일·v3→v4. 전체 재생성(519초) 대비 50배. 부수 효과로 운영자가 지적한 'Level 1234 설명 없음'이 전체 재생성 없이 해소됐다.\n\n**UX는 운영자 지적 6라운드로 재구성됐다**: 하단 고정 패널 → 선택 지점 옆 팝오버 → 팝오버 내 편집 → 인플레이스 편집(그 줄이 편집기가 된다) → 1블록 제한 해제(줄 단위 매핑으로 여러 줄 편집 + 항목 추가·삭제) → 모드 선택 단계 제거(더블클릭이 직접 편집이므로 팝오버는 지시 전용) → 대상 하이라이트(최소 단위가 블록이라는 사실을 눈으로 보여준다) → 스크롤 문제 3중 수정(absolute→fixed, 측정 전 렌더 금지, preventScroll+위치 복원) → 승인된 목업 열람 복원.\n\n**남은 산출물**: docs/agents/ux-conventions.md — 지적 하나마다 규칙 하나와 그것을 낳은 실패를 함께 적었다. AGENTS.md가 참조하므로 다음 세션·다른 에이전트도 따른다. 잘못 적은 규칙 1건(스크롤 시 닫기)이 실패로 반증돼 정정된 이력도 남아 있다.\n\n**Out of Scope**: 스토리·수용기준의 줄 단위 다중 편집(한 줄이 한 항목이 아니라 story/ears/gwt가 겹쳐 줄 수 변화의 의미가 정해지지 않는다), 프롬프트의 용어 정의 보강(Optiflow·MVP)."
+      }
+    ]
   }
 ]
 </script>
