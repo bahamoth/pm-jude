@@ -18,7 +18,11 @@ Each rule exists because it was missed at least once. The "why" column records t
 |---|---|
 | The action happens **next to its target**, not in a panel elsewhere on the page. | #66: the first correction UI put the input at the bottom of the card. The user could not see what they were fixing while typing. |
 | Mode choices (which *kind* of action) also belong next to the target — not one panel away from where the action lands. | Same round of #66. Choosing "AI or manual" far from the text breaks the same link. |
-| Anchored surfaces clamp to their container and flip when space runs out; they never render clipped or off-screen. | A clipped popover is unusable, and the user cannot tell it is clipped. |
+| Anchored surfaces clamp to the viewport and flip when space runs out; they never render clipped or off-screen. | A clipped popover is unusable, and the user cannot tell it is clipped. |
+| Floating surfaces are `position: fixed`, positioned in **viewport** coordinates — never `absolute` inside the content they annotate. | #66: an absolutely-positioned popover on a bottom item extended the document's scroll area, so a click alone moved the page. Floating UI must not participate in document layout. |
+| Never render a floating surface before its coordinates are measured — keep it `invisible` for that frame. | Drawing it at (0,0) first makes the view jump, and focusing it there drags the scroll position with it. |
+| Focus programmatically with `preventScroll: true`. | Without it the browser scrolls to reveal the field, which is exactly the jump the user did not ask for. |
+| A fixed surface closes on scroll and resize rather than chasing its anchor. | Stale coordinates are worse than a closed popover, and the selection context is gone once the user scrolls away. |
 
 ## Editing text
 
