@@ -5,6 +5,7 @@ import {
   CLARIFICATION_V3,
   COMPLETENESS_V1,
   CONDENSATION_V1,
+  DOCUMENT_PATCH_V0,
   MOCKUP_V0,
   PROMOTION_V0,
   REQUIREMENTS_V2,
@@ -17,8 +18,14 @@ import {
   runRuleLayer,
 } from '../prompts/completeness-v0';
 import { detectNotionUrls, parseNotionUrl, type NotionPageSource } from '../connect/notion';
+import {
+  applyDocumentCorrections,
+  readDocumentPath,
+  type DocumentCorrection,
+} from '../document/path';
 import type { CompletenessV1Output } from '../prompts/completeness-v1';
 import type { CondensationOutput } from '../prompts/condensation-v0';
+import type { DocumentPatchOutput } from '../prompts/document-patch-v0';
 import type { PromotionOutput } from '../prompts/promotion-v0';
 import type { BackInjectionOutput } from '../prompts/back-injection-v0';
 import type { MockupOutput } from '../prompts/mockup-v0';
@@ -1217,6 +1224,126 @@ export class IntakeRunner<A> {
    * 아니에요: 해당 슬롯을 미충족으로 되돌리고 event.text(정정 내용)를 재판정에 태운다.
    * 정정 자체는 왕복 상한에 산입되지 않는다(#30).
    */
+  /**
+   * 문서 부분 교정 (#66, ADR-0016) — 지목한 요소만 고쳐 vN+1을 만든다.
+   *
+   * 전체 재생성이 아니다: 만족한 부분이 함께 바뀌는 것을 막는 것이 이 경로의 존재 이유다
+   * (실측 #64 — v3→v4 재생성에서 스토리 하나가 소실됐다).
+   *
+   * **상태를 보지 않는다.** 종결된 세션도, 이슈가 생성된 세션도 문서는 고칠 수 있다 —
+   * 종결은 대화의 진행이 끝났다는 상태이고 문서의 정확성과는 다른 축이다(ADR-0016 결정 4).
+   * 교정은 세션 상태를 되돌리지도 않는다.
+   */
+  async correctDocument(
+    event: IntakeEvent<A>,
+    request: {
+      mode: 'edit' | 'instruct';
+      paths: readonly string[];
+      /** mode=edit — 요청자가 쓴 대체 텍스트. 지목이 여러 개면 모두 이 값이 된다. */
+      replacement?: string;
+      /** mode=instruct — 자연어 정정 지시. */
+      instruction?: string;
+      /** 드래그 선택 원문 (있으면 지시의 초점). */
+      quotedText?: string;
+    },
+  ): Promise<ReplyOutcome | null> {
+    const { store } = this.deps;
+    const session = store.findSessionByThreadKey(event.threadKey);
+    if (!session) return null;
+    const current = store.latestRequirementsDoc(session.id);
+    if (!current) return null; // 아직 문서가 없다 — 고칠 대상이 없다
+    const content = current.content as RequirementsOutput;
+    if (request.paths.length === 0) return this.outcomeOf(session.id);
+
+    // 주소 검증을 먼저 — 틀린 주소로 LLM을 부르거나 문서를 반쯤 고치지 않는다
+    const targets = request.paths.map((path) => ({
+      path,
+      currentText: readDocumentPath(content, path),
+    }));
+
+    let corrections: DocumentCorrection[];
+    let note: string | undefined;
+    if (request.mode === 'edit') {
+      const replacement = request.replacement ?? '';
+      corrections = targets.map(({ path }) => ({ path, text: replacement }));
+    } else {
+      const result = await this.gateway.complete<DocumentPatchOutput>(
+        DOCUMENT_PATCH_V0,
+        {
+          document: content,
+          targets,
+          ...(request.quotedText ? { quotedText: request.quotedText } : {}),
+          instruction: request.instruction ?? '',
+          teamLanguage: this.teamLanguage,
+        },
+        { sessionId: session.id },
+      );
+      // 지목 밖 주소는 버린다 — 나머지 불변은 프롬프트에 부탁하지 않고 코드가 지킨다
+      const allowed = new Set(request.paths);
+      corrections = result.output.replacements.filter((entry) => allowed.has(entry.path));
+      note = result.output.note;
+      if (corrections.length === 0) return this.outcomeOf(session.id);
+    }
+
+    const nextContent = applyDocumentCorrections(content, corrections);
+    const version = this.documentVersionOf(session.id) + 1;
+    const doc = assembleRequirementsDocument({
+      output: nextContent,
+      promotedSlots: store
+        .listSlotStates(session.id)
+        .filter((slot) => slot.state === 'promoted')
+        .map((slot) => ({
+          slotKey: slot.slotKey,
+          openIssueAssignee: slot.openIssueAssignee,
+          question: nonEmptyText(slot.value) ?? `${slot.slotKey} 확정 필요`,
+        })),
+      utterances: store.listUtterances(session.id).map((utterance) => ({
+        seq: utterance.seq,
+        authorType: utterance.authorType,
+        originalText: utterance.originalText,
+        originalLanguage: utterance.originalLanguage,
+      })),
+    });
+    store.appendRequirementsDoc({ sessionId: session.id, version, content: doc.content });
+
+    // 정정 입력은 발화로 남는다 — 「요청자가 이렇게 고치라고 말했다」가 근거다 (ADR-0016)
+    const spoken = request.mode === 'edit' ? request.replacement : request.instruction;
+    if (spoken) {
+      store.appendUtterance({
+        sessionId: session.id,
+        authorType: 'requester',
+        ...(event.authorId !== undefined ? { authorId: event.authorId } : {}),
+        channel: event.channel,
+        originalText: `[문서 정정 ${request.paths.join(', ')}] ${spoken}`,
+        originalLanguage: this.sessionLanguageOf(session.id, event),
+      });
+    }
+    store.recordSignal({
+      sessionId: session.id,
+      type: 'document_corrected',
+      payload: {
+        mode: request.mode,
+        paths: [...request.paths],
+        appliedPaths: corrections.map((entry) => entry.path),
+        version,
+        ...(note ? { note } : {}),
+      },
+      modelVersion: this.deps.modelVersion,
+      ...this.versionAxesOf(session),
+    });
+
+    const text = formatDocument(doc, version);
+    await this.deps.port.post(event.address, text);
+    store.appendUtterance({
+      sessionId: session.id,
+      authorType: 'agent',
+      channel: event.channel,
+      originalText: text,
+      originalLanguage: this.teamLanguage,
+    });
+    return this.outcomeOf(session.id);
+  }
+
   async confirmSlot(
     event: IntakeEvent<A>,
     slotKey: string,

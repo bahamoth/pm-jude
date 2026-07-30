@@ -494,6 +494,68 @@ export function createWebServer(deps: WebServerDeps): Server {
   }
 
   /** 슬롯 단위 요청자 확인 (F3) — 맞아요는 즉시(무 LLM), 정정은 백그라운드 라운드. */
+  /**
+   * 문서 부분 교정 (#66, ADR-0016) — 주소로 지목하고, 직접 편집 또는 자연어 지시로 고친다.
+   * 상태를 보지 않는다: 종결 세션도 문서는 고칠 수 있다.
+   */
+  async function handleDocumentCorrection(
+    req: IncomingMessage,
+    res: ServerResponse,
+    sessionId: string,
+  ): Promise<void> {
+    const session = store.getSession(sessionId);
+    if (!session?.channelThreadKey) {
+      sendJson(res, 404, { error: '세션 없음' });
+      return;
+    }
+    const body = await readJsonBody(req);
+    if (body.mode !== 'edit' && body.mode !== 'instruct') {
+      throw new BadRequest('mode는 edit 또는 instruct여야 한다');
+    }
+    const mode: 'edit' | 'instruct' = body.mode;
+    if (!Array.isArray(body.paths) || body.paths.length === 0) {
+      throw new BadRequest('paths는 비어 있지 않은 배열이어야 한다');
+    }
+    const paths = body.paths.map((path) => {
+      if (typeof path !== 'string' || !path.trim()) throw new BadRequest('paths 항목이 잘못됐다');
+      return path;
+    });
+    const text = mode === 'edit' ? body.replacement : body.instruction;
+    if (typeof text !== 'string' || !text.trim()) {
+      throw new BadRequest(mode === 'edit' ? 'replacement가 필요하다' : 'instruction이 필요하다');
+    }
+    const quotedText = typeof body.quotedText === 'string' ? body.quotedText : undefined;
+    const address: WebAddress = { sessionId };
+    const event = {
+      address,
+      threadKey: session.channelThreadKey,
+      channel: 'web' as const,
+      text: '',
+    };
+    const correction =
+      mode === 'edit'
+        ? { mode, paths, replacement: text, ...(quotedText ? { quotedText } : {}) }
+        : { mode, paths, instruction: text, ...(quotedText ? { quotedText } : {}) };
+
+    // 직접 편집은 LLM을 거치지 않아 즉시 끝난다 — 백그라운드로 미룰 이유가 없다.
+    // 자연어 지시는 LLM 호출이라 백그라운드로 돌리고 SSE로 결과를 알린다.
+    if (mode === 'edit') {
+      const outcome = await runner.correctDocument(event, correction);
+      if (!outcome) {
+        sendJson(res, 409, { error: '고칠 문서가 없어요.' });
+        return;
+      }
+      sendJson(res, 200, { ...outcome, documentVersion: runner.documentVersionOf(sessionId) });
+      return;
+    }
+    const started = runInBackground(sessionId, () => runner.correctDocument(event, correction));
+    if (!started) {
+      sendJson(res, 409, { error: '이미 처리 중이에요 — 잠시 뒤 다시 시도해 주세요.' });
+      return;
+    }
+    sendJson(res, 202, { accepted: true });
+  }
+
   async function handleSlotConfirm(
     req: IncomingMessage,
     res: ServerResponse,
@@ -978,6 +1040,15 @@ export function createWebServer(deps: WebServerDeps): Server {
             handleMockupApproval(res, sessionId);
             return;
           }
+        }
+        if (
+          req.method === 'POST' &&
+          segments.length === 5 &&
+          segments[3] === 'document' &&
+          segments[4] === 'corrections'
+        ) {
+          await handleDocumentCorrection(req, res, sessionId);
+          return;
         }
         if (req.method === 'POST' && segments.length === 5 && segments[3] === 'slots') {
           let slotKey: string;
