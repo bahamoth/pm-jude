@@ -168,6 +168,17 @@ const ko = {
   'doc.completedBody':
     '정리한 내용을 전부 확인해 주셨어요. 지금은 여기가 여정의 끝이고, 이 문서가 개발팀에 전달됩니다.',
 
+  // 문서 부분 교정 (#66) — 문서는 끊임없이, 원하는 범위만 고칠 수 있다
+  'doc.correctHint': '고칠 부분을 드래그해서 선택하거나 항목을 눌러 주세요. 선택한 곳만 고쳐요.',
+  'doc.correctSelected': '{count}곳 선택됨',
+  'doc.correctModeInstruct': '말로 지시',
+  'doc.correctModeEdit': '직접 고치기',
+  'doc.correctInstructPlaceholder': '어떻게 고칠까요? (예: 이 항목을 더 구체적으로 써 주세요)',
+  'doc.correctEditPlaceholder': '이 자리에 들어갈 내용을 그대로 써 주세요',
+  'doc.correctApply': '이 부분 고치기',
+  'doc.correctCancel': '취소',
+  'doc.correctMultiEditNote': '여러 곳을 선택했어요 — 직접 고치기는 한 곳씩 해 주세요.',
+
   'retry.title': '여기서 멈췄어요',
   'retry.body': '답하신 내용은 저장돼 있어요 — 다시 시도하면 그 답부터 이어서 진행할게요.',
   'retry.staleRound': '다른 창에서 이미 다음 질문으로 넘어갔어요 — 최신 질문을 가져왔어요.',
@@ -350,6 +361,17 @@ const en: Record<Key, string> = {
   'doc.completedTitle': "That's everything confirmed",
   'doc.completedBody':
     'You checked every item I pinned down. This is the end of the journey for now, and the document goes to the team.',
+
+  // Partial document correction (#66)
+  'doc.correctHint': 'Drag to select what to fix, or tap an item. Only what you select changes.',
+  'doc.correctSelected': '{count} selected',
+  'doc.correctModeInstruct': 'Tell me',
+  'doc.correctModeEdit': 'Edit directly',
+  'doc.correctInstructPlaceholder': 'How should I fix it? (e.g. make this more specific)',
+  'doc.correctEditPlaceholder': 'Write exactly what should go here',
+  'doc.correctApply': 'Fix this part',
+  'doc.correctCancel': 'Cancel',
+  'doc.correctMultiEditNote': 'Multiple parts selected — direct editing works one at a time.',
 
   'retry.title': 'It stopped here',
   'retry.body': "Your answers are saved — retry and I'll carry on from them.",

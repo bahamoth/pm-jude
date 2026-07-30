@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AckCard } from '@/components/ack-card';
 import { AttachmentList } from '@/components/attachment-list';
 import { AttachmentPicker } from '@/components/attachment-picker';
-import { DocumentView } from '@/components/document-view';
+import { DocumentView, type DocumentCorrectionRequest } from '@/components/document-view';
 import { HoldCard } from '@/components/hold-card';
 import { Jude, type JudeHandle } from '@/components/jude';
 import { JourneyStepper } from '@/components/journey-stepper';
@@ -24,6 +24,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   approveMockup,
   confirmSlotOk,
+  correctDocument,
   correctSlot,
   getSession,
   retryRound,
@@ -171,6 +172,34 @@ export default function SessionPage() {
   const onHold =
     session.status === 'closed' && session.terminalState === 'on_hold_insufficient_info';
   // 죽은 라운드 판정은 서버가 한다 (G-10) — 화면은 처리 중이 아닐 때만 재시도를 드러낸다
+  // 문서 부분 교정 (#66) — edit는 즉시 반영(LLM 없음), instruct는 백그라운드 라운드로 돈다
+  const onCorrectDocument = (request: DocumentCorrectionRequest) => {
+    const payload =
+      request.mode === 'edit'
+        ? {
+            mode: 'edit' as const,
+            paths: request.paths,
+            replacement: request.text,
+            ...(request.quotedText ? { quotedText: request.quotedText } : {}),
+          }
+        : {
+            mode: 'instruct' as const,
+            paths: request.paths,
+            instruction: request.text,
+            ...(request.quotedText ? { quotedText: request.quotedText } : {}),
+          };
+    if (request.mode === 'edit') {
+      setError(null);
+      void correctDocument(sessionId, payload)
+        .then(() => refetch())
+        .catch((e: unknown) =>
+          setError(e instanceof Error ? e.message : t(lang, 'session.actionFailed')),
+        );
+      return;
+    }
+    void act(() => correctDocument(sessionId, payload));
+  };
+
   const failed = roundFailed(pendingRound, processing || busy);
   // 정본은 저장 구조체 (#53). 저장 행이 없는 레거시 세션만 게시 텍스트 역파싱으로 폴백한다 —
   // 마지막 발화가 문서가 아닐 수 있으므로(#52 안내 회신) 문서 머리로 골라낸다.
@@ -304,6 +333,8 @@ export default function SessionPage() {
             lines={docLines}
             version={storedDocument?.version ?? documentVersion}
             fullyPromoted={fullyPromoted(slotStates)}
+            onCorrect={onCorrectDocument}
+            submitting={busy || failed}
           />
           <AttachmentList lang={lang} sessionId={sessionId} attachments={attachments} />
         </div>
@@ -328,6 +359,8 @@ export default function SessionPage() {
             lines={docLines}
             version={storedDocument?.version ?? documentVersion}
             fullyPromoted={fullyPromoted(slotStates)}
+            onCorrect={onCorrectDocument}
+            submitting={busy || failed}
           />
           <AttachmentList lang={lang} sessionId={sessionId} attachments={attachments} />
           {completed ? (
