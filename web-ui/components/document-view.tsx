@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -59,14 +59,29 @@ export function DocumentView({
   const [text, setText] = useState('');
   // 인플레이스 편집 중인 주소 — 그 줄이 편집기로 바뀐다 (#66 UX)
   const [editingPath, setEditingPath] = useState<string | null>(null);
+  /** 대상의 현재 rect를 돌려주는 함수 — 스크롤 후에도 다시 재기 위해 요소를 붙잡아 둔다. */
+  const targetRectRef = useRef<(() => DOMRect | null) | null>(null);
   const correctable = onCorrect !== undefined && lines.some((line) => line.path);
 
-  const open = (picked: DocSelection | null) => {
+  const open = (picked: DocSelection | null, rectOf?: () => DOMRect | null) => {
     if (!picked) return;
+    targetRectRef.current =
+      rectOf ??
+      (() => {
+        // 선택 범위가 걸친 첫 요소를 기준으로 삼는다 — 드래그 선택은 Range가 이미 사라졌을 수 있다
+        const first = picked.paths[0];
+        if (!first || !bodyRef.current) return null;
+        return (
+          bodyRef.current
+            .querySelector<HTMLElement>(`[data-doc-path="${first}"]`)
+            ?.getBoundingClientRect() ?? null
+        );
+      });
     setSelection(picked);
     setText('');
   };
   const close = () => {
+    targetRectRef.current = null;
     setSelection(null);
     setAnchor(null);
     setText('');
@@ -94,7 +109,8 @@ export function DocumentView({
     if (!correctable) return;
     // 드래그로 잡은 선택이 있으면 그쪽이 우선이다 — 클릭이 범위 선택을 덮지 않게
     if (!window.getSelection()?.isCollapsed) return;
-    open(selectionFromElement(event.currentTarget));
+    const element = event.currentTarget;
+    open(selectionFromElement(element), () => element.getBoundingClientRect());
   };
   /** 더블클릭은 그 자리에서 바로 고치기다 — 지시할 필요가 없는 사람의 경로. */
   const editLine = (event: React.MouseEvent<HTMLElement>) => {
@@ -109,19 +125,28 @@ export function DocumentView({
     if (path) startInlineEdit([path]);
   };
 
-  // 팝오버를 선택 지점 옆에 붙인다 — 고칠 곳과 입력하는 곳이 멀면 무엇을 고치는지 놓친다.
-  // 좌표는 viewport 기준이고 position: fixed다 — 문서 레이아웃과 스크롤 영역을 건드리지 않는다.
-  useLayoutEffect(() => {
-    if (!selection) return;
+  /**
+   * 팝오버를 선택 지점 옆에 붙인다 — 고칠 곳과 입력하는 곳이 멀면 무엇을 고치는지 놓친다.
+   * 좌표는 viewport 기준의 fixed다(문서 레이아웃·스크롤 영역을 건드리지 않는다).
+   *
+   * 저장된 rect를 쓰지 않고 **대상 요소를 그때그때 다시 잰다** — 스크롤·리사이즈로 위치가
+   * 변해도 정확히 따라가고, 위치가 낡아 엉뚱한 곳에 뜨는 일이 없다.
+   */
+  const reposition = useCallback(() => {
+    const target = targetRectRef.current?.();
+    if (!target) return;
     const size = popoverRef.current?.getBoundingClientRect();
     setAnchor(
       anchorPosition(
-        selection.rect,
+        target,
         { width: size?.width ?? 340, height: size?.height ?? 200 },
         { width: window.innerWidth, height: window.innerHeight },
       ),
     );
-  }, [selection]);
+  }, []);
+  useLayoutEffect(() => {
+    if (selection) reposition();
+  }, [selection, reposition]);
 
   // 닫는 길은 셋이다 — 명시적 취소 버튼, ESC, 그리고 바깥 클릭. 어느 하나만 두면 갇힌다.
   useEffect(() => {
@@ -135,24 +160,29 @@ export function DocumentView({
       if (popoverRef.current?.contains(target)) return; // 팝오버 안의 클릭은 조작이다
       close();
     };
-    // fixed 좌표는 스크롤하면 낡는다 — 따라다니게 만드는 대신 닫는다(선택 맥락도 흐려진다)
-    const onScrollOrResize = () => close();
+    // fixed 좌표는 스크롤하면 낡는다 — 닫지 말고 다시 잰다. 닫으면 팝오버가 열리는 순간의
+    // 미세한 스크롤에도 사라져 버린다(문서 하단에서 실제로 그랬다).
     document.addEventListener('keydown', onKey);
     // 캡처 단계에서 받는다 — 문서 본문의 클릭 핸들러가 먼저 새 선택을 열어버리지 않게
     document.addEventListener('pointerdown', onPointerDown, true);
-    window.addEventListener('scroll', onScrollOrResize, true);
-    window.addEventListener('resize', onScrollOrResize);
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
     return () => {
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('pointerdown', onPointerDown, true);
-      window.removeEventListener('scroll', onScrollOrResize, true);
-      window.removeEventListener('resize', onScrollOrResize);
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
     };
   }, [selection]);
   // 포커스는 위치가 정해진 뒤에 준다. preventScroll이 없으면 브라우저가 입력창을 보이게
   // 하려고 문서를 스크롤한다 — 문서 하단에서 특히 크게 튄다.
   useEffect(() => {
-    if (selection && anchor) inputRef.current?.focus({ preventScroll: true });
+    if (!selection || !anchor) return;
+    // preventScroll을 무시하는 브라우저가 있다 — 스크롤이 움직였으면 되돌린다
+    const y = window.scrollY;
+    const x = window.scrollX;
+    inputRef.current?.focus({ preventScroll: true });
+    if (window.scrollY !== y || window.scrollX !== x) window.scrollTo(x, y);
   }, [selection, anchor]);
 
   const submit = () => {
