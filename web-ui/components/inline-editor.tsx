@@ -28,8 +28,12 @@ export function InlineEditor({ lang, initial, submitting, onCommit, onCancel }: 
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
+    // preventScroll을 무시하는 브라우저가 있다 — 움직였으면 되돌린다
+    const y = window.scrollY;
+    const x = window.scrollX;
     node.focus({ preventScroll: true });
     node.setSelectionRange(node.value.length, node.value.length);
+    if (window.scrollY !== y || window.scrollX !== x) window.scrollTo(x, y);
   }, []);
 
   // 내용에 맞춰 높이를 잡는다. 페인트 전에 해야 rows=1 높이로 한 프레임 그려지지 않는다 —

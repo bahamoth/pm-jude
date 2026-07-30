@@ -22,7 +22,8 @@ Each rule exists because it was missed at least once. The "why" column records t
 | Floating surfaces are `position: fixed`, positioned in **viewport** coordinates — never `absolute` inside the content they annotate. | #66: an absolutely-positioned popover on a bottom item extended the document's scroll area, so a click alone moved the page. Floating UI must not participate in document layout. |
 | Never render a floating surface before its coordinates are measured — keep it `invisible` for that frame. | Drawing it at (0,0) first makes the view jump, and focusing it there drags the scroll position with it. |
 | Focus programmatically with `preventScroll: true`. | Without it the browser scrolls to reveal the field, which is exactly the jump the user did not ask for. |
-| A fixed surface closes on scroll and resize rather than chasing its anchor. | Stale coordinates are worse than a closed popover, and the selection context is gone once the user scrolls away. |
+| A fixed surface **re-measures its anchor** on scroll and resize. Do not close it instead. | First tried closing: any scroll — including the browser's own nudge when the popover opened — made it vanish instantly at the bottom of the document. Measure the anchor element live rather than trusting a stored rect. |
+| After programmatic focus, **restore the scroll position** if it moved. `preventScroll` alone is not enough. | Browsers ignore `preventScroll` in some cases, and the resulting jump is indistinguishable from a bug to the user. |
 
 ## Editing text
 
