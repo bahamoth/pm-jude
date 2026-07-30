@@ -358,6 +358,111 @@ describe('F4 — 디자인 시스템 선정과 역주입', () => {
   });
 });
 
+describe('F4 — 승인·에스컬레이션 후 개선 반복 재개 (#67)', () => {
+  const backInjectedResponse = JSON.stringify({
+    problem: '영업 실적을 정리해 볼 수단이 없어 매니저가 수작업으로 집계한다',
+    users: ['영업팀 매니저'],
+    scope: { inScope: ['월별 매출 추이 조회'], outOfScope: [] },
+    stories: [
+      {
+        story: '영업팀 매니저로서, 월별 매출 추이를 확인하고 싶다',
+        acceptanceCriteria: [
+          {
+            ears: 'When 매니저가 기간을 선택하면, the system shall 월별 매출 합계를 표시한다',
+            gwt: {
+              given: '매출 데이터가 존재할 때',
+              when: '기간을 선택하면',
+              then: '월별 합계가 표시된다',
+            },
+          },
+        ],
+      },
+    ],
+    dataSources: [],
+    openIssues: [],
+  });
+
+  /** 목업 v1을 테마 위임으로 승인한 지점까지 — 요청자가 화면을 확정한 상태. */
+  async function reachApproved(extra: string[], options?: { maxMockupIterations?: number }) {
+    const made = await reachDocumented(
+      [uiYesResponse, mockupResponse('v1'), backInjectedResponse, ...extra],
+      options,
+    );
+    await made.runner.selectMockupTheme(answer, { delegated: true });
+    await made.runner.approveMockup(answer);
+    return made;
+  }
+
+  it('승인된 목업에 코멘트를 남기면 v2가 재생성된다 — 확정이 영구 고정이 아니다', async () => {
+    const { runner, store, port, outcome } = await reachApproved([mockupResponse('v2 — 카드형')]);
+    const sessionId = outcome!.sessionId;
+    expect(store.latestMockup(sessionId)?.convergence).toBe('approved'); // 전제
+
+    const result = await runner.annotateMockup(answer, [{ text: '표를 카드로 바꿔 주세요' }]);
+
+    const mockups = store.listMockups(sessionId);
+    expect(mockups).toHaveLength(2);
+    expect(mockups[1]?.convergence).toBe('iterating'); // 새 판은 다시 열린 상태다
+    // 재개가 여정을 되돌리지 않는다 — 완주·문서가 취소된 것처럼 보이면 안 된다 (ADR-0016 선례)
+    expect(result?.status).toBe('documented');
+    expect(store.getSession(sessionId)?.status).toBe('documented');
+    // 이전 판의 테마 결정이 무효가 된 사실을 안내한다 — 요청자 언어로 (원칙 5)
+    expect(port.posted.at(-1)?.text).toMatch(/흑백|분위기/);
+  });
+
+  it('재개 후 다시 승인하면 역주입이 다시 일어나 문서 v3이 나온다', async () => {
+    const { runner, store, outcome } = await reachApproved([
+      mockupResponse('v2 — 카드형'),
+      backInjectedResponse,
+    ]);
+    const sessionId = outcome!.sessionId;
+    expect(store.listRequirementsDocs(sessionId)).toHaveLength(2); // 전제: 첫 승인의 v2
+
+    await runner.annotateMockup(answer, [{ text: '표를 카드로 바꿔 주세요' }]);
+    const candidate = runner.themeCandidates()[0]!;
+    await runner.selectMockupTheme(answer, { themeId: candidate.id });
+    const result = await runner.approveMockup(answer);
+
+    expect(result?.status).toBe('documented');
+    const docs = store.listRequirementsDocs(sessionId);
+    expect(docs).toHaveLength(3);
+    expect(docs[2]?.backInjectedFrom).toBe(store.latestMockup(sessionId)!.id);
+    const content = docs[2]!.content as { visualDirection?: { themeId: string | null } };
+    expect(content.visualDirection?.themeId).toBe(candidate.id); // 재선정한 시각 방향이 반영된다
+    expect(store.latestMockup(sessionId)?.convergence).toBe('approved');
+  });
+
+  it('반복 상한은 구간 안의 왕복만 제한한다 — 재개가 새 구간을 연다', async () => {
+    const { runner, store, outcome } = await reachApproved([mockupResponse('v2')], {
+      maxMockupIterations: 1,
+    });
+    const sessionId = outcome!.sessionId;
+    expect(runner.mockupIterationsUsed(sessionId)).toBe(0); // 승인으로 구간이 닫혔다
+
+    await runner.annotateMockup(answer, [{ text: '표를 카드로' }]);
+
+    expect(store.listMockups(sessionId)).toHaveLength(2); // 상한이 재개를 막지 않는다
+    expect(runner.mockupIterationsUsed(sessionId)).toBe(1); // 새 구간의 1회차
+  });
+
+  it('에스컬레이션된 목업도 재개할 수 있다 — 상한 도달이 dead end가 되지 않는다', async () => {
+    const { runner, store, outcome } = await reachDocumented(
+      [uiYesResponse, mockupResponse('v1'), mockupResponse('v2'), mockupResponse('v3')],
+      { maxMockupIterations: 1 },
+    );
+    const sessionId = outcome!.sessionId;
+    await runner.annotateMockup(answer, [{ text: '카드로' }]); // 반복 1 — 예산 소진
+    await runner.annotateMockup(answer, [{ text: '더 화려하게' }]); // 상한 초과 → escalated
+    expect(store.latestMockup(sessionId)?.convergence).toBe('escalated'); // 전제
+
+    await runner.annotateMockup(answer, [{ text: '다시 보니 목록이 나을 것 같아요' }]);
+
+    const mockups = store.listMockups(sessionId);
+    expect(mockups).toHaveLength(3);
+    expect(mockups[2]?.convergence).toBe('iterating');
+  });
+});
+
 describe('목업 생성 실패의 재시도 경로 (G-10, #62)', () => {
   it('문서 게시 후 목업 생성이 죽으면 pendingRound가 mockup이고, 재시도가 목업을 만든다', async () => {
     const responses = [

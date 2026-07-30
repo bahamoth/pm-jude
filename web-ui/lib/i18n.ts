@@ -102,6 +102,14 @@ const ko = {
   'mockupArchive.lede':
     '승인하신 화면이에요. 구현의 기준은 문서이고, 이 목업은 참고용으로 남겨 둡니다.',
   'mockupArchive.themeDelegated': '분위기는 개발팀 몫',
+  'mockupArchive.ledeEscalated':
+    '수정 횟수를 다 써서 여기서 멈춘 화면이에요. 이어서 고치고 싶으시면 알려 주세요.',
+  'mockupArchive.revise': '이 화면 고치기',
+  'mockupArchive.reviseTitle': '어디를 고치면 좋을까요?',
+  'mockupArchive.reviseHint':
+    '고칠 곳을 알려 주시면 새 판을 만들어 드려요. 지금 문서는 그대로 남고, 새 화면을 확정하면 문서에 다시 반영해요.',
+  'mockupArchive.reviseSubmit': '새 판 만들기',
+  'mockupArchive.reviseCancel': '취소',
 
   'mockup.title': '화면 목업',
   'mockup.lede': '말씀하신 내용을 화면으로 만들어 봤어요. 직접 눌러 보면서 확인해 주세요.',
@@ -308,6 +316,14 @@ const en: Record<Key, string> = {
   'mockupArchive.lede':
     'This is the screen you approved. The document is what gets built — the mockup stays for reference.',
   'mockupArchive.themeDelegated': 'Look left to the team',
+  'mockupArchive.ledeEscalated':
+    'This screen stopped here — the revision rounds ran out. Tell me if you want to keep going.',
+  'mockupArchive.revise': 'Change this screen',
+  'mockupArchive.reviseTitle': 'What should change?',
+  'mockupArchive.reviseHint':
+    "Tell me what to change and I'll make a new version. Your current document stays as it is — approving the new screen updates it again.",
+  'mockupArchive.reviseSubmit': 'Make a new version',
+  'mockupArchive.reviseCancel': 'Cancel',
 
   'mockup.title': 'Screen mockup',
   'mockup.lede': "I've turned your request into a screen. Click around and see if it matches.",

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { fullyPromoted, isLastRound, journeyStep, roundFailed, statusChip } from './stage';
+import {
+  fullyPromoted,
+  isLastRound,
+  journeyStep,
+  mockupCardMode,
+  roundFailed,
+  statusChip,
+} from './stage';
 import type { SlotView } from './types';
 
 function slot(partial: Partial<SlotView> & Pick<SlotView, 'slotKey' | 'state'>): SlotView {
@@ -69,5 +76,21 @@ describe('문서 화면의 정직 표시 (G-11)', () => {
       ]),
     ).toBe(false);
     expect(fullyPromoted([])).toBe(false);
+  });
+});
+
+describe('목업 카드 모습 (#67)', () => {
+  it('열린 판은 반복 패널 — 코멘트·테마·확정이 다 필요하다', () => {
+    expect(mockupCardMode({ convergence: 'iterating' })).toBe('panel');
+  });
+
+  it('승인·에스컬레이션으로 닫힌 판은 열람 + 고치기 진입점', () => {
+    expect(mockupCardMode({ convergence: 'approved' })).toBe('archive');
+    // 상한으로 멈춘 판도 고칠 수 있어야 한다 — dead end 금지
+    expect(mockupCardMode({ convergence: 'escalated' })).toBe('archive');
+  });
+
+  it('목업이 없으면 카드도 없다 — 비 UI 요청', () => {
+    expect(mockupCardMode(null)).toBe('none');
   });
 });

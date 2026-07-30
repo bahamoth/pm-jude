@@ -2,7 +2,7 @@
 
 비개발자 스테이크홀더의 모호한 요청을 인테이크하고, 개발자가 곧바로 구현에 착수할 수 있는 완결된 요구사항으로 정제하는 AI PM 인테이크 레이어. 이 문서는 프로젝트 전체가 따르는 정본 용어집이다 — 이슈 제목, 코드 식별자, 문서, 커밋 메시지에서 아래 용어를 그대로 쓴다.
 
-정본 출처: PRD v1.7. 개요·원칙은 [PRD.md](PRD.md)에, 나머지 섹션은 [docs/prd/](docs/prd/)에 분할되어 있다(목차: PRD.md). 용어 충돌 시 이 문서가 우선하며, PRD 개정 시 이 문서를 함께 갱신한다. 정의만으로 부족한 용어에는 원문 위치를 병기한다.
+정본 출처: PRD v1.8. 개요·원칙은 [PRD.md](PRD.md)에, 나머지 섹션은 [docs/prd/](docs/prd/)에 분할되어 있다(목차: PRD.md). 용어 충돌 시 이 문서가 우선하며, PRD 개정 시 이 문서를 함께 갱신한다. 정의만으로 부족한 용어에는 원문 위치를 병기한다.
 
 > **EN** — PM Jude is an AI intake layer: it takes a non-developer stakeholder's vague request and refines it into requirements a developer can build from. This file is the project's canonical glossary — use these terms verbatim in issue titles, code identifiers, documents and commit messages. Each entry gives the Korean definition first and the English one after it; the two are equally binding. Where a term is contested, this file wins over the PRD, and revising the PRD means revising this file in the same change.
 >
@@ -170,8 +170,8 @@ _Avoid_: 파일, 업로드, 자료(단독) / file, upload, document (bare)
 **EN** — Confirming with the requester on structured slot values in their own language, rather than on a prose translation. A guard on translation integrity: translation is a lossy transform performed by a probabilistic component, and neither side can verify it.
 
 **목업(Mockup)**:
-UI 요청에 한해 생성되는 요구 확인용 중간충실도 인터랙티브 HTML 화면. 레이아웃 반복 단계는 그레이스케일이고, 수렴 후 디자인 시스템 선정 단계에서만 테마 변형이 입혀진다(v1.7). 구현 결과물·코드 기준이 아니며, 코드 형태로는 개발팀에 노출되지 않는다.
-**EN** — A medium-fidelity interactive HTML screen, generated for UI requests only, to confirm what was asked for. Grayscale during layout iteration; theme variants appear only in the design-system selection stage after convergence (v1.7). Not a deliverable and not an implementation reference; it is never handed to the development team as code.
+UI 요청에 한해 생성되는 요구 확인용 중간충실도 인터랙티브 HTML 화면. 레이아웃 반복 단계는 그레이스케일이고, 수렴 후 디자인 시스템 선정 단계에서만 테마 변형이 입혀진다(v1.7). 승인 후에도 코멘트로 개선 반복을 재개할 수 있다 — 승인은 한 반복 구간의 끝이고, 재개는 문서·완주를 되돌리지 않는다(v1.8, ADR-0017). 구현 결과물·코드 기준이 아니며, 코드 형태로는 개발팀에 노출되지 않는다.
+**EN** — A medium-fidelity interactive HTML screen, generated for UI requests only, to confirm what was asked for. Grayscale during layout iteration; theme variants appear only in the design-system selection stage after convergence (v1.7). Approval closes an iteration segment, not the screen: a later comment reopens revision without rewinding the document or the completion signal (v1.8, ADR-0017). Not a deliverable and not an implementation reference; it is never handed to the development team as code.
 _Avoid_: 프로토타입, 시안, 와이어프레임 / prototype, comp, wireframe
 
 **디자인 시스템 선정(Design System Selection)**:

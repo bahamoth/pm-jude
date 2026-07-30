@@ -1,6 +1,6 @@
 ## 5. 기능 요구사항 (F1–F14)
 
-> **EN** — PRD §5 — functional requirements F1 through F14, grouped into core (channel-agnostic), channel adapters, evaluation and improvement, and the PoC harness. The load-bearing ones are F2 (clarification engine: context grounding, targeted questions, two-layer completeness check, slot tri-state), F4 (mockup loop: UI classification, iteration cap, design-system selection from the theme registry, back-injection — v1.7), F5 (gate routing and SLA), F8 (terminal states) and F12 (deployment gate).
+> **EN** — PRD §5 — functional requirements F1 through F14, grouped into core (channel-agnostic), channel adapters, evaluation and improvement, and the PoC harness. The load-bearing ones are F2 (clarification engine: context grounding, targeted questions, two-layer completeness check, slot tri-state), F4 (mockup loop: UI classification, per-segment iteration cap with revision reopenable after approval, design-system selection from the theme registry, back-injection — v1.8), F5 (gate routing and SLA), F8 (terminal states) and F12 (deployment gate).
 
 기능은 **코어(채널 무관)**, **채널 어댑터**, **평가·개선**, **PoC 하네스**로 구분한다.
 
@@ -55,12 +55,13 @@
 - **전제 조건**: 명확화 종료 시 요청을 분류한다 — **UI 변화를 수반하는가?** 비 UI 요청(데이터 수정, 리포트/배치, 성능, 인프라 등)은 목업 단계를 **생략**하고 F3의 슬롯 단위 문서 검증으로 대체한다.
 - UI 요청: 자체 LLM이 단일 self-contained **인터랙티브 HTML** 목업 생성(중간충실도, 그레이스케일, 더미데이터, "요구사항 확인용 목업 — 구현 결과 아님" 워터마크). 호스팅된 URL을 채팅에 전달. *(v1.7 개정)* 그레이스케일은 **레이아웃 반복 단계**의 규정이다 — 수렴 후 디자인 시스템 선정 단계에서만 테마 변형을 허용한다(아래). 목업 HTML은 **구조 층과 테마 토큰 층을 분리**해 생성하며, 테마 변형은 LLM 재생성 없이 토큰 교체만으로 이뤄진다 — 후보 간 차이가 시각 방향뿐임을 코드로 보장한다.
 - **호스팅·보안**: 앱 도메인과 분리된 샌드박스 usercontent 도메인(Cloudflare R2 + Workers 권장), 만료 서명 URL, CSP `sandbox` + `default-src 'none'` + 외부 네트워크 차단, 뷰어 iframe `sandbox="allow-scripts"`(allow-same-origin 배제), postMessage origin 검증, Slack 전송 시 `unfurl_links:false`/`unfurl_media:false`.
-- **버전 매핑**: 요구사항 vN ↔ 목업 vN ↔ URL vN. 최대 2~3회 반복 후 수렴 또는 에스컬레이션.
+- **버전 매핑**: 요구사항 vN ↔ 목업 vN ↔ URL vN. 한 반복 구간에서 최대 2~3회 반복 후 수렴 또는 에스컬레이션.
+- **상시 개선** *(v1.8 개정 — 보드 #67, ADR-0017)*: 반복 상한은 **한 구간**의 왕복을 제한하며 목업의 생애를 잠그지 않는다. 승인·에스컬레이션으로 닫힌 판에 요청자가 코멘트를 남기면 그것이 재개 요청이 되어 새 구간의 첫 판이 생성되고, 예산도 새로 시작한다. 재개는 세션 상태를 되돌리지 않는다 — 문서와 완주는 그대로 서 있고, 재승인 시 역주입이 다시 일어난다. 근거는 문서와 같다(ADR-0016): 요청자가 화면 기대를 맞추는 수단이 「한 번 승인했으니 끝」으로 잠기면 나중에 발견한 어긋남을 고칠 길이 사라지며, 어긋남은 대개 승인한 뒤에 눈에 띈다.
 - **디자인 시스템 선정** *(v1.7 신설 — 보드 #54)*: 레이아웃이 수렴하면 **테마 레지스트리**(내장 프리셋 + 외부 등록 — 디자인 토큰 JSON·CSS 파일, 같은 id는 외부가 프리셋을 덮는다)의 후보를 같은 목업에 입힌 테마 변형으로 제시하고, 요청자가 **1택하거나 「개발팀이 정하는 게 좋겠다」로 위임**한다(승격과 같은 정신 — 답할 수 없는 선택을 강요하지 않는다). 선정 없이 승인은 불가하다. 선정 결과는 역주입 시 **「확정된 시각 방향」**으로 requirements 구조체에 코드가 합류시킨다 — 이는 구현 스택 강제가 아니라 **요청자 확인을 거친 시각 언어의 기록**이며, 구현 수단 선택은 개발팀 재량으로 남는다(§3 "어떻게 비움" 원칙과의 경계). 조직 표준 디자인 시스템이 정해지면 코드 수정 없이 외부 등록으로 흡수한다.
 - **역주입(문서 흡수)** *(v1.4 신설 — 원칙 7)*: 목업 승인 시, 반복 과정의 어노테이션·코멘트에서 **확정된 요구사항을 `requirements` vN+1의 문장으로 흡수**한다(예: "목업 v2에서 확정 — 필터 3종(기간·팀·상태), 기본 기간 30일, 빈 상태 문구 표시"). 2~3회 반복하면 목업에만 존재하고 문서에는 없는 확정 사항이 반드시 생기는데, F6은 목업을 "구현 기준 아님"으로 보내므로 그 정보는 공식적으로 아무 데도 없게 된다. 역주입은 이 누수를 막는다.
   - 흡수 후 **목업은 폐기 가능해야 한다** — 목업을 지워도 문서만으로 구현 가능한 상태가 목표다.
   - 게이트는 흡수 완료 여부를 표시하고, 판독 큐는 어노테이션 대비 문서 반영 누락을 점검 항목으로 갖는다.
-- **수용기준**: 비 UI 요청에서 목업 미실행 / UI 요청에서 조작 가능 URL 전달 / 워터마크 상시 / 반복·어노테이션·**디자인 시스템 선정**이 F11 신호로 기록 / **목업 반복 종료 시 어노테이션 대비 문서 반영 누락 0** / **선정(또는 위임) 없는 승인 불가 — 승인된 문서에 확정된 시각 방향 존재**.
+- **수용기준**: 비 UI 요청에서 목업 미실행 / UI 요청에서 조작 가능 URL 전달 / 워터마크 상시 / 반복·어노테이션·**디자인 시스템 선정**이 F11 신호로 기록 / **목업 반복 종료 시 어노테이션 대비 문서 반영 누락 0** / **선정(또는 위임) 없는 승인 불가 — 승인된 문서에 확정된 시각 방향 존재** / **승인·에스컬레이션 후에도 코멘트로 개선 반복을 재개할 수 있고, 재개가 문서·완주를 되돌리지 않음**.
 
 ### F5 — 개발자 승인 게이트 (코어)
 - 승인/질문/백로그/거절 4버튼, **비동기 동작**. **승인 시에만** Linear 이슈 생성 — 이 제약은 상태 머신 코드로 강제(원칙 2).
