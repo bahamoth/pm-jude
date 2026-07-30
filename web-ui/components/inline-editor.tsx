@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { t, type Lang } from '@/lib/i18n';
 
 interface Props {
@@ -31,8 +31,9 @@ export function InlineEditor({ lang, initial, submitting, onCommit, onCancel }: 
     node.setSelectionRange(node.value.length, node.value.length);
   }, []);
 
-  // 내용에 맞춰 높이를 잡는다 — 스크롤바가 생기면 문장 전체가 안 보인다
-  useEffect(() => {
+  // 내용에 맞춰 높이를 잡는다. 페인트 전에 해야 rows=1 높이로 한 프레임 그려지지 않는다 —
+  // 그 한 프레임이 스크롤바를 번쩍이게 만든다.
+  useLayoutEffect(() => {
     const node = ref.current;
     if (!node) return;
     node.style.height = 'auto';
@@ -82,7 +83,7 @@ export function InlineEditor({ lang, initial, submitting, onCommit, onCancel }: 
         }}
         rows={1}
         disabled={submitting}
-        className="w-full resize-none rounded-md border border-primary/60 bg-background px-2 py-1 text-[15px] leading-relaxed outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="w-full resize-none overflow-hidden rounded-md border border-primary/60 bg-background px-2 py-1 text-[15px] leading-relaxed outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
       />
       <span className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
         <button

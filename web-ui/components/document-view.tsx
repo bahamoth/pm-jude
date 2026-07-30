@@ -17,6 +17,9 @@ import {
 import type { DocLine } from '@/lib/document';
 import { t, type Lang } from '@/lib/i18n';
 
+/** 지시가 바꿀 블록의 표시 — 드래그 범위와 실제 대상이 다를 수 있으므로 눈에 보여야 한다. */
+const TARGET_CLASS = 'rounded bg-primary/10 ring-1 ring-primary/40';
+
 export interface DocumentCorrectionRequest {
   mode: 'edit' | 'instruct';
   paths: string[];
@@ -156,6 +159,18 @@ export function DocumentView({
     close();
   };
 
+  // 지시가 바꿀 범위 (#66 UX) — 드래그는 문단 절반을 잡아도 대상은 그 항목 전체다.
+  // 그 차이를 문구로 설명하지 않고 하이라이트로 보여준다.
+  const targetPaths = new Set(selection?.paths ?? []);
+  // 선택이 블록보다 작았는가 — 그렇다면 "왜 전체가 대상인지" 한 줄 안내가 필요하다
+  const partialPick =
+    selection !== null &&
+    selection.quotedText.length > 0 &&
+    lines.some(
+      (line) =>
+        line.path && targetPaths.has(line.path) && line.text.trim() !== selection.quotedText,
+    );
+
   // 배열을 편집 중이면 그 항목 줄들 — 편집기 하나로 합쳐 보여준다
   const groupLines =
     editingPath && !editingPath.endsWith(']') && !/\]\.[A-Za-z]+$/.test(editingPath)
@@ -230,7 +245,13 @@ export function DocumentView({
               );
             case 'field':
               return (
-                <p key={i} data-doc-path={line.path} onClick={pickLine} onDoubleClick={editLine}>
+                <p
+                  key={i}
+                  data-doc-path={line.path}
+                  onClick={pickLine}
+                  onDoubleClick={editLine}
+                  className={line.path && targetPaths.has(line.path) ? TARGET_CLASS : undefined}
+                >
                   <span className="font-semibold">{line.label}</span>
                   <span className="text-muted-foreground"> — </span>
                   {line.text}
@@ -251,7 +272,7 @@ export function DocumentView({
                   data-doc-path={line.path}
                   onClick={pickLine}
                   onDoubleClick={editLine}
-                  className={`flex gap-2 pl-1${correctable && line.path ? ' cursor-pointer rounded hover:bg-muted/60' : ''}`}
+                  className={`flex gap-2 pl-1${correctable && line.path ? ' cursor-pointer rounded hover:bg-muted/60' : ''}${line.path && targetPaths.has(line.path) ? ` ${TARGET_CLASS}` : ''}`}
                 >
                   <span className="text-primary">•</span>
                   <span>{line.text}</span>
@@ -264,7 +285,7 @@ export function DocumentView({
                   data-doc-path={line.path}
                   onClick={pickLine}
                   onDoubleClick={editLine}
-                  className={`pl-6 text-sm${correctable && line.path ? ' cursor-pointer rounded hover:bg-muted/60' : ''}`}
+                  className={`pl-6 text-sm${correctable && line.path ? ' cursor-pointer rounded hover:bg-muted/60' : ''}${line.path && targetPaths.has(line.path) ? ` ${TARGET_CLASS}` : ''}`}
                 >
                   – {line.text}
                 </p>
@@ -274,7 +295,7 @@ export function DocumentView({
                 <p
                   key={i}
                   data-doc-path={line.path}
-                  className="ml-6 rounded-md bg-muted px-3 py-2 font-mono text-xs text-muted-foreground"
+                  className={`ml-6 rounded-md bg-muted px-3 py-2 font-mono text-xs text-muted-foreground${line.path && targetPaths.has(line.path) ? ` ${TARGET_CLASS}` : ''}`}
                 >
                   {line.text}
                 </p>
@@ -305,7 +326,7 @@ export function DocumentView({
           >
             <div className="mb-2 flex items-center justify-between gap-2">
               <Badge variant="secondary" className="text-[11px]">
-                {t(lang, 'doc.correctSelected', { count: selection.paths.length })}
+                {t(lang, 'doc.correctTargetCount', { count: selection.paths.length })}
               </Badge>
               <button
                 type="button"
@@ -318,15 +339,27 @@ export function DocumentView({
 
             {/* 팝오버는 지시 전용이다 — 직접 고치기는 더블클릭으로 그 자리에서 한다 */}
             <div className="grid gap-2">
+              {partialPick && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-500">
+                  {t(lang, 'doc.correctPartialNote')}
+                </p>
+              )}
               {selection.quotedText && (
                 <p className="line-clamp-2 rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">
-                  “{selection.quotedText}”
+                  <span className="font-medium">{t(lang, 'doc.correctQuotedLabel')}</span> “
+                  {selection.quotedText}”
                 </p>
               )}
               <Textarea
                 ref={inputRef}
                 value={text}
-                onChange={(e) => setText(e.target.value)}
+                onChange={(e) => {
+                  setText(e.target.value);
+                  // 지시도 길어질 수 있다 — 내용만큼 자라고 스크롤바는 두지 않는다
+                  const node = e.currentTarget;
+                  node.style.height = 'auto';
+                  node.style.height = `${String(node.scrollHeight)}px`;
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -335,7 +368,7 @@ export function DocumentView({
                 }}
                 placeholder={t(lang, 'doc.correctInstructPlaceholder')}
                 rows={2}
-                className="text-sm"
+                className="resize-none overflow-hidden text-sm"
               />
               <div className="flex items-center justify-between gap-2">
                 <Button size="sm" disabled={submitting || !text.trim()} onClick={submit}>
