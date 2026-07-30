@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.14.0](https://github.com/bahamoth/pm-jude/compare/v0.13.0...v0.14.0) (2026-07-30)
+
+
+### Features
+
+* [#55](https://github.com/bahamoth/pm-jude/issues/55) — 백엔드 콘솔 로그의 롤링 파일 사본 + AGENTS.md 문서화 ([4d67c65](https://github.com/bahamoth/pm-jude/commit/4d67c65b5f3452f5a5f9e63ccf2807146fa9df84))
+* [#56](https://github.com/bahamoth/pm-jude/issues/56) — 게이트웨이 타임아웃 프롬프트별 상한 ([02594be](https://github.com/bahamoth/pm-jude/commit/02594be0d5ba5f27797587d0ff025331e2b90f84))
+* [#57](https://github.com/bahamoth/pm-jude/issues/57) — 노션 커넥터: URL을 markdown 첨부로 페치 (ADR-0013) ([b50130e](https://github.com/bahamoth/pm-jude/commit/b50130ed0a7317ca8749756d2047feaf75ee44a3))
+* [#58](https://github.com/bahamoth/pm-jude/issues/58) — 장문 소스 규율: 발화 상한 + 생성 한정 압축 + 조립 예산 ([0c6c19c](https://github.com/bahamoth/pm-jude/commit/0c6c19c7ccc24201861cd1b177e7e98118def01e))
+* [#59](https://github.com/bahamoth/pm-jude/issues/59) — 레이어드 설정: 스키마 기본값 → pm-jude.config.json → 환경변수 ([27b36e8](https://github.com/bahamoth/pm-jude/commit/27b36e8d584e6f4821e3eb9e4a5884174981e087))
+* [#60](https://github.com/bahamoth/pm-jude/issues/60) — 생성 뷰의 대화 예산: 장문 발화도 압축 대상 (ADR-0014 확장) ([beabd29](https://github.com/bahamoth/pm-jude/commit/beabd297cc9425e59b83d3dd29a688f5d1cea989))
+* [#60](https://github.com/bahamoth/pm-jude/issues/60) — 프롬프트 버전별 추론 강도(effort) + 백엔드 생성 진행 로그 ([84efb11](https://github.com/bahamoth/pm-jude/commit/84efb1119239c163ad742ea0cd581d5021a1cf60))
+* [#61](https://github.com/bahamoth/pm-jude/issues/61) — 명확화 라운드 간 심화: 대화 이력·판정 근거 주입 (clarification@0.4.0) ([14c7661](https://github.com/bahamoth/pm-jude/commit/14c76615a73e65b04127ea871d60712e5e67926a))
+* [#63](https://github.com/bahamoth/pm-jude/issues/63) — 세션 사용량·개선 델타 계측 (이터레이션 규율 1단계) ([a488b05](https://github.com/bahamoth/pm-jude/commit/a488b051eb79184531817117c18d3d5c4158d38e))
+* [#64](https://github.com/bahamoth/pm-jude/issues/64) — 생성 품질 계약 수리: requirements@0.3.0 · condensation@0.2.0 ([3437528](https://github.com/bahamoth/pm-jude/commit/3437528d90e3dcb6f977018e355b70e2b948908c))
+* [#64](https://github.com/bahamoth/pm-jude/issues/64) — 표 분해 3규칙: 성격별로 가른다 (v4 평가 산출물) ([66b6379](https://github.com/bahamoth/pm-jude/commit/66b6379364079e158d86d1e79d726e58bc195652))
+* [#66](https://github.com/bahamoth/pm-jude/issues/66) — 드래그 선택 정정 UI (5단계) ([bff00f6](https://github.com/bahamoth/pm-jude/commit/bff00f6fc0a633779e2ee610003ac032349416da))
+* [#66](https://github.com/bahamoth/pm-jude/issues/66) — 문서 부분 교정: 직접 편집·자연어 지시, 종결 무관 (2~4단계) ([0f1c645](https://github.com/bahamoth/pm-jude/commit/0f1c645a358b5e0ca0f50513ab7a7026bb7a4946))
+* [#66](https://github.com/bahamoth/pm-jude/issues/66) — 문서 요소 주소 체계 + 항목 단위 렌더 (ADR-0016 1단계) ([e25f395](https://github.com/bahamoth/pm-jude/commit/e25f39567ef862a80d0af6c2e3a69009cef91f50))
+* [#66](https://github.com/bahamoth/pm-jude/issues/66) — 승인된 목업 열람 경로 복원 ([6bc5aa0](https://github.com/bahamoth/pm-jude/commit/6bc5aa0470722884a33bdb9510bf3f6712d6e36c))
+* [#66](https://github.com/bahamoth/pm-jude/issues/66) — 여러 줄 직접 편집(항목 추가·삭제 포함) · 팝오버는 지시 전용 ([67ddd49](https://github.com/bahamoth/pm-jude/commit/67ddd49a1cbbb3fc283584ac387202280d9a1475))
+* [#67](https://github.com/bahamoth/pm-jude/issues/67) — 목업 상시 개선: 승인 후에도 코멘트로 반복을 재개한다 ([4cb8af3](https://github.com/bahamoth/pm-jude/commit/4cb8af310b36ac55fcd337e8697eb3d5a68fcd83))
+
+
+### Bug Fixes
+
+* [#60](https://github.com/bahamoth/pm-jude/issues/60) — 실측 기반 상한 조정: requirements·back-injection 600s, condensation 300s ([2d9dd1c](https://github.com/bahamoth/pm-jude/commit/2d9dd1c291b33d014e30fa160177a08ee0c76db5))
+* [#62](https://github.com/bahamoth/pm-jude/issues/62) — 목업 생성 실패의 재시도 경로 + mockup 상한·effort 조정 ([2408da4](https://github.com/bahamoth/pm-jude/commit/2408da4e6cd1e1e6f901b3cd9c1173a6abe44c51))
+* [#64](https://github.com/bahamoth/pm-jude/issues/64) — A/B 재평가(v2=상) 권고 반영: 계획·측정 이관, 강제성 보존, 압축 16k ([476807c](https://github.com/bahamoth/pm-jude/commit/476807c6e054ecfbe9ce2a166b98ee5432da2800))
+* [#64](https://github.com/bahamoth/pm-jude/issues/64) — requirements 상한 900s: 생성 시간 실측 궤적 반영 ([bd59bd5](https://github.com/bahamoth/pm-jude/commit/bd59bd5fa873d364b76789d16d5b6e532e634ed5))
+* [#64](https://github.com/bahamoth/pm-jude/issues/64) — v3 평가 회귀 수리: 요청자 답변의 지위·scope의 역할 ([aca3050](https://github.com/bahamoth/pm-jude/commit/aca305004c1ad8da7ea81fd3392e45d2a300d295))
+* [#64](https://github.com/bahamoth/pm-jude/issues/64) — 압축 절단을 최후 수단으로: 허용 배수 1.5 + 재시도 목표 강화 ([54dfe6d](https://github.com/bahamoth/pm-jude/commit/54dfe6d0703aae6ec5cd05dafb63f4f8627e6fa8))
+* [#65](https://github.com/bahamoth/pm-jude/issues/65) — 사용량 한도 응답을 스키마 위반으로 오진하지 않는다 ([9dfcaf4](https://github.com/bahamoth/pm-jude/commit/9dfcaf4e3f52c53b6a0f33d1b7d2f756705d2771))
+* [#66](https://github.com/bahamoth/pm-jude/issues/66) — 문서 하단 클릭 시 스크롤 이동·팝오버 실패 ([af0116a](https://github.com/bahamoth/pm-jude/commit/af0116ae4e721014332526d6da83567c84a5e2d9))
+* [#66](https://github.com/bahamoth/pm-jude/issues/66) — 인플레이스 편집 + 세 갈래 닫기 · UX 규약 문서화 ([04c71ee](https://github.com/bahamoth/pm-jude/commit/04c71ee0b6e8e94b7cef571873fc724f7db38967))
+* [#66](https://github.com/bahamoth/pm-jude/issues/66) — 정정을 선택 지점 옆에서: 인라인 팝오버 (UX 재구성) ([48d6946](https://github.com/bahamoth/pm-jude/commit/48d69469ef9db78492fe43f33767210f7ff28fda))
+* [#66](https://github.com/bahamoth/pm-jude/issues/66) — 지시 대상 하이라이트 + 불필요한 스크롤바 제거 ([fa4802b](https://github.com/bahamoth/pm-jude/commit/fa4802bc69ac764fa015afe25e6b2971c80696a4))
+* [#66](https://github.com/bahamoth/pm-jude/issues/66) — 클릭만으로 화면이 튀는 문제: 팝오버를 fixed로 ([c8fc3f2](https://github.com/bahamoth/pm-jude/commit/c8fc3f24d323f388fa82cfc11a62b7c6cb0d40c8))
+
 ## [0.13.0](https://github.com/bahamoth/pm-jude/compare/v0.12.0...v0.13.0) (2026-07-29)
 
 
