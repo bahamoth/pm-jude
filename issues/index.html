@@ -1479,7 +1479,7 @@
   {
     "id": 51,
     "title": "완주 후 슬롯 정정 UI 부재 — 코어는 허용, 화면이 차단",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
@@ -1488,9 +1488,15 @@
     "parent": null,
     "blockedBy": [],
     "created": "2026-07-28",
-    "updated": "2026-07-28",
+    "updated": "2026-07-30",
     "body": "## 문제\n완주(session_completed) 성립 시 확인된 슬롯이 뱃지로만 렌더되어 정정 진입점이 사라진다(web-ui/components/slot-review.tsx:57 — confirmedByRequester ? 뱃지 : 버튼). 그러나 코어와 서버는 완주 후에도 정정을 허용한다 — 가드는 status==='documented'뿐(src/runner/core-runner.ts:662, src/web/server.ts:497)이고 tests/core-runner.test.ts:624-651이 「완주 v1 → 정정 → v2에서 완주 재성립」을 고정한다. 즉 코어가 허용하는 경로를 화면이 막고 있으며, 완주 후 문서를 고치려면 API 직접 호출뿐이다.\n\n## 수용기준\n- 완주 후에도 확인된 슬롯에 정정 진입점이 있다 (「아니에요」 경로 재노출 또는 동등 UI)\n- 정정 제출 시 확인 초기화·새 버전에서의 완주 재성립이 화면에 반영된다 (v뱃지·완주 카드·스테퍼)\n- 기존 백엔드·web-ui 테스트 회귀 없음\n\n## 참조\ndocs/ux/requester-journey.md §5.5·§6, G-11(문서 버전 단위 완주)",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-30",
+        "body": "수용기준 대조 후 종결 — 소급 확인(구현은 선행 작업에 포함돼 있었고 티켓 종결만 누락됐다).\n\n① 완주 후 정정 진입점 — 충족. web-ui/lib/slot-actions.ts가 확인된 슬롯을 'correct-only'로 판정하고, slot-review.tsx가 「확인됨」 배지와 함께 정정 버튼을 계속 노출한다(주석에 #51 근거 명시). 코어가 허용하는 경로를 화면이 막는 상태는 해소됐다.\n② 정정 시 확인 초기화·완주 재성립의 화면 반영 — 충족. confirmSlot(false)이 슬롯을 unfilled로 되돌리고(core-runner.ts:1378) 재판정 후 문서 vN+1이 나온다. tests/core-runner.test.ts:622 '정정으로 문서가 다시 나오면 완주도 새 버전에서 다시 성립한다 (G-11)'가 이를 고정하고, 화면은 storedDocument.version 배지와 completed 카드로 반영한다.\n③ 회귀 없음 — 루트 286 + web-ui 52 그린.\n\n**#66이 이 티켓의 취지를 넘어섰다**: 슬롯 정정(근거를 고쳐 전체 재생성)뿐 아니라 문서 요소를 직접 지목해 부분 교정하는 경로가 생겼고, 종결 잠금도 문서 정정에는 적용되지 않는다(ADR-0016). 「완주했으니 못 고친다」는 상태가 코어·화면 양쪽에서 사라졌다."
+      }
+    ]
   },
   {
     "id": 52,
@@ -1511,7 +1517,7 @@
   {
     "id": 53,
     "title": "requirements_doc 영속 미구현 — 문서가 발화 텍스트로만 존재",
-    "state": "open",
+    "state": "closed",
     "labels": [
       "ready-for-agent"
     ],
@@ -1520,9 +1526,15 @@
     "parent": null,
     "blockedBy": [],
     "created": "2026-07-28",
-    "updated": "2026-07-28",
+    "updated": "2026-07-30",
     "body": "## 문제\ndata-model.md가 규정한 requirements_doc(version int, content json, back_injected_from fk)이 스키마에 없다(src/store/schema.ts — 11테이블, 문서 테이블 0건). 현재 문서는 assembleRequirementsDocument()가 만든 구조체를 formatDocument로 문자열화해 에이전트 발화로 append하는 형태뿐이고(src/runner/core-runner.ts:967-975) 구조체는 버려진다. 버전도 저장값이 아니라 document_delivered 신호 개수의 파생값이며(core-runner.ts:993-998), 클라이언트는 마지막 에이전트 발화를 역파싱해 문서를 재구성한다(web-ui/app/s/[id]/page.tsx:162, web-ui/lib/document.ts). 구조체 영속은 목업 역주입(F4, Phase 2)의 전제이고, 역파싱은 문서 서식 변경에 취약하다.\n\n## 수용기준\n- 문서 구조체(JSON)와 버전이 전용 테이블에 영속된다 (data-model.md의 requirements_doc 필드 준수, back_injected_from은 F4 전까지 null 허용)\n- 버전은 신호 개수 파생값이 아니라 저장값이다 (기존 세션의 파생 버전과 정합 유지)\n- 세션 조회 API·문서 화면이 발화 역파싱 대신 저장 구조체를 사용한다\n- 기존 세션 데이터의 마이그레이션 경로 명시 (발화 텍스트는 원칙 7에 따라 불변 보존 — 문서 테이블은 추가 영속이지 대체가 아님)\n\n## 참조\ndocs/data-model.md:96-105, ARCHITECTURE.md ERD, PRD F3·F4",
-    "comments": []
+    "comments": [
+      {
+        "author": "claude",
+        "date": "2026-07-30",
+        "body": "수용기준 대조 후 종결 — 소급 확인.\n\n① 구조체·버전 영속 — 충족. requirements_doc 테이블 존재(id·session_id·version·content·back_injected_from·created_at — data-model.md 필드 준수), 실DB에 4행 저장(세션 49597175의 v1~v4).\n② 버전이 저장값 — 충족. documentVersionOf가 latestRequirementsDoc().version을 먼저 읽고, 저장 행이 없는 레거시 세션에서만 document_delivered 신호 개수로 폴백한다(core-runner.ts:2084). 기존 세션과의 정합이 폴백으로 유지된다.\n③ 화면이 저장 구조체 사용 — 충족. page.tsx가 storedDocument가 있으면 documentLinesFromContent로 렌더하고 parseDocumentText는 폴백으로만 남는다. #66에서 두 경로가 명시적으로 갈렸다 — 구조체 경로만 요소 주소를 갖고 부분 교정을 지원하며, 레거시 텍스트 경로는 주소가 없다(텍스트에서 항목을 되쪼갤 수 없다). 이 분기를 테스트로 고정했다.\n④ 마이그레이션 경로 — 충족. 문서 테이블은 추가 영속이고 발화 텍스트는 그대로 보존된다(원칙 7). 레거시 세션은 역파싱 폴백으로 계속 표시된다.\n\n**후속 활용**: back_injected_from은 F4 역주입에서 실제로 채워지고 있고(세션 49597175 v2가 목업 승인 유래), #66의 부분 교정도 이 테이블에 vN+1을 쌓는다."
+      }
+    ]
   },
   {
     "id": 54,
