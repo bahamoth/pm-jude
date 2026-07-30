@@ -5,7 +5,15 @@
 
 import type { DocumentContent } from './types';
 
-export type DocLine =
+/**
+ * 문서 요소의 안정적 주소 (#66, ADR-0016) — 부분 교정의 좌표.
+ *
+ * 정정은 이 주소로 대상을 지목하고, 드래그 선택은 선택 범위가 걸친 주소 집합으로 환원된다.
+ * 주소가 붙는 것은 **교정 대상 요소**뿐이다 — 제목·구분선은 문서의 내용이 아니라 표시 장치다.
+ */
+export type DocPath = string;
+
+export type DocLine = (
   | { kind: 'title'; text: string }
   | { kind: 'field'; label: string; text: string }
   | { kind: 'section'; label: string; text: string }
@@ -13,7 +21,8 @@ export type DocLine =
   | { kind: 'sub'; text: string }
   | { kind: 'gwt'; text: string }
   | { kind: 'note'; text: string }
-  | { kind: 'text'; text: string };
+  | { kind: 'text'; text: string }
+) & { path?: DocPath; label?: string };
 
 /**
  * 저장 구조체 → 표시 라인 (#53). 코어 formatDocument와 같은 구조·문구를 만들어
@@ -23,46 +32,59 @@ export function documentLinesFromContent(
   content: DocumentContent,
   meta: { version: number; transcriptCount: number },
 ): DocLine[] {
+  // 배열은 항목마다 한 라인이다 (#66) — 쉼표로 이어 붙이면 읽을 수도, 지목할 수도 없다
   const lines: DocLine[] = [
     { kind: 'title', text: `requirements 문서 v${String(meta.version)}` },
-    { kind: 'field', label: '문제', text: content.problem },
-    { kind: 'field', label: '사용자', text: content.users.join(', ') },
-    {
-      kind: 'field',
-      label: '스코프',
-      text:
-        `포함: ${content.scope.inScope.join(', ')}` +
-        (content.scope.outOfScope.length ? ` / 제외: ${content.scope.outOfScope.join(', ')}` : ''),
-    },
-    { kind: 'section', label: '유저스토리·수용기준', text: '' },
+    { kind: 'field', label: '문제', text: content.problem, path: 'problem' },
+    { kind: 'section', label: '사용자', text: '' },
   ];
-  for (const story of content.stories) {
-    lines.push({ kind: 'bullet', text: story.story });
-    for (const criterion of story.acceptanceCriteria) {
-      lines.push({ kind: 'sub', text: criterion.ears });
+  content.users.forEach((user, i) => {
+    lines.push({ kind: 'bullet', text: user, path: `users[${String(i)}]` });
+  });
+  lines.push({ kind: 'section', label: '스코프 — 포함', text: '' });
+  content.scope.inScope.forEach((item, i) => {
+    lines.push({ kind: 'bullet', text: item, path: `scope.inScope[${String(i)}]` });
+  });
+  if (content.scope.outOfScope.length) {
+    lines.push({ kind: 'section', label: '스코프 — 제외', text: '' });
+    content.scope.outOfScope.forEach((item, i) => {
+      lines.push({ kind: 'bullet', text: item, path: `scope.outOfScope[${String(i)}]` });
+    });
+  }
+  lines.push({ kind: 'section', label: '유저스토리·수용기준', text: '' });
+  content.stories.forEach((story, si) => {
+    lines.push({ kind: 'bullet', text: story.story, path: `stories[${String(si)}].story` });
+    story.acceptanceCriteria.forEach((criterion, ci) => {
+      const base = `stories[${String(si)}].acceptanceCriteria[${String(ci)}]`;
+      lines.push({ kind: 'sub', text: criterion.ears, path: `${base}.ears` });
       lines.push({
         kind: 'gwt',
         text: `Given ${criterion.gwt.given} / When ${criterion.gwt.when} / Then ${criterion.gwt.then}`,
+        path: `${base}.gwt`,
       });
-    }
-  }
-  lines.push({
-    kind: 'field',
-    label: '데이터 소스',
-    text: content.dataSources.join(', ') || '미확정 (오픈이슈 참조)',
+    });
   });
+  lines.push({ kind: 'section', label: '데이터 소스', text: '' });
+  if (content.dataSources.length === 0) {
+    lines.push({ kind: 'text', text: '미확정 (오픈이슈 참조)' });
+  } else {
+    content.dataSources.forEach((source, i) => {
+      lines.push({ kind: 'bullet', text: source, path: `dataSources[${String(i)}]` });
+    });
+  }
   if (content.openIssues.length) {
     lines.push({
       kind: 'section',
       label: '오픈이슈',
       text: '(요청자가 답할 수 없어 승격됨 — 담당자 확인 필요)',
     });
-    for (const issue of content.openIssues) {
+    content.openIssues.forEach((issue, i) => {
       lines.push({
         kind: 'bullet',
         text: `[${issue.slotKey}] ${issue.question} — 담당: ${issue.assignee ?? '미지정'}`,
+        path: `openIssues[${String(i)}].question`,
       });
-    }
+    });
   }
   lines.push({
     kind: 'note',

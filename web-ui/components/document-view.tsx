@@ -15,6 +15,8 @@ interface Props {
 }
 
 // requirements 문서 열람 (US-9·10) — 문서를 구조대로 표시한다.
+// 교정 대상 라인에는 data-doc-path로 요소 주소를 심는다 (#66, ADR-0016) — 드래그 선택이
+// 선택 범위가 걸친 주소를 이 속성에서 읽어 부분 정정의 대상으로 삼는다.
 export function DocumentView({ lang, lines, version, fullyPromoted }: Props) {
   return (
     <Card>
@@ -47,7 +49,7 @@ export function DocumentView({ lang, lines, version, fullyPromoted }: Props) {
               );
             case 'field':
               return (
-                <p key={i}>
+                <p key={i} data-doc-path={line.path}>
                   <span className="font-semibold">{line.label}</span>
                   <span className="text-muted-foreground"> — </span>
                   {line.text}
@@ -63,14 +65,14 @@ export function DocumentView({ lang, lines, version, fullyPromoted }: Props) {
               );
             case 'bullet':
               return (
-                <p key={i} className="flex gap-2 pl-1">
+                <p key={i} data-doc-path={line.path} className="flex gap-2 pl-1">
                   <span className="text-primary">•</span>
                   <span>{line.text}</span>
                 </p>
               );
             case 'sub':
               return (
-                <p key={i} className="pl-6 text-sm">
+                <p key={i} data-doc-path={line.path} className="pl-6 text-sm">
                   – {line.text}
                 </p>
               );
@@ -78,6 +80,7 @@ export function DocumentView({ lang, lines, version, fullyPromoted }: Props) {
               return (
                 <p
                   key={i}
+                  data-doc-path={line.path}
                   className="ml-6 rounded-md bg-muted px-3 py-2 font-mono text-xs text-muted-foreground"
                 >
                   {line.text}
