@@ -171,7 +171,10 @@ const ko = {
   // 문서 부분 교정 (#66) — 문서는 끊임없이, 원하는 범위만 고칠 수 있다
   'doc.correctHint':
     '고칠 곳을 드래그하거나 항목을 눌러 주세요. 두 번 누르면 그 자리에서 바로 고칠 수 있어요.',
-  'doc.correctSelected': '{count}곳 선택됨',
+  'doc.correctTargetCount': '표시된 {count}곳이 바뀝니다',
+  'doc.correctPartialNote':
+    '일부만 선택했지만 표시된 항목 전체가 다시 쓰여요 — 문장 안 일부만 고치려면 두 번 눌러 직접 고쳐 주세요.',
+  'doc.correctQuotedLabel': '지시의 초점:',
   'doc.correctModeInstruct': '말로 지시',
   'doc.correctModeEdit': '직접 고치기',
   'doc.correctInstructPlaceholder': '어떻게 고칠까요? (예: 이 항목을 더 구체적으로 써 주세요)',
@@ -370,7 +373,10 @@ const en: Record<Key, string> = {
   // Partial document correction (#66)
   'doc.correctHint':
     'Tap to tell me what to change, or double-tap to edit it yourself. Drag across a list to edit several lines at once.',
-  'doc.correctSelected': '{count} selected',
+  'doc.correctTargetCount': '{count} highlighted item(s) will change',
+  'doc.correctPartialNote':
+    'You selected part of it, but the whole highlighted item gets rewritten — to change only some words, double-tap and edit it yourself.',
+  'doc.correctQuotedLabel': 'Focus of the instruction:',
   'doc.correctModeInstruct': 'Tell me',
   'doc.correctModeEdit': 'Edit directly',
   'doc.correctInstructPlaceholder': 'How should I fix it? (e.g. make this more specific)',

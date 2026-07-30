@@ -26,7 +26,8 @@ Each rule exists because it was missed at least once. The "why" column records t
 |---|---|
 | Text is edited **in place** — the element becomes editable. Do not lift text into a modal or a side panel to change it. | #66: editing inside the popover meant reading in one place and typing in another. |
 | An editor opens with the **current value**, cursor at the end. Never an empty box the user has to retype. | Retyping a sentence to change three words is work the product should absorb. |
-| Editors grow with their content. No inner scrollbars on a field the user is composing in. | Scope items run several lines; a one-line box hides what is being edited. |
+| Editors grow with their content and carry `overflow-hidden`. No inner scrollbar on a field the user is composing in. | Scope items run several lines; a one-line box hides what is being edited. A scrollbar that is never needed reads as unfinished work. |
+| Size a field **before paint** (`useLayoutEffect`), not after. | Measuring after paint draws one frame at the collapsed height — long enough to flash a scrollbar that then disappears. |
 | An editing surface covers the unit the user **selected**, not the unit that was easy to implement. | #66: direct editing was capped at one block because multi-block editing needs text→array re-mapping. Line-per-item mapping was the answer — and it made add/remove fall out for free. |
 
 ## Gestures
@@ -50,6 +51,7 @@ Each rule exists because it was missed at least once. The "why" column records t
 | A finished state still shows what can be done next. "Done" is not a dead end. | #66: the completed session showed a large "confirmed" notice and the only way to change the document was a small button inside a slot card — the operator concluded there was no way at all. |
 | If data exists, there is a path to see it. Do not render a branch that hides content the session still holds. | #66: an approved mockup stayed in the database with no route to view it, because the panel only existed in the `mockup` status branch. |
 | Show the unit of change the user is choosing (selection count, quoted text, target version) before they commit. | Users should not have to guess the blast radius of a correction. |
+| When the **acted-on unit differs from the selected range**, highlight the real unit and say so. | #66: the smallest editable unit is a block, so dragging half a paragraph still rewrites the whole item. Nothing showed that, so the operator reasonably expected only the dragged words to change. The affected blocks now get a ring, and a note points to in-place editing for word-level changes. |
 
 ## Destructive and irreversible
 
