@@ -11,8 +11,8 @@
 | §1 문서 정보 — 버전·변경 이력·대상 독자 | [docs/prd/document-info.md](docs/prd/document-info.md) |
 | §2 제품 개요 | 이 문서 |
 | §3 핵심 원칙 | 이 문서 |
-| §4 사용자 시나리오 / 유저 스토리 — US-1~US-11 | [docs/prd/user-stories.md](docs/prd/user-stories.md) |
-| §5 기능 요구사항 — F1–F14 | [docs/prd/functional-requirements.md](docs/prd/functional-requirements.md) |
+| §4 사용자 시나리오 / 유저 스토리 — US-1~US-12 | [docs/prd/user-stories.md](docs/prd/user-stories.md) |
+| §5 기능 요구사항 — F1–F15 | [docs/prd/functional-requirements.md](docs/prd/functional-requirements.md) |
 | §6 비기능 요구사항 · §7 시스템 구성 | [docs/prd/system.md](docs/prd/system.md) |
 | §8 스코프 제외 · §9 마일스톤 | [docs/prd/scope-and-milestones.md](docs/prd/scope-and-milestones.md) |
 | §10 성공 지표 · §11 리스크와 완화책 | [docs/prd/metrics-and-risks.md](docs/prd/metrics-and-risks.md) |
