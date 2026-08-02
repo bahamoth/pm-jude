@@ -28,27 +28,34 @@ function loadMermaid(): Promise<typeof import('mermaid').default> {
 
 export function MermaidDiagram({ lang, source }: { lang: Lang; source: string }) {
   const reactId = useId();
-  const [svg, setSvg] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
+  // 결과를 소스와 함께 담는다 — 소스가 바뀌면 비교가 스켈레톤으로 되돌리므로,
+  // 이펙트 서두의 동기 리셋 setState가 필요 없다 (react-hooks/set-state-in-effect)
+  const [rendered, setRendered] = useState<{
+    source: string;
+    svg: string | null;
+    failed: boolean;
+  } | null>(null);
 
   useEffect(() => {
     let alive = true;
-    setSvg(null);
-    setFailed(false);
     // mermaid.render의 id는 DOM id로 쓰인다 — useId의 콜론을 제거한다
     const renderId = `mmd-${reactId.replaceAll(':', '')}`;
     loadMermaid()
       .then((mermaid) => mermaid.render(renderId, source))
       .then((result) => {
-        if (alive) setSvg(result.svg);
+        if (alive) setRendered({ source, svg: result.svg, failed: false });
       })
       .catch(() => {
-        if (alive) setFailed(true);
+        if (alive) setRendered({ source, svg: null, failed: true });
       });
     return () => {
       alive = false;
     };
   }, [reactId, source]);
+
+  const current = rendered?.source === source ? rendered : null;
+  const svg = current?.svg ?? null;
+  const failed = current?.failed ?? false;
 
   if (failed) {
     return (
@@ -65,7 +72,6 @@ export function MermaidDiagram({ lang, source }: { lang: Lang; source: string })
   }
   return (
     // SVG는 securityLevel 'strict'가 소독한 mermaid 출력이다
-    // eslint-disable-next-line react/no-danger
     <div className="overflow-x-auto" dangerouslySetInnerHTML={{ __html: svg }} />
   );
 }

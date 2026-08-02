@@ -51,6 +51,8 @@ export default function GatePage() {
 
   useEffect(() => {
     try {
+      // 저장된 결정자 복원은 마운트 후에만 가능(SSR에는 localStorage가 없다) — 부팅 1회 반영
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDecidedBy(localStorage.getItem(DECIDED_BY_KEY) ?? '');
     } catch {
       // 프라이빗 모드 등 — 기억 못 해도 화면은 동작해야 한다
