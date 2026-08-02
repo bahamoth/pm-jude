@@ -1,6 +1,7 @@
 import { PromptRegistry } from './registry';
 import { attachmentExtractionPromptV0 } from './attachment-extraction-v0';
 import { backInjectionPromptV0 } from './back-injection-v0';
+import { backInjectionPromptV1 } from './back-injection-v1';
 import { condensationPromptV0 } from './condensation-v0';
 import { condensationPromptV1 } from './condensation-v1';
 import { documentPatchPromptV0 } from './document-patch-v0';
@@ -15,6 +16,7 @@ import { promotionPromptV0 } from './promotion-v0';
 import { requirementsPromptV0 } from './requirements-v0';
 import { requirementsPromptV1 } from './requirements-v1';
 import { requirementsPromptV2 } from './requirements-v2';
+import { requirementsPromptV3 } from './requirements-v3';
 import { uiClassificationPromptV0 } from './ui-classification-v0';
 
 /** 구 버전은 등록만 유지한다 — 버전은 불변이고 과거 세션의 신호가 여기 귀속돼 있다. */
@@ -32,8 +34,10 @@ export const PROMOTION_V0 = 'promotion@0.1.0';
 export const REQUIREMENTS_V0 = 'requirements@0.1.0';
 /** 현행 — 첨부 유래 확정 사항을 문서 문장으로 흡수하는 판 (F3, ADR-0011 결정 6). */
 export const REQUIREMENTS_V1 = 'requirements@0.2.0';
-/** 현행 — 분류표 행 정의 이관·자료 내 미결 승격·선택지 보존 판 (#64 대조 평가 반영). */
+/** 분류표 행 정의 이관·자료 내 미결 승격·선택지 보존 판 (#64 대조 평가 반영). */
 export const REQUIREMENTS_V2 = 'requirements@0.3.0';
+/** 현행 — 규범 다이어그램 판 (#70, ADR-0018): 시각 구조 확정 사항을 mermaid로 흡수한다. */
+export const REQUIREMENTS_V3 = 'requirements@0.4.0';
 /** 이미지 첨부를 텍스트로 환원한다 — 이미지가 모델에 원본으로 닿는 유일한 지점 (ADR-0011). */
 export const ATTACHMENT_EXTRACTION_V0 = 'attachment-extraction@0.1.0';
 /** 문서 첫 게시 시점의 UI 분류 (F4 전제, #54) — 목업 단계 진입 여부를 정한다. */
@@ -42,6 +46,8 @@ export const UI_CLASSIFICATION_V0 = 'ui-classification@0.1.0';
 export const MOCKUP_V0 = 'mockup@0.1.0';
 /** 목업 승인 시 어노테이션 확정 사항의 문서 흡수 (F4 역주입, #54). */
 export const BACK_INJECTION_V0 = 'back-injection@0.1.0';
+/** 현행 — 규범 다이어그램 보존 판 (#70, ADR-0018). */
+export const BACK_INJECTION_V1 = 'back-injection@0.2.0';
 /** 장문 첨부의 사실 보존 축약 — 생성 호출 전용 파생물 (#58, ADR-0014). */
 export const CONDENSATION_V0 = 'condensation@0.1.0';
 /** 현행 — 산문형 요구·미결 표기를 표와 동급 보존하는 판 (#64). */
@@ -62,10 +68,12 @@ export function createDefaultRegistry(): PromptRegistry {
   registry.register(requirementsPromptV0);
   registry.register(requirementsPromptV1);
   registry.register(requirementsPromptV2);
+  registry.register(requirementsPromptV3);
   registry.register(attachmentExtractionPromptV0);
   registry.register(uiClassificationPromptV0);
   registry.register(mockupPromptV0);
   registry.register(backInjectionPromptV0);
+  registry.register(backInjectionPromptV1);
   registry.register(condensationPromptV0);
   registry.register(condensationPromptV1);
   registry.register(documentPatchPromptV0);

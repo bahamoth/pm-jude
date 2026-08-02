@@ -492,6 +492,8 @@ export class SessionStore {
       createdAt: string;
     }>;
     slotStates: Array<typeof schema.slotState.$inferSelect>;
+    /** 다이어그램 확인 상태 (F3 v2.0, #70) — 규범 지위의 근거. */
+    diagramStates: Array<typeof schema.diagramState.$inferSelect>;
     signals: Array<Omit<typeof schema.signal.$inferSelect, 'id'>>;
     documents: Array<Omit<typeof schema.requirementsDoc.$inferSelect, 'id' | 'sessionId'>>;
     /**
@@ -514,6 +516,17 @@ export class SessionStore {
       elementRef: string | null;
       createdAt: string;
     }>;
+    /** 게이트 항목 (F5, #69) — 결정과 사유가 궤적으로 남는다. */
+    gateItems: Array<Omit<typeof schema.gateItem.$inferSelect, 'id' | 'sessionId'>>;
+    /** 생성 이슈 (F6) — 내부 키 대신 상정 문서 버전으로 가리킨다 (화면·골든셋 공용). */
+    linearIssues: Array<{
+      docVersion: number | null;
+      identifier: string;
+      url: string;
+      provenanceKey: string;
+      connector: string;
+      createdAt: string;
+    }>;
   }> {
     return this.db
       .select()
@@ -523,8 +536,22 @@ export class SessionStore {
         const seqByUtterance = new Map(
           this.listUtterances(session.id).map((utterance) => [utterance.id, utterance.seq]),
         );
+        const gateVersionById = new Map(
+          this.listGateItems(session.id).map((item) => [item.id, item.docVersion]),
+        );
         return {
           session,
+          gateItems: this.listGateItems(session.id).map(
+            ({ id: _id, sessionId: _sessionId, ...rest }) => rest,
+          ),
+          linearIssues: this.listLinearIssues(session.id).map((issue) => ({
+            docVersion: gateVersionById.get(issue.gateItemId) ?? null,
+            identifier: issue.identifier,
+            url: issue.url,
+            provenanceKey: issue.provenanceKey,
+            connector: issue.connector,
+            createdAt: issue.createdAt,
+          })),
           mockups: this.listMockups(session.id).map(
             ({ id: _id, sessionId: _sessionId, html, ...rest }) => ({
               ...rest,
@@ -562,6 +589,7 @@ export class SessionStore {
             ({ id: _id, authorId: _authorId, ...rest }) => rest,
           ),
           slotStates: this.listSlotStates(session.id),
+          diagramStates: this.listDiagramStates(session.id),
           signals: this.listSignals(session.id).map(({ id: _id, ...rest }) => rest),
           documents: this.listRequirementsDocs(session.id).map(
             ({ id: _id, sessionId: _sessionId, ...rest }) => rest,
@@ -781,6 +809,161 @@ export class SessionStore {
       elementRef: annotation.elementRef,
       createdAt: annotation.createdAt,
     }));
+  }
+
+  /**
+   * 다이어그램 확인 상태 기록 (F3 v2.0, #70) — 슬롯 확인과 대칭인 upsert.
+   * 확인 리셋(재생성·교정)도 같은 경로다 — confirmedByRequester: false로 다시 쓴다.
+   */
+  setDiagramState(input: {
+    sessionId: string;
+    diagramId: string;
+    confirmedByRequester: boolean;
+  }): void {
+    this.db
+      .insert(schema.diagramState)
+      .values({ ...input, updatedAt: now() })
+      .onConflictDoUpdate({
+        target: [schema.diagramState.sessionId, schema.diagramState.diagramId],
+        set: { confirmedByRequester: input.confirmedByRequester, updatedAt: now() },
+      })
+      .run();
+  }
+
+  listDiagramStates(sessionId: string): Array<typeof schema.diagramState.$inferSelect> {
+    return this.db
+      .select()
+      .from(schema.diagramState)
+      .where(eq(schema.diagramState.sessionId, sessionId))
+      .orderBy(schema.diagramState.diagramId)
+      .all();
+  }
+
+  /**
+   * 다이어그램 확인 리셋 (#70) — 문서 재생성은 전체, 부분 교정은 지목된 id만.
+   * 새 문서에는 새 확인이 필요하다 — 슬롯 확인의 버전 규율과 같다 (G-11).
+   */
+  resetDiagramStates(sessionId: string, diagramIds?: string[]): void {
+    const rows = this.listDiagramStates(sessionId);
+    for (const row of rows) {
+      if (diagramIds && !diagramIds.includes(row.diagramId)) continue;
+      if (!row.confirmedByRequester) continue;
+      this.setDiagramState({
+        sessionId,
+        diagramId: row.diagramId,
+        confirmedByRequester: false,
+      });
+    }
+  }
+
+  /**
+   * 게이트 상정 (F5, #69) — 문서 버전 하나에 대기 항목 하나. 같은 (세션, 버전) 재상정은
+   * unique 제약이 거부한다. 이전 버전의 대기 항목은 행으로 남고 최신 항목이 「현재」가 된다.
+   */
+  submitGateItem(input: {
+    sessionId: string;
+    docVersion: number;
+    isConditional: boolean;
+  }): typeof schema.gateItem.$inferSelect {
+    const row = {
+      id: randomUUID(),
+      sessionId: input.sessionId,
+      docVersion: input.docVersion,
+      isConditional: input.isConditional,
+      decision: null,
+      reasonTag: null,
+      note: null,
+      decidedBy: null,
+      submittedAt: now(),
+      decidedAt: null,
+    };
+    this.db.insert(schema.gateItem).values(row).run();
+    return row;
+  }
+
+  getGateItem(id: string): typeof schema.gateItem.$inferSelect | null {
+    return this.db.select().from(schema.gateItem).where(eq(schema.gateItem.id, id)).get() ?? null;
+  }
+
+  /** 세션의 게이트 항목 전부 — 문서 버전 오름차순 (이력·트레이스). */
+  listGateItems(sessionId: string): Array<typeof schema.gateItem.$inferSelect> {
+    return this.db
+      .select()
+      .from(schema.gateItem)
+      .where(eq(schema.gateItem.sessionId, sessionId))
+      .orderBy(schema.gateItem.docVersion)
+      .all();
+  }
+
+  /** 세션의 현재 게이트 항목 — 최신 문서 버전의 것. 이전 버전 대기 항목은 밀려난 이력이다. */
+  currentGateItem(sessionId: string): typeof schema.gateItem.$inferSelect | undefined {
+    return this.db
+      .select()
+      .from(schema.gateItem)
+      .where(eq(schema.gateItem.sessionId, sessionId))
+      .orderBy(desc(schema.gateItem.docVersion))
+      .limit(1)
+      .get();
+  }
+
+  /** 게이트 결정 기록 — 한 번 결정된 항목은 다시 결정되지 않는다 (전이 가드는 러너 몫). */
+  decideGateItem(
+    id: string,
+    input: {
+      decision: 'approve' | 'question' | 'backlog' | 'reject';
+      reasonTag?: string;
+      note?: string;
+      decidedBy?: string;
+    },
+  ): void {
+    this.db
+      .update(schema.gateItem)
+      .set({
+        decision: input.decision,
+        reasonTag: input.reasonTag ?? null,
+        note: input.note ?? null,
+        decidedBy: input.decidedBy ?? null,
+        decidedAt: now(),
+      })
+      .where(eq(schema.gateItem.id, id))
+      .run();
+  }
+
+  /** 게이트 화면의 대기 목록 — 결정 없는 항목 중 세션별 최신 문서 버전의 것만. */
+  listPendingGateItems(): Array<typeof schema.gateItem.$inferSelect> {
+    const all = this.db.select().from(schema.gateItem).orderBy(schema.gateItem.submittedAt).all();
+    const latestBySession = new Map<string, number>();
+    for (const item of all) {
+      const seen = latestBySession.get(item.sessionId) ?? 0;
+      if (item.docVersion > seen) latestBySession.set(item.sessionId, item.docVersion);
+    }
+    return all.filter(
+      (item) => item.decision === null && latestBySession.get(item.sessionId) === item.docVersion,
+    );
+  }
+
+  /** 생성 이슈 기록 (F6) — 호출자는 승인 경로뿐이다 (하드 제약은 러너 코드가 강제). */
+  recordLinearIssue(input: {
+    sessionId: string;
+    gateItemId: string;
+    linearIssueId: string;
+    identifier: string;
+    url: string;
+    provenanceKey: string;
+    connector: 'linear' | 'fake';
+  }): typeof schema.linearIssue.$inferSelect {
+    const row = { ...input, id: randomUUID(), createdAt: now() };
+    this.db.insert(schema.linearIssue).values(row).run();
+    return row;
+  }
+
+  listLinearIssues(sessionId: string): Array<typeof schema.linearIssue.$inferSelect> {
+    return this.db
+      .select()
+      .from(schema.linearIssue)
+      .where(eq(schema.linearIssue.sessionId, sessionId))
+      .orderBy(schema.linearIssue.createdAt)
+      .all();
   }
 
   /** 신호 기록 (F11). 버전 5축은 스키마 NOT NULL + FK로 강제된다. */

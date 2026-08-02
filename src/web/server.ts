@@ -6,6 +6,7 @@ import { clarificationOutputSchema } from '../prompts/clarification-v0';
 import type { PromptRegistry } from '../prompts/registry';
 import {
   DEFAULT_ATTACHMENT_LIMITS,
+  GATE_REJECT_REASONS,
   IntakeRunner,
   TEMP_REQUIRED_SLOTS,
   UploadRejectedError,
@@ -13,8 +14,11 @@ import {
   type AttachmentLimits,
   type ChannelPort,
   type ClarificationRoundPayload,
+  type GateDecision,
+  type GateRejectReason,
 } from '../runner/core-runner';
 import type { NotionPageSource } from '../connect/notion';
+import type { IssueConnector } from '../connect/issue-connector';
 import type { ExtractorRegistry } from '../extract/registry';
 import { renderMockupHtml } from '../mockup/render';
 import { ThemeRegistry } from '../mockup/theme-registry';
@@ -54,6 +58,8 @@ export interface WebServerDeps {
   condense?: { targetChars?: number; budgetChars?: number };
   /** 게이트웨이 전역 상한 (#59, ADR-0015). */
   llm?: { timeoutMs?: number; maxConcurrency?: number };
+  /** 이슈 생성 커넥터 (F6, #69) — 승인 경로의 유일한 출구. 실커넥터 또는 페이크. */
+  issues?: IssueConnector;
 }
 
 /** 질문별 「모르겠다」 1클릭 버튼(US-5) 렌더링에 필요한 최소 구조 — 내부 슬롯 매핑은 내보내지 않는다. */
@@ -717,6 +723,32 @@ export function createWebServer(deps: WebServerDeps): Server {
       })(),
       roundBudget: runner.roundBudgetOf(sessionId),
       processing: inFlight.has(sessionId),
+      /** 다이어그램 확인 상태 (F3 v2.0, #70) — 확인 전 다이어그램은 규범 아님 표시의 근거. */
+      diagramStates: store.listDiagramStates(sessionId).map((state) => ({
+        diagramId: state.diagramId,
+        confirmedByRequester: state.confirmedByRequester,
+      })),
+      /** 현재 게이트 항목 (F5, #69) — 요청자 화면의 「개발팀 검토 대기·결과」 표시 근거. */
+      gate: (() => {
+        const item = store.currentGateItem(sessionId);
+        return item
+          ? {
+              id: item.id,
+              docVersion: item.docVersion,
+              isConditional: item.isConditional,
+              decision: item.decision,
+              reasonTag: item.reasonTag,
+              note: item.note,
+              submittedAt: item.submittedAt,
+              decidedAt: item.decidedAt,
+            }
+          : null;
+      })(),
+      /** 생성된 이슈 (F6) — 종결 화면의 근거. 페이크 이슈는 connector로 구분된다. */
+      issue: (() => {
+        const row = store.listLinearIssues(sessionId).at(-1);
+        return row ? { identifier: row.identifier, url: row.url, connector: row.connector } : null;
+      })(),
       session: {
         id: session.id,
         status: session.status,
@@ -937,6 +969,126 @@ export function createWebServer(deps: WebServerDeps): Server {
     sendJson(res, 202, { sessionId, accepted: true });
   }
 
+  /**
+   * 게이트 대기 목록 (F5, #69) — 개발자 표면(/gate)의 근거. 결정 없는 최신 문서 버전 항목만.
+   * 판단 재료의 최소형: 요청 원문·문제 문장·오픈이슈 수·요청자 확인 완주 여부.
+   */
+  function handleGateList(res: ServerResponse): void {
+    const pending = store.listPendingGateItems().map((item) => {
+      const request = store
+        .listUtterances(item.sessionId)
+        .find((utterance) => utterance.authorType === 'requester');
+      const content = store.latestRequirementsDoc(item.sessionId)?.content as
+        { problem?: string; openIssues?: unknown[] } | undefined;
+      return {
+        id: item.id,
+        sessionId: item.sessionId,
+        docVersion: item.docVersion,
+        isConditional: item.isConditional,
+        submittedAt: item.submittedAt,
+        requestText: request?.originalText ?? '',
+        problem: typeof content?.problem === 'string' ? content.problem : null,
+        openIssueCount: Array.isArray(content?.openIssues) ? content.openIssues.length : 0,
+        /** 요청자 슬롯 확인 완주 여부 (G-11) — 미완주 상정도 유효하되 표시로 가른다. */
+        completed: runner.isCompleted(item.sessionId),
+      };
+    });
+    sendJson(res, 200, { pending, rejectReasons: [...GATE_REJECT_REASONS] });
+  }
+
+  /**
+   * 게이트 결정 (F5·F6·F8) — LLM 없는 동기 처리이며 승인만 커넥터 호출이 낀다.
+   * 요청자 라운드와의 경합은 inFlight로 막는다 — 결정과 재문서화가 겹치지 않게.
+   */
+  async function handleGateDecision(
+    req: IncomingMessage,
+    res: ServerResponse,
+    gateItemId: string,
+  ): Promise<void> {
+    const item = store.getGateItem(gateItemId);
+    const session = item ? store.getSession(item.sessionId) : null;
+    if (!item || !session?.channelThreadKey) {
+      sendJson(res, 404, { error: '게이트 항목 없음' });
+      return;
+    }
+    const body = await readJsonBody(req);
+    const decision = body.decision;
+    if (
+      decision !== 'approve' &&
+      decision !== 'question' &&
+      decision !== 'backlog' &&
+      decision !== 'reject'
+    ) {
+      throw new BadRequest('decision은 approve/question/backlog/reject 중 하나여야 한다');
+    }
+    const note = typeof body.note === 'string' ? body.note.trim() : '';
+    if (decision === 'question' && !note) {
+      throw new BadRequest('질문 결정에는 질문 본문(note)이 필요하다');
+    }
+    const reasonTag = typeof body.reasonTag === 'string' ? body.reasonTag : '';
+    if (decision === 'reject' && !GATE_REJECT_REASONS.includes(reasonTag as GateRejectReason)) {
+      throw new BadRequest(`거절 사유는 다음 중 하나여야 한다: ${GATE_REJECT_REASONS.join(', ')}`);
+    }
+    if (inFlight.has(item.sessionId)) {
+      sendJson(res, 409, { error: '이 요청은 지금 처리 중이다 — 잠시 뒤 다시 시도해 달라' });
+      return;
+    }
+    inFlight.add(item.sessionId);
+    try {
+      const result = await runner.decideGate(
+        {
+          address: { sessionId: item.sessionId },
+          threadKey: session.channelThreadKey,
+          channel: 'web',
+          text: '',
+        },
+        {
+          gateItemId,
+          decision: decision as GateDecision,
+          ...(note ? { note } : {}),
+          ...(reasonTag ? { reasonTag } : {}),
+          ...(typeof body.decidedBy === 'string' && body.decidedBy
+            ? { decidedBy: body.decidedBy }
+            : {}),
+        },
+      );
+      if (result === 'not_found') {
+        sendJson(res, 404, { error: '게이트 항목 없음' });
+        return;
+      }
+      if (result === 'already_decided') {
+        sendJson(res, 409, { code: 'already_decided', error: '이미 결정된 항목이다' });
+        return;
+      }
+      if (result === 'stale') {
+        sendJson(res, 409, {
+          code: 'stale_gate',
+          error: '이 항목은 최신 문서의 것이 아니다 — 목록을 다시 불러와 달라',
+        });
+        return;
+      }
+      const updated = store.getSession(item.sessionId);
+      const issue = store.listLinearIssues(item.sessionId).at(-1);
+      sendJson(res, 200, {
+        outcome: 'ok',
+        decision,
+        session: {
+          id: item.sessionId,
+          status: updated?.status ?? session.status,
+          terminalState: updated?.terminalState ?? null,
+        },
+        issue:
+          decision === 'approve' && issue
+            ? { identifier: issue.identifier, url: issue.url, connector: issue.connector }
+            : null,
+      });
+    } finally {
+      inFlight.delete(item.sessionId);
+      const status = statusOf(item.sessionId);
+      if (status) broadcast(item.sessionId, 'status', status);
+    }
+  }
+
   /** 업로드 가능 여부와 상한 — 세션 조회와 정책 조회가 같은 답을 준다. */
   function uploadPolicy(): Record<string, unknown> {
     return runner.attachmentsEnabled
@@ -964,6 +1116,17 @@ export function createWebServer(deps: WebServerDeps): Server {
       // 세션 없는 화면(인테이크 폼)도 무엇을 올릴 수 있는지 미리 알아야 한다 (P-U1)
       if (req.method === 'GET') {
         sendJson(res, 200, uploadPolicy());
+        return;
+      }
+    }
+    // 승인 게이트 (F5, #69) — 개발자 표면의 결정 API
+    if (segments[0] === 'api' && segments[1] === 'gate') {
+      if (req.method === 'GET' && segments.length === 2) {
+        handleGateList(res);
+        return;
+      }
+      if (req.method === 'POST' && segments.length === 4 && segments[3] === 'decision') {
+        await handleGateDecision(req, res, segments[2] ?? '');
         return;
       }
     }
@@ -1052,6 +1215,34 @@ export function createWebServer(deps: WebServerDeps): Server {
           segments[4] === 'corrections'
         ) {
           await handleDocumentCorrection(req, res, sessionId);
+          return;
+        }
+        // 다이어그램 단위 확인 (F3 v2.0, #70) — LLM 없는 동기 처리. 정정은 문서 교정 경로.
+        if (
+          req.method === 'POST' &&
+          segments.length === 6 &&
+          segments[3] === 'diagrams' &&
+          segments[5] === 'confirmation'
+        ) {
+          const session = store.getSession(sessionId);
+          if (!session?.channelThreadKey) {
+            sendJson(res, 404, { error: '세션 없음' });
+            return;
+          }
+          const outcome = runner.confirmDiagram(
+            {
+              address: { sessionId },
+              threadKey: session.channelThreadKey,
+              channel: 'web',
+              text: '',
+            },
+            decodeURIComponent(segments[4] ?? ''),
+          );
+          if (!outcome) {
+            sendJson(res, 409, { error: '지금은 이 다이어그램을 확인할 수 없어요.' });
+            return;
+          }
+          sendJson(res, 200, { sessionId, confirmed: true });
           return;
         }
         if (req.method === 'POST' && segments.length === 5 && segments[3] === 'slots') {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canConfirmDiagram,
   fullyPromoted,
   isLastRound,
   journeyStep,
@@ -26,6 +27,15 @@ describe('상태 → 여정·칩 매핑', () => {
     expect(journeyStep('clarifying')).toBe(2);
     expect(journeyStep('documented')).toBe(3);
     expect(journeyStep('closed')).toBe(2);
+    expect(journeyStep('closed', { terminalState: 'on_hold_insufficient_info' })).toBe(2);
+  });
+
+  it('게이트(#69)부터 종결이 갈린다 — 검토 대기 ④, 게이트 종결 ④, 이슈 생성 ⑤', () => {
+    expect(journeyStep('documented', { gateWaiting: true })).toBe(4);
+    expect(journeyStep('documented', { gateWaiting: false })).toBe(3);
+    expect(journeyStep('closed', { terminalState: 'issue_created' })).toBe(5);
+    expect(journeyStep('closed', { terminalState: 'backlog' })).toBe(4);
+    expect(journeyStep('closed', { terminalState: 'rejected' })).toBe(4);
   });
 
   it('목업 반복은 ③ 문서 확정 위에서 돈다 (F4 #54 — 정본 스테퍼 대응)', () => {
@@ -76,6 +86,16 @@ describe('문서 화면의 정직 표시 (G-11)', () => {
       ]),
     ).toBe(false);
     expect(fullyPromoted([])).toBe(false);
+  });
+});
+
+describe('다이어그램 확인 창 (#70)', () => {
+  it('슬롯 확인과 같은 창이다 — documented·mockup에서만 (백엔드 가드와 일치)', () => {
+    expect(canConfirmDiagram('documented')).toBe(true);
+    expect(canConfirmDiagram('mockup')).toBe(true);
+    expect(canConfirmDiagram('clarifying')).toBe(false);
+    expect(canConfirmDiagram('closed')).toBe(false);
+    expect(canConfirmDiagram('intake')).toBe(false);
   });
 });
 

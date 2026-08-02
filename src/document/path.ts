@@ -10,7 +10,7 @@ import type { RequirementsOutput } from '../prompts/requirements-v0';
  * 주소 문법은 화면 렌더(web-ui/lib/document.ts)와 같다:
  *   problem · users[0] · scope.inScope[2] · scope.outOfScope[1]
  *   stories[0].story · stories[0].acceptanceCriteria[1].ears · …[1].gwt
- *   dataSources[0] · openIssues[2].question
+ *   dataSources[0] · openIssues[2].question · diagrams[0].title · diagrams[0].mermaid (#70)
  */
 
 /** 알 수 없는 주소 — 오타를 조용히 무시하지 않는다 (미등록 MIME 거부와 같은 정신). */
@@ -163,6 +163,12 @@ export function readDocumentPath(content: RequirementsOutput, path: string): str
       if (acField === 'gwt') return formatGwt(criterion.gwt);
       return fail();
     }
+    case 'diagrams': {
+      // 제목과 mermaid 본문만 주소를 갖는다 (#70) — id·kind·출처는 편집 대상이 아니라 좌표다
+      const [index, field] = rest;
+      if (typeof index !== 'number' || (field !== 'title' && field !== 'mermaid')) return fail();
+      return at(content.diagrams ?? [], index, path)[field];
+    }
     default:
       return fail();
   }
@@ -242,6 +248,12 @@ export function applyDocumentCorrections(
         const criterion = at(story.acceptanceCriteria, rest[2] as number, path);
         if (rest[3] === 'ears') criterion.ears = value;
         else criterion.gwt = parseGwt(value);
+        break;
+      }
+      case 'diagrams': {
+        const diagram = at(next.diagrams ?? [], rest[0] as number, path);
+        if (rest[1] === 'title') diagram.title = value;
+        else diagram.mermaid = value; // mermaid는 다행 텍스트다 — trim은 양끝만 다듬는다
         break;
       }
       default:

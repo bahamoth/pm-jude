@@ -86,7 +86,11 @@ const configSchema = z
       .strict()
       .prefault({}),
     linear: z
-      .object({ apiKey: z.string().nullable().default(null) })
+      .object({
+        apiKey: z.string().nullable().default(null),
+        /** 이슈 생성 대상 팀 (F6, #69) — apiKey와 함께 있어야 실커넥터가 열린다. */
+        teamId: z.string().nullable().default(null),
+      })
       .strict()
       .prefault({}),
     log: z
@@ -125,6 +129,7 @@ const ENV_MAPPING: ReadonlyArray<[envVar: string, path: [string, string], kind: 
   ['SLACK_BOT_TOKEN', ['slack', 'botToken'], 'string'],
   ['SLACK_APP_TOKEN', ['slack', 'appToken'], 'string'],
   ['LINEAR_API_KEY', ['linear', 'apiKey'], 'string'],
+  ['LINEAR_TEAM_ID', ['linear', 'teamId'], 'string'],
 ];
 
 const DEFAULT_CONFIG_FILENAME = 'pm-jude.config.json';

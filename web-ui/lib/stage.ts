@@ -7,23 +7,38 @@ export const JOURNEY_STEPS = [
   { index: 1, labelKey: 'journey.1' },
   { index: 2, labelKey: 'journey.2' },
   { index: 3, labelKey: 'journey.3' },
-  { index: 4, labelKey: 'journey.4', pending: true },
+  { index: 4, labelKey: 'journey.4' },
   { index: 5, labelKey: 'journey.5', pending: true },
 ] as const satisfies ReadonlyArray<{ index: number; labelKey: Key; pending?: boolean }>;
 
-/** 현재 여정 단계 (1~5). 보류는 ②에, 목업 반복은 ③(문서 확정) 위에서 돈다 (F4 #54). */
-export function journeyStep(status: SessionStatus): number {
+/**
+ * 현재 여정 단계 (1~5). 보류는 ②에, 목업 반복은 ③(문서 확정) 위에서 돈다 (F4 #54).
+ * 게이트(#69)부터 종결이 갈린다: 검토 대기는 ④, 게이트 종결(백로그·거절)은 ④에서 멈추고,
+ * 이슈 생성은 ⑤에 닿는다. 보류 종결만 ②로 돌아간다 — 정리가 안 끝난 상태니까.
+ */
+export function journeyStep(
+  status: SessionStatus,
+  context?: { terminalState?: string | null; gateWaiting?: boolean },
+): number {
   switch (status) {
     case 'intake':
       return 1;
     case 'clarifying':
       return 2;
     case 'documented':
-      return 3;
+      return context?.gateWaiting ? 4 : 3;
     case 'mockup':
       return 3;
     case 'closed':
-      return 2;
+      switch (context?.terminalState) {
+        case 'issue_created':
+          return 5;
+        case 'backlog':
+        case 'rejected':
+          return 4;
+        default:
+          return 2; // 보류(정보 부족) — 내용 정리가 끝나지 않았다
+      }
   }
 }
 
@@ -77,6 +92,14 @@ export function mockupCardMode(
 ): 'panel' | 'archive' | 'none' {
   if (mockup === null) return 'none';
   return mockup.convergence === 'iterating' ? 'panel' : 'archive';
+}
+
+/**
+ * 다이어그램 확인 가능 상태 (#70) — 슬롯 확인과 같은 창이다: documented·mockup에서만.
+ * 백엔드 가드와 일치해야 한다 — 화면이 열어 둔 버튼이 409로 끝나면 안 된다 (P-U1).
+ */
+export function canConfirmDiagram(status: SessionStatus): boolean {
+  return status === 'documented' || status === 'mockup';
 }
 
 /** 전면 승격 문서 (#28 S-5) — 채워진 슬롯 없이 전부 개발팀 확인으로 넘어간 경우. */

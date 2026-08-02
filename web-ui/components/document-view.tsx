@@ -15,7 +15,9 @@ import {
   type DocSelection,
 } from '@/lib/doc-selection';
 import type { DocLine } from '@/lib/document';
-import { t, type Lang } from '@/lib/i18n';
+import { MermaidDiagram } from '@/components/mermaid-diagram';
+import { t, type Key, type Lang } from '@/lib/i18n';
+import type { DiagramStateView } from '@/lib/types';
 
 /** 지시가 바꿀 블록의 표시 — 드래그 범위와 실제 대상이 다를 수 있으므로 눈에 보여야 한다. */
 const TARGET_CLASS = 'rounded bg-primary/10 ring-1 ring-primary/40';
@@ -38,7 +40,19 @@ interface Props {
   /** 부분 교정 (#66) — 없으면 열람 전용(레거시 텍스트 경로는 주소가 없다). */
   onCorrect?: (request: DocumentCorrectionRequest) => void;
   submitting?: boolean;
+  /** 다이어그램 단위 확인 상태 (F3 v2.0, #70) — 없으면 전부 미확인 취급. */
+  diagramStates?: DiagramStateView[];
+  /** 다이어그램 「맞아요」 (ADR-0018 결정 3) — 없으면 확인 버튼이 열리지 않는다(종결 화면 등). */
+  onConfirmDiagram?: (diagramId: string) => void;
 }
+
+/** 다이어그램 종류의 사람 표기 키. */
+const DIAGRAM_KIND_KEY: Record<'flow' | 'state' | 'hierarchy' | 'screen', Key> = {
+  flow: 'diagram.kind.flow',
+  state: 'diagram.kind.state',
+  hierarchy: 'diagram.kind.hierarchy',
+  screen: 'diagram.kind.screen',
+};
 
 // requirements 문서 열람 (US-9·10) — 문서를 구조대로 표시한다.
 // 교정 대상 라인에는 data-doc-path로 요소 주소를 심는다 (#66, ADR-0016) — 드래그 선택이
@@ -50,7 +64,12 @@ export function DocumentView({
   fullyPromoted,
   onCorrect,
   submitting,
+  diagramStates,
+  onConfirmDiagram,
 }: Props) {
+  const diagramConfirmed = (diagramId: string) =>
+    diagramStates?.some((state) => state.diagramId === diagramId && state.confirmedByRequester) ??
+    false;
   const bodyRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -343,6 +362,70 @@ export function DocumentView({
                   {line.text}
                 </p>
               );
+            // 규범 다이어그램 (F3 v2.0, #70) — 제목 줄과 렌더 블록. 확인 배지가 규범 지위를 말한다.
+            case 'diagramTitle': {
+              const confirmed = diagramConfirmed(line.diagramId);
+              return (
+                <div
+                  key={i}
+                  data-doc-path={line.path}
+                  onClick={pickLine}
+                  onDoubleClick={editLine}
+                  className={`mt-1 flex flex-wrap items-center gap-2${correctable && line.path ? ' cursor-pointer rounded hover:bg-muted/60' : ''}${line.path && targetPaths.has(line.path) ? ` ${TARGET_CLASS}` : ''}`}
+                >
+                  <span className="font-medium">{line.text}</span>
+                  <Badge variant="outline" className="text-[11px]">
+                    {t(lang, DIAGRAM_KIND_KEY[line.diagramKind])}
+                  </Badge>
+                  {line.sourceAttachmentRef && (
+                    <span className="text-xs text-muted-foreground">
+                      {t(lang, 'diagram.source', { ref: line.sourceAttachmentRef })}
+                    </span>
+                  )}
+                  <Badge
+                    variant={confirmed ? 'secondary' : 'outline'}
+                    className={`ml-auto text-[11px]${confirmed ? '' : ' border-dashed text-muted-foreground'}`}
+                  >
+                    {t(lang, confirmed ? 'diagram.confirmed' : 'diagram.unconfirmed')}
+                  </Badge>
+                </div>
+              );
+            }
+            case 'diagram': {
+              const confirmed = diagramConfirmed(line.diagramId);
+              return (
+                <div key={i} className="grid gap-2 rounded-lg border bg-card p-3">
+                  <div
+                    data-doc-path={line.path}
+                    onClick={pickLine}
+                    onDoubleClick={editLine}
+                    className={line.path && targetPaths.has(line.path) ? TARGET_CLASS : undefined}
+                  >
+                    <MermaidDiagram lang={lang} source={line.text} />
+                  </div>
+                  {!confirmed && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-2">
+                      {/* ADR-0018 결정 3 — 확인 없는 재생성 다이어그램은 규범이 아니다 */}
+                      <p className="text-xs text-muted-foreground">
+                        {t(lang, 'diagram.unconfirmedNote')}
+                      </p>
+                      {onConfirmDiagram && (
+                        <Button
+                          size="sm"
+                          disabled={submitting}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onConfirmDiagram(line.diagramId);
+                          }}
+                        >
+                          {t(lang, 'diagram.confirm')}
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            }
             default:
               return <p key={i}>{line.text}</p>;
           }

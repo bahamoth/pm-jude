@@ -85,6 +85,22 @@ export interface UploadedFile {
   bytes: number;
 }
 
+/** 규범 다이어그램 (F3 v2.0, ADR-0018) — 문서 안에 실리는 재생성 다이어그램. */
+export interface DiagramView {
+  id: string;
+  title: string;
+  kind: 'flow' | 'state' | 'hierarchy' | 'screen';
+  mermaid: string;
+  /** 유래 첨부 참조 (A1 등) — 출처 표시의 근거. 대화 유래면 null. */
+  sourceAttachmentRef: string | null;
+}
+
+/** 다이어그램 단위 확인 상태 (ADR-0018 결정 3) — 확인 없는 재생성본은 규범이 아니다. */
+export interface DiagramStateView {
+  diagramId: string;
+  confirmedByRequester: boolean;
+}
+
 /** requirements 문서 구조체 — 서버 requirements_doc.content의 뷰 타입 (#53, data-model.md). */
 export interface DocumentContent {
   problem: string;
@@ -99,6 +115,8 @@ export interface DocumentContent {
   }>;
   dataSources: string[];
   openIssues: Array<{ slotKey: string; question: string; assignee: string | null }>;
+  /** 규범 다이어그램 (v2.0) — 레거시 문서에는 없다. */
+  diagrams?: DiagramView[];
 }
 
 /** 목업 요약 (F4 #54) — 세션 조회에 실린다. 상세는 목업 상태 조회로. */
@@ -137,6 +155,57 @@ export interface MockupState extends MockupSummary {
   processing: boolean;
 }
 
+/** 게이트 결정 4종 (F5 #69) — 값 집합은 코어가 소유한다 (src/runner/core-runner.ts). */
+export type GateDecision = 'approve' | 'question' | 'backlog' | 'reject';
+
+/** 세션의 현재 게이트 항목 (F5 #69) — 「개발팀 검토 대기·결과」 표시의 근거. */
+export interface GateView {
+  id: string;
+  docVersion: number;
+  /** 미해결 오픈이슈(승격 슬롯) 동반 상정 (F2c ②). */
+  isConditional: boolean;
+  decision: GateDecision | null;
+  reasonTag: string | null;
+  note: string | null;
+  submittedAt: string;
+  decidedAt: string | null;
+}
+
+/** 생성된 이슈 (F6) — connector가 fake면 데모 이슈다 (실이슈 오인 방지). */
+export interface IssueView {
+  identifier: string;
+  url: string;
+  connector: 'linear' | 'fake';
+}
+
+/** 게이트 대기 목록의 항목 (GET /api/gate) — 개발자 표면의 근거. */
+export interface GatePendingItem {
+  id: string;
+  sessionId: string;
+  docVersion: number;
+  isConditional: boolean;
+  submittedAt: string;
+  requestText: string;
+  problem: string | null;
+  openIssueCount: number;
+  /** 요청자 슬롯 확인 완주 여부 (G-11) — 미완주 상정도 유효하되 표시로 가른다. */
+  completed: boolean;
+}
+
+export interface GateList {
+  pending: GatePendingItem[];
+  /** 거절의 통제된 사유 태그 목록 — 표기는 화면 사전 몫. */
+  rejectReasons: string[];
+}
+
+/** 게이트 결정 응답 (POST /api/gate/:id/decision). */
+export interface GateDecisionOutcome {
+  outcome: 'ok';
+  decision: GateDecision;
+  session: { id: string; status: SessionStatus; terminalState: string | null };
+  issue: IssueView | null;
+}
+
 export interface SessionDetail {
   latestQuestions: ReplyQuestion[] | null;
   /** 최신 명확화 라운드의 식별자 — 답변 제출이 동반해야 한다 (G-10 라운드 정합). */
@@ -169,6 +238,12 @@ export interface SessionDetail {
   uploads: UploadPolicy;
   /** 목업 요약 (F4 #54) — null이면 목업 없는 세션 (비 UI 또는 목업 전). */
   mockup: MockupSummary | null;
+  /** 현재 게이트 항목 (F5 #69) — null이면 아직 상정 전. */
+  gate: GateView | null;
+  /** 생성된 이슈 (F6) — null이면 승인 전. */
+  issue: IssueView | null;
+  /** 다이어그램 단위 확인 상태 (F3 v2.0, #70) — 문서의 diagrams와 id로 짝을 이룬다. */
+  diagramStates: DiagramStateView[];
 }
 
 export interface SessionSummary {

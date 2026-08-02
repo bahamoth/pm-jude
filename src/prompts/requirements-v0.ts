@@ -55,6 +55,27 @@ export const requirementsOutputSchema = z
           .strict(),
       )
       .default([]),
+    /**
+     * 규범 다이어그램 (v2.0, ADR-0018 — #70) — 시각 구조가 본질인 확정 사항의 표기.
+     * 텍스트 표기(mermaid)만 규범 지위를 가지며, 요청자의 다이어그램 단위 확인 전에는
+     * 「확인 전 — 참고용」으로 표시된다. 구 버전 프롬프트 출력은 이 필드가 없다 — default가 받는다.
+     */
+    diagrams: z
+      .array(
+        z
+          .object({
+            /** 문서 내 참조·확인의 좌표 — 짧은 영문 슬러그 (예: "order-flow"). */
+            id: z.string().min(1),
+            title: z.string().min(1),
+            kind: z.enum(['flow', 'state', 'hierarchy', 'screen']),
+            /** mermaid 텍스트 표기 — diff 가능해야 규범이 된다 (ADR-0018 결정 2). */
+            mermaid: z.string().min(1),
+            /** 출처 — 첨부 유래면 그 ref(A1…), 대화 유래면 null (F2c 출처 규율과 대칭). */
+            sourceAttachmentRef: z.string().nullable(),
+          })
+          .strict(),
+      )
+      .default([]),
   })
   .strict();
 

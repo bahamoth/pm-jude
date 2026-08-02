@@ -1,6 +1,9 @@
 import {
   ApiError,
   type Accepted,
+  type GateDecision,
+  type GateDecisionOutcome,
+  type GateList,
   type IntakeResult,
   type MockupState,
   type ReplyOutcome,
@@ -95,6 +98,20 @@ export function sendReply(
       ...(uploadIds?.length ? { uploadIds } : {}),
     }),
   });
+}
+
+/**
+ * 다이어그램 단위 확인 (F3 v2.0, ADR-0018 결정 3 — #70). LLM 없는 동기 200 —
+ * 확인 없는 재생성 다이어그램은 규범이 아니므로, 이 호출이 규범 지위를 부여한다.
+ */
+export function confirmDiagram(
+  sessionId: string,
+  diagramId: string,
+): Promise<{ sessionId: string; confirmed: true }> {
+  return request(
+    `/api/sessions/${encodeURIComponent(sessionId)}/diagrams/${encodeURIComponent(diagramId)}/confirmation`,
+    { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
+  );
 }
 
 /** 맞아요(즉시 200) — LLM 호출이 없다. */
@@ -205,5 +222,27 @@ export function approveMockup(sessionId: string): Promise<Accepted> {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: '{}',
+  });
+}
+
+// ── 승인 게이트 (F5·F6, #69) — 개발자 표면(/gate) ──────────────────────
+
+/** 게이트 대기 목록 — 결정 없는 최신 문서 버전 항목만 온다. */
+export function getGate(): Promise<GateList> {
+  return request('/api/gate');
+}
+
+/**
+ * 게이트 결정(동기 200) — 승인만 이슈 커넥터 호출이 낀다. 409의 code
+ * (`already_decided`·`stale_gate`)는 오류가 아니라 다른 곳이 앞서간 신호다 — 목록 재조회로 푼다.
+ */
+export function decideGate(
+  gateItemId: string,
+  body: { decision: GateDecision; reasonTag?: string; note?: string; decidedBy?: string },
+): Promise<GateDecisionOutcome> {
+  return request(`/api/gate/${encodeURIComponent(gateItemId)}/decision`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
   });
 }

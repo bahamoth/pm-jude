@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   approveMockup,
+  confirmDiagram,
   confirmSlotOk,
   correctDocument,
   correctSlot,
@@ -35,10 +36,18 @@ import {
 } from '@/lib/api';
 import { documentLinesFromContent, parseDocumentText } from '@/lib/document';
 import type { UploadedFile } from '@/lib/types';
+import { closedCardKind, gateWaiting, rejectReasonKey } from '@/lib/gate';
 import { rememberSession } from '@/lib/local-sessions';
 import { t, sessionLang, useLang, type Lang } from '@/lib/i18n';
 import { judeState, type JudeState } from '@/lib/jude-geometry';
-import { fullyPromoted, isLastRound, journeyStep, mockupCardMode, roundFailed } from '@/lib/stage';
+import {
+  canConfirmDiagram,
+  fullyPromoted,
+  isLastRound,
+  journeyStep,
+  mockupCardMode,
+  roundFailed,
+} from '@/lib/stage';
 import { ApiError, type SessionDetail } from '@/lib/types';
 import { watchProcessing } from '@/lib/watch-processing';
 
@@ -172,6 +181,8 @@ export default function SessionPage() {
     .map((file) => file.filename);
   const onHold =
     session.status === 'closed' && session.terminalState === 'on_hold_insufficient_info';
+  /** 개발팀 검토 대기 (F5 #69) — documented에서 게이트 항목이 결정을 기다리는 상태. */
+  const waitingForGate = gateWaiting(session.status, detail.gate);
   // 죽은 라운드 판정은 서버가 한다 (G-10) — 화면은 처리 중이 아닐 때만 재시도를 드러낸다
   // 문서 부분 교정 (#66) — edit는 즉시 반영(LLM 없음), instruct는 백그라운드 라운드로 돈다
   const onCorrectDocument = (request: DocumentCorrectionRequest) => {
@@ -202,6 +213,20 @@ export default function SessionPage() {
   };
 
   const failed = roundFailed(pendingRound, processing || busy);
+  /**
+   * 다이어그램 「맞아요」 (F3 v2.0, #70) — 동기 200, 감시 없이 재조회로 충분하다.
+   * 확인 창은 슬롯 확인과 같다(documented·mockup) — 백엔드 가드와 일치 (P-U1).
+   */
+  const onConfirmDiagram = canConfirmDiagram(session.status)
+    ? (diagramId: string) => {
+        setError(null);
+        void confirmDiagram(sessionId, diagramId)
+          .then(() => refetch())
+          .catch((e: unknown) =>
+            setError(e instanceof Error ? e.message : t(lang, 'session.confirmFailed')),
+          );
+      }
+    : undefined;
   /**
    * 목업 카드 (#54 · #66 · #67) — 열려 있는 판이면 반복 패널, 닫힌 판이면 열람 + 고치기 진입점.
    *
@@ -277,11 +302,14 @@ export default function SessionPage() {
     <Shell lang={lang} sessionId={sessionId} judeState={face} judeRef={judeRef}>
       <JourneyStepper
         lang={lang}
-        current={journeyStep(session.status)}
+        current={journeyStep(session.status, {
+          terminalState: session.terminalState,
+          gateWaiting: waitingForGate,
+        })}
         note={
           onHold
             ? t(lang, 'journey.onHold')
-            : completed
+            : completed && !waitingForGate && session.status !== 'closed'
               ? t(lang, 'journey.done') // 확인 완료가 ③ 위에 표시된다 (G-11)
               : undefined
         }
@@ -358,6 +386,8 @@ export default function SessionPage() {
             fullyPromoted={fullyPromoted(slotStates)}
             onCorrect={onCorrectDocument}
             submitting={busy || failed}
+            diagramStates={detail.diagramStates}
+            onConfirmDiagram={onConfirmDiagram}
           />
           <AttachmentList lang={lang} sessionId={sessionId} attachments={attachments} />
         </div>
@@ -384,11 +414,22 @@ export default function SessionPage() {
             fullyPromoted={fullyPromoted(slotStates)}
             onCorrect={onCorrectDocument}
             submitting={busy || failed}
+            diagramStates={detail.diagramStates}
+            onConfirmDiagram={onConfirmDiagram}
           />
           {/* 승인 뒤에도 화면을 다시 보고 다시 고칠 수 있다 (#66 · #67) */}
           {mockupCard}
           <AttachmentList lang={lang} sessionId={sessionId} attachments={attachments} />
-          {completed ? (
+          {waitingForGate && detail.gate ? (
+            // 개발팀 검토 대기 (F5 #69) — 「다음 단계 준비 중」이 아니라 실제로 검토 중이다
+            <Alert>
+              <AlertTitle>{t(lang, 'gateWait.title')}</AlertTitle>
+              <AlertDescription className="grid gap-1">
+                <span>{t(lang, 'gateWait.body', { version: detail.gate.docVersion })}</span>
+                {detail.gate.isConditional && <span>{t(lang, 'gateWait.conditionalNote')}</span>}
+              </AlertDescription>
+            </Alert>
+          ) : completed ? (
             <Alert>
               <AlertTitle>{t(lang, 'doc.completedTitle')}</AlertTitle>
               <AlertDescription>{t(lang, 'doc.completedBody')}</AlertDescription>
@@ -406,10 +447,23 @@ export default function SessionPage() {
           onResume={(text) => void act(() => sendReply(sessionId, text))}
         />
       ) : (
-        <Alert>
-          <AlertTitle>{t(lang, 'session.closedTitle')}</AlertTitle>
-          <AlertDescription>{t(lang, 'session.closedBody')}</AlertDescription>
-        </Alert>
+        // 게이트 종결 (F8 #69) — 결과 카드 + 문서·목업·자료는 계속 보인다
+        // (ux-conventions: 데이터가 있으면 보는 길이 있다 / 문서 교정은 종결과 무관 — ADR-0016)
+        <div className="grid gap-4">
+          <ClosedOutcomeCard lang={lang} detail={detail} />
+          <DocumentView
+            lang={lang}
+            lines={docLines}
+            version={storedDocument?.version ?? documentVersion}
+            fullyPromoted={fullyPromoted(slotStates)}
+            onCorrect={onCorrectDocument}
+            submitting={busy || failed}
+            diagramStates={detail.diagramStates}
+            onConfirmDiagram={onConfirmDiagram}
+          />
+          {mockupCard}
+          <AttachmentList lang={lang} sessionId={sessionId} attachments={attachments} />
+        </div>
       )}
 
       {error && (
@@ -426,6 +480,72 @@ export default function SessionPage() {
         </Alert>
       )}
     </Shell>
+  );
+}
+
+/**
+ * 게이트 종결 카드 (F8 #69) — terminalState가 유일한 근거다. 이슈 생성은 식별자·링크를,
+ * 거절은 사유와 이의 경로를 보여준다. 미지의 종결 상태는 기존 generic 문구로 폴백한다.
+ */
+function ClosedOutcomeCard({ lang, detail }: { lang: Lang; detail: SessionDetail }) {
+  const kind = closedCardKind(detail.session.terminalState);
+  if (kind === 'issue') {
+    return (
+      <Alert>
+        <AlertTitle>{t(lang, 'closed.issueTitle')}</AlertTitle>
+        <AlertDescription className="grid gap-2">
+          <span>
+            {t(lang, 'closed.issueBody', {
+              identifier: detail.issue?.identifier ?? t(lang, 'common.dash'),
+            })}
+          </span>
+          {detail.issue && (
+            <span className="flex flex-wrap items-center gap-2">
+              <a
+                className="underline"
+                href={detail.issue.url}
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                {t(lang, 'closed.issueLink')}
+              </a>
+              {detail.issue.connector === 'fake' && (
+                <span className="text-muted-foreground">{t(lang, 'closed.issueFakeNote')}</span>
+              )}
+            </span>
+          )}
+        </AlertDescription>
+      </Alert>
+    );
+  }
+  if (kind === 'backlog') {
+    return (
+      <Alert>
+        <AlertTitle>{t(lang, 'closed.backlogTitle')}</AlertTitle>
+        <AlertDescription>{t(lang, 'closed.backlogBody')}</AlertDescription>
+      </Alert>
+    );
+  }
+  if (kind === 'rejected') {
+    const reasonKey = rejectReasonKey(detail.gate?.reasonTag ?? null);
+    return (
+      <Alert>
+        <AlertTitle>{t(lang, 'closed.rejectedTitle')}</AlertTitle>
+        <AlertDescription>
+          {t(lang, 'closed.rejectedBody', {
+            reason: reasonKey
+              ? t(lang, reasonKey)
+              : (detail.gate?.reasonTag ?? t(lang, 'common.dash')),
+          })}
+        </AlertDescription>
+      </Alert>
+    );
+  }
+  return (
+    <Alert>
+      <AlertTitle>{t(lang, 'session.closedTitle')}</AlertTitle>
+      <AlertDescription>{t(lang, 'session.closedBody')}</AlertDescription>
+    </Alert>
   );
 }
 

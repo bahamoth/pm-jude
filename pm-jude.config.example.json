@@ -31,6 +31,6 @@
   },
   "notion": { "apiKey": null },
   "slack": { "botToken": null, "appToken": null },
-  "linear": { "apiKey": null },
+  "linear": { "apiKey": null, "teamId": null },
   "log": { "file": null }
 }
