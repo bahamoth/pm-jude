@@ -225,6 +225,69 @@ const ko = {
   'session.retryFailed': '다시 시도하지 못했어요',
   'session.actionFailed': '처리하지 못했어요',
   'session.confirmFailed': '확인을 저장하지 못했어요',
+
+  // 개발팀 검토 대기·종결 (F5·F8 #69) — 요청자 화면
+  'gateWait.title': '개발팀 검토를 기다리고 있어요',
+  'gateWait.body':
+    '문서 v{version}이 개발팀 검토 목록에 올라가 있어요. 결과가 나오면 이 화면에 표시돼요 — 그동안 문서 확인·정정은 계속 하실 수 있어요.',
+  'gateWait.conditionalNote': '개발팀이 확정할 항목도 함께 넘어갔어요 — 답하지 않으셔도 돼요.',
+  'closed.issueTitle': '개발팀이 승인했어요',
+  'closed.issueBody':
+    '작업 목록에 {identifier}로 등록됐어요. 이 요청의 정리는 여기서 마무리예요 — 문서는 언제든 다시 열어 보실 수 있어요.',
+  'closed.issueLink': '이슈 열기',
+  'closed.issueFakeNote': '데모 이슈예요 — 실제 트래커에는 아직 연결되지 않았어요.',
+  'closed.backlogTitle': '지금은 보관함에 있어요',
+  'closed.backlogBody':
+    '개발팀 검토 결과, 바로 진행하지 않고 보관해 두기로 했어요. 비슷한 요청이 모이거나 상황이 바뀌면 다시 검토돼요.',
+  'closed.rejectedTitle': '이번에는 진행하지 않기로 했어요',
+  'closed.rejectedBody':
+    '개발팀 검토 결과예요 — 사유: {reason}. 이 결정에 이견이 있으면 팀 리드에게 재검토를 요청하실 수 있어요.',
+
+  // 거절 사유 짧은 표기 — 게이트 셀렉트와 종결 카드가 같이 쓴다
+  'reason.priority': '우선순위',
+  'reason.out_of_scope': '팀 범위 밖',
+  'reason.duplicate': '기존 요청과 중복',
+  'reason.technically_infeasible': '기술적으로 어려움',
+  'reason.insufficient_info': '정보 부족',
+
+  // 승인 게이트 (F5 #69) — 개발자 표면(/gate). Jude의 목소리가 아니라 사실 어조다.
+  'gate.title': '승인 게이트',
+  'gate.lede': '문서가 확정된 요청의 진행 여부를 결정합니다. 이슈는 승인 시에만 생성됩니다.',
+  'gate.empty': '대기 중인 검토가 없습니다.',
+  'gate.loadFailed': '목록을 불러오지 못했습니다',
+  'gate.refresh': '새로고침',
+  'gate.docVersion': '문서 v{version}',
+  'gate.conditional': '조건부 — 오픈이슈 {count}건',
+  'gate.completedBadge': '요청자 확인 완주',
+  'gate.notCompletedBadge': '요청자 확인 진행 중',
+  'gate.openSession': '세션 열기',
+  'gate.requestLabel': '요청 원문',
+  'gate.problemLabel': '문제',
+  'gate.decidedBy': '결정자 (선택)',
+  'gate.decidedByPlaceholder': '이름 또는 핸들',
+  'gate.approve': '승인',
+  'gate.question': '질문',
+  'gate.backlog': '백로그',
+  'gate.reject': '거절',
+  'gate.cancel': '취소',
+  'gate.approveNote': '이슈를 생성하고 요청을 종결합니다 — 되돌릴 수 없습니다.',
+  'gate.approveCommit': '승인 확정',
+  'gate.questionLabel': '요청자에게 보낼 질문',
+  'gate.questionPlaceholder': '예: 기존 CRM 리포트와 무엇이 다른가요?',
+  'gate.questionNote': '세션이 명확화로 돌아가고, 답변이 오면 새 문서로 재상정됩니다.',
+  'gate.questionCommit': '질문 보내기',
+  'gate.backlogNote': '요청자에게 회신되고 백로그로 종결됩니다 — 되돌릴 수 없습니다.',
+  'gate.backlogCommit': '백로그로 보내기',
+  'gate.rejectLabel': '거절 사유',
+  'gate.rejectNote': '사유와 이의 경로가 요청자에게 회신됩니다 — 되돌릴 수 없습니다.',
+  'gate.rejectCommit': '거절 확정',
+  'gate.decidedIssue': '{identifier} 생성됨',
+  'gate.decidedFakeNote':
+    '페이크 커넥터입니다 — 실제 Linear에는 생성되지 않았습니다. LINEAR_API_KEY·LINEAR_TEAM_ID 설정 시 실이슈가 생성됩니다.',
+  'gate.decidedQuestion': '질문을 보냈습니다 — 세션이 명확화로 복귀했습니다.',
+  'gate.decidedBacklog': '백로그로 종결했습니다.',
+  'gate.decidedReject': '거절로 종결했습니다.',
+  'gate.raced': '이 항목은 다른 곳에서 이미 처리됐습니다 — 목록을 새로 불러왔습니다.',
 } as const;
 
 export type Key = keyof typeof ko;
@@ -441,6 +504,73 @@ const en: Record<Key, string> = {
   'session.retryFailed': "I couldn't retry that",
   'session.actionFailed': "I couldn't process that",
   'session.confirmFailed': "I couldn't save that confirmation",
+
+  // Team review waiting and gate outcomes (F5·F8 #69) — requester surface
+  'gateWait.title': "It's with the team for review",
+  'gateWait.body':
+    'Document v{version} is on the team review queue. The outcome shows up here — meanwhile you can keep checking and correcting the document.',
+  'gateWait.conditionalNote':
+    "Some items went along for the team to settle — you don't have to answer those.",
+  'closed.issueTitle': 'The team approved it',
+  'closed.issueBody':
+    "It's on their work queue as {identifier}. That wraps up the refinement here — the document stays available any time.",
+  'closed.issueLink': 'Open the issue',
+  'closed.issueFakeNote': "This is a demo issue — it isn't connected to a real tracker yet.",
+  'closed.backlogTitle': "It's parked in the backlog",
+  'closed.backlogBody':
+    'After review, the team decided not to take this up right now. It comes back for review when similar requests pile up or things change.',
+  'closed.rejectedTitle': 'The team decided not to proceed',
+  'closed.rejectedBody':
+    "That's the review outcome — reason: {reason}. If you disagree, you can ask the team lead for a second look.",
+
+  // Short reject-reason labels — shared by the gate select and the closed card
+  'reason.priority': 'Priority',
+  'reason.out_of_scope': "Outside the team's scope",
+  'reason.duplicate': 'Duplicate of existing work',
+  'reason.technically_infeasible': 'Technically infeasible',
+  'reason.insufficient_info': 'Insufficient information',
+
+  // Approval gate (F5 #69) — developer surface (/gate). Factual tone, not Jude's voice.
+  'gate.title': 'Approval gate',
+  'gate.lede':
+    'Decide whether refined requests proceed. An issue is created only on approval.',
+  'gate.empty': 'Nothing waiting for review.',
+  'gate.loadFailed': "Couldn't load the queue",
+  'gate.refresh': 'Refresh',
+  'gate.docVersion': 'Document v{version}',
+  'gate.conditional': 'Conditional — {count} open issue(s)',
+  'gate.completedBadge': 'Requester confirmed all items',
+  'gate.notCompletedBadge': 'Requester confirmation in progress',
+  'gate.openSession': 'Open session',
+  'gate.requestLabel': 'Original request',
+  'gate.problemLabel': 'Problem',
+  'gate.decidedBy': 'Decided by (optional)',
+  'gate.decidedByPlaceholder': 'Name or handle',
+  'gate.approve': 'Approve',
+  'gate.question': 'Ask',
+  'gate.backlog': 'Backlog',
+  'gate.reject': 'Reject',
+  'gate.cancel': 'Cancel',
+  'gate.approveNote': 'Creates the issue and closes the request — this cannot be undone.',
+  'gate.approveCommit': 'Confirm approval',
+  'gate.questionLabel': 'Question for the requester',
+  'gate.questionPlaceholder': 'e.g. How is this different from the existing CRM report?',
+  'gate.questionNote':
+    'The session returns to clarification and is resubmitted with a new document once answered.',
+  'gate.questionCommit': 'Send question',
+  'gate.backlogNote': 'The requester is notified and the request closes as backlog — this cannot be undone.',
+  'gate.backlogCommit': 'Send to backlog',
+  'gate.rejectLabel': 'Rejection reason',
+  'gate.rejectNote':
+    'The reason and the appeal path are sent to the requester — this cannot be undone.',
+  'gate.rejectCommit': 'Confirm rejection',
+  'gate.decidedIssue': '{identifier} created',
+  'gate.decidedFakeNote':
+    'Fake connector — nothing was created in real Linear. Set LINEAR_API_KEY and LINEAR_TEAM_ID for real issues.',
+  'gate.decidedQuestion': 'Question sent — the session returned to clarification.',
+  'gate.decidedBacklog': 'Closed as backlog.',
+  'gate.decidedReject': 'Closed as rejected.',
+  'gate.raced': 'This item was already handled elsewhere — the queue has been refreshed.',
 };
 
 const DICT: Record<Lang, Record<Key, string>> = { ko, en };

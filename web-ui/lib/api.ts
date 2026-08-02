@@ -1,6 +1,9 @@
 import {
   ApiError,
   type Accepted,
+  type GateDecision,
+  type GateDecisionOutcome,
+  type GateList,
   type IntakeResult,
   type MockupState,
   type ReplyOutcome,
@@ -205,5 +208,27 @@ export function approveMockup(sessionId: string): Promise<Accepted> {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: '{}',
+  });
+}
+
+// ── 승인 게이트 (F5·F6, #69) — 개발자 표면(/gate) ──────────────────────
+
+/** 게이트 대기 목록 — 결정 없는 최신 문서 버전 항목만 온다. */
+export function getGate(): Promise<GateList> {
+  return request('/api/gate');
+}
+
+/**
+ * 게이트 결정(동기 200) — 승인만 이슈 커넥터 호출이 낀다. 409의 code
+ * (`already_decided`·`stale_gate`)는 오류가 아니라 다른 곳이 앞서간 신호다 — 목록 재조회로 푼다.
+ */
+export function decideGate(
+  gateItemId: string,
+  body: { decision: GateDecision; reasonTag?: string; note?: string; decidedBy?: string },
+): Promise<GateDecisionOutcome> {
+  return request(`/api/gate/${encodeURIComponent(gateItemId)}/decision`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
   });
 }
