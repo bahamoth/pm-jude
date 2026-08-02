@@ -886,21 +886,26 @@ describe('코어 러너 — 답변과 2층 판정 분기', () => {
     expect(store.exportSessions()).toHaveLength(0);
   });
 
-  it('보류 외의 종결 세션은 답변을 무시한다 — 재개는 보류(정보 부족) 전용 (#30)', async () => {
+  it('보류 외의 종결 세션의 답변은 재판정 없이 안내 회신을 받는다 — 침묵 금지 (원칙 5, F8 #69)', async () => {
     const { runner, port, store } = makeRunner([clarificationResponse]);
     const { sessionId } = await runner.handleIntake(intake);
-    // Phase 1 종결 상태(거절 등)를 가정한 가드 회귀 방어
     store.updateSessionState(sessionId, { status: 'closed', terminalState: 'rejected' });
 
     const postedBefore = port.posted.length;
     const result = await runner.handleReply({ ...intake, text: '추가로요' });
 
-    expect(result).toBeNull();
-    expect(port.posted.length).toBe(postedBefore);
-    // 종결 후 발화는 세션에 추가 기록되지 않는다
+    // 재판정 루프는 돌지 않고 세션도 되살아나지 않는다 — 재개는 보류(정보 부족) 전용 (#30)
+    expect(result?.status).toBe('closed');
+    expect(result?.terminalState).toBe('rejected');
+    // 발화는 보존되고(원칙 7) 안내 회신이 나간다 (원칙 5)
+    expect(port.posted.length).toBe(postedBefore + 1);
+    expect(port.posted.at(-1)?.text).toContain('마무리된 상태');
     expect(
       store.exportSessions()[0]?.utterances.filter((u) => u.originalText === '추가로요'),
-    ).toEqual([]);
+    ).toHaveLength(1);
+    expect(
+      store.exportSessions()[0]?.signals.filter((s) => s.type === 'reply_after_closed'),
+    ).toHaveLength(1);
   });
 });
 

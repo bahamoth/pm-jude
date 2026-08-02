@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { loadConfig } from '../config';
+import { FakeIssueConnector, LinearIssueConnector } from '../connect/issue-connector';
 import { NotionConnector } from '../connect/notion';
 import { createDefaultExtractorRegistry } from '../extract/registry';
 import { AgentSdkBackend } from '../gateway/agent-sdk-backend';
@@ -42,6 +43,16 @@ if (config.mockup.themeDir) {
 const registry = createDefaultRegistry();
 const model = config.llm.model;
 if (fake) console.error('[web] 가짜 백엔드 모드 — 데모·UI 검증 전용, LLM 호출 없음');
+
+// 이슈 생성 커넥터 (F6, #69) — 키·팀이 갖춰지면 실 Linear, 아니면 페이크로 루프를 완주시킨다.
+// 페이크 모드에서는 항상 페이크다 — 데모 승인이 실이슈를 만드는 사고를 막는다.
+const issues =
+  !fake && config.linear.apiKey && config.linear.teamId
+    ? new LinearIssueConnector({ apiKey: config.linear.apiKey, teamId: config.linear.teamId })
+    : new FakeIssueConnector();
+if (issues.kind === 'fake') {
+  console.error('[web] 이슈 커넥터: 페이크 — LINEAR_API_KEY·LINEAR_TEAM_ID 설정 시 실이슈 생성');
+}
 const server = createWebServer({
   store,
   backend: fake ? createFakeBackend(registry) : new AgentSdkBackend(model ? { model } : {}),
@@ -70,6 +81,7 @@ const server = createWebServer({
   createExtractors: createDefaultExtractorRegistry,
   // 노션 커넥터 (#57, ADR-0013) — 토큰 없으면 꺼짐, URL은 텍스트로 남는다
   ...(config.notion.apiKey ? { notion: new NotionConnector({ token: config.notion.apiKey }) } : {}),
+  issues,
   themes,
 });
 

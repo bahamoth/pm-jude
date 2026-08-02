@@ -336,6 +336,47 @@ describe('trace-data — 저장소 export의 조형', () => {
     expect(html).toContain('목업');
   });
 
+  it('게이트 항목·이슈가 요약·세션·HTML에 실린다 (F5·F6 #69, AGENTS.md 동반 지침)', async () => {
+    store = SessionStore.open(':memory:');
+    await seedSession(store, '대시보드 요청');
+    const exported = store.exportSessions()[0];
+    if (!exported) throw new Error('시드 세션 없음');
+    const sessionId = exported.session.id;
+    store.appendRequirementsDoc({ sessionId, version: 1, content: { problem: '집계 수작업' } });
+    const item = store.submitGateItem({ sessionId, docVersion: 1, isConditional: true });
+    store.decideGateItem(item.id, { decision: 'approve', decidedBy: 'dev-lee' });
+    store.recordLinearIssue({
+      sessionId,
+      gateItemId: item.id,
+      linearIssueId: 'fake-issue-1',
+      identifier: 'FAKE-1',
+      url: 'https://linear.app/fake/issue/FAKE-1',
+      provenanceKey: `pm-jude:session:${sessionId}:doc:v1`,
+      connector: 'fake',
+    });
+
+    const data = buildTraceData(store.exportSessions(), store.listVersionRegistry(), GENERATED_AT);
+
+    expect(data.summary.gateDecisionCounts).toMatchObject({ approve: 1 });
+    expect(data.summary.issueCount).toBe(1);
+    expect(data.sessions[0]?.gateItems?.[0]).toMatchObject({
+      docVersion: 1,
+      isConditional: true,
+      decision: 'approve',
+      decidedBy: 'dev-lee',
+    });
+    // 이슈는 내부 키 대신 상정 문서 버전으로 귀속된다
+    expect(data.sessions[0]?.linearIssues?.[0]).toMatchObject({
+      docVersion: 1,
+      identifier: 'FAKE-1',
+      connector: 'fake',
+    });
+
+    const html = renderTraceHtml(data);
+    expect(html).toContain('승인 게이트');
+    expect(html).toContain('FAKE-1');
+  });
+
   it('빈 저장소 — 세션 0건, 평균 왕복 null', () => {
     store = SessionStore.open(':memory:');
     const data = buildTraceData(store.exportSessions(), store.listVersionRegistry(), GENERATED_AT);

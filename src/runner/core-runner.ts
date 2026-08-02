@@ -18,6 +18,7 @@ import {
   runRuleLayer,
 } from '../prompts/completeness-v0';
 import { detectNotionUrls, parseNotionUrl, type NotionPageSource } from '../connect/notion';
+import { buildIssuePayload, provenanceKeyOf, type IssueConnector } from '../connect/issue-connector';
 import {
   applyDocumentCorrections,
   readDocumentPath,
@@ -225,6 +226,40 @@ export interface ReplyOutcome {
   terminalState: string | null;
 }
 
+/** 게이트 결정 4종 (F5) — 값 집합과 전이는 코드가 소유한다 (ADR-0001). */
+export type GateDecision = 'approve' | 'question' | 'backlog' | 'reject';
+
+/** 거절의 통제된 사유 목록 (F5) — 자유 텍스트 사유는 F11 집계가 불가능하다. */
+export const GATE_REJECT_REASONS = [
+  'priority',
+  'out_of_scope',
+  'duplicate',
+  'technically_infeasible',
+  'insufficient_info',
+] as const;
+export type GateRejectReason = (typeof GATE_REJECT_REASONS)[number];
+
+/** 거절 사유의 요청자 회신 표기 — 태그는 기계 몫, 문장은 요청자 언어 몫 (F2d). */
+const GATE_REASON_LABELS: Record<'ko' | 'en', Record<GateRejectReason, string>> = {
+  ko: {
+    priority: '지금은 다른 작업의 우선순위가 높아요',
+    out_of_scope: '개발팀이 다루는 범위 밖의 요청이에요',
+    duplicate: '이미 진행 중인 요청과 겹쳐요',
+    technically_infeasible: '현재 구조에서는 기술적으로 어려워요',
+    insufficient_info: '판단할 정보가 아직 부족해요',
+  },
+  en: {
+    priority: 'other work takes priority right now',
+    out_of_scope: "it falls outside the team's scope",
+    duplicate: 'it overlaps with a request already in progress',
+    technically_infeasible: 'it is technically infeasible in the current setup',
+    insufficient_info: 'there is not yet enough information to judge it',
+  },
+};
+
+/** 게이트 결정의 반환 — 실패도 사유가 있는 값이다 (침묵 실패 금지, 원칙 5의 API 판). */
+export type GateDecisionResult = 'ok' | 'not_found' | 'already_decided' | 'stale';
+
 /** 신호에 함께 실리는 버전 축 (모델 버전은 러너가 들고 있다) — 세션 생성 시점 고정, F11. */
 interface SignalVersionAxes {
   promptVersionId: string;
@@ -290,6 +325,15 @@ const MESSAGES = {
       '목업에서 확정된 내용을 문서에 반영해 새 버전으로 정리했어요. 이제 문서가 기준이 되고, 목업은 참고용이에요.',
     utteranceTooLong: (max: number) =>
       `메시지가 너무 길어요 (최대 ${String(max)}자). 긴 자료는 파일로 첨부하거나 링크로 주시면 제가 직접 읽을게요.`,
+    issueCreated: (identifier: string) =>
+      `개발팀이 요청을 승인했어요 — 작업 목록에 ${identifier}로 등록됐어요. 이 요청의 정리는 여기서 마무리예요. 문서는 언제든 다시 열어 보실 수 있어요.`,
+    gateQuestionIntro: '개발팀이 확인하고 싶은 것이 있어요:',
+    gateBacklogged:
+      '개발팀 검토 결과, 이 요청은 지금 바로 진행하지 않고 보관함에 두기로 했어요. 비슷한 요청이 모이거나 상황이 바뀌면 다시 검토돼요.',
+    gateRejected: (reason: string) =>
+      `개발팀 검토 결과, 이 요청은 진행하지 않기로 했어요 — ${reason}. 이 결정에 이견이 있으면 팀 리드에게 재검토를 요청하실 수 있어요.`,
+    closedGuide:
+      '이 요청은 이미 마무리된 상태예요. 새로 필요한 것이 있으면 새 요청으로 접수해 주세요 — 이 대화 기록은 그대로 남아 있어요.',
   },
   en: {
     ack: "Got it. I'll ask a few questions to pin the request down.",
@@ -316,6 +360,15 @@ const MESSAGES = {
       'Everything settled on the mockup is now folded into a new version of the document. The document is the reference from here — the mockup stays around only for context.',
     utteranceTooLong: (max: number) =>
       `That message is too long (max ${String(max)} characters). For long material, attach a file or share a link and I'll read it directly.`,
+    issueCreated: (identifier: string) =>
+      `The team approved this request — it's on their work queue as ${identifier}. That wraps up the refinement here. The document stays available any time.`,
+    gateQuestionIntro: 'The team has something to check with you:',
+    gateBacklogged:
+      "After review, the team decided not to take this up right now — it's parked in the backlog. It comes back for review when similar requests pile up or things change.",
+    gateRejected: (reason: string) =>
+      `After review, the team decided not to proceed with this request — ${reason}. If you disagree, you can ask the team lead for a second look.`,
+    closedGuide:
+      'This request has already wrapped up. If you need something new, please file a new request — this conversation stays on record.',
   },
 } as const;
 
@@ -355,6 +408,12 @@ export interface IntakeRunnerDeps<A> {
   notion?: NotionPageSource;
   /** 게이트웨이 전역 상한 주입 (#59, ADR-0015) — 프롬프트 버전 선언이 있으면 그쪽이 우선(#56). */
   llm?: { timeoutMs?: number; maxConcurrency?: number };
+  /**
+   * 이슈 생성 커넥터 (F6, #69) — 승인 게이트의 승인 경로만 부른다 (하드 제약).
+   * 없으면 승인 결정이 명시적으로 실패한다 — 이슈 없이 「승인됨」으로 조용히 닫히는 경로를
+   * 만들지 않는다. 어댑터는 실커넥터 또는 페이크를 반드시 물린다.
+   */
+  issues?: IssueConnector;
 }
 
 function formatQuestions(output: ClarificationOutput, language: 'ko' | 'en'): string {
@@ -1040,7 +1099,33 @@ export class IntakeRunner<A> {
     let session = store.findSessionByThreadKey(event.threadKey);
     if (!session) return null;
     if (session.status === 'closed') {
-      if (session.terminalState !== 'on_hold_insufficient_info') return null;
+      if (session.terminalState !== 'on_hold_insufficient_info') {
+        // 종결 후에도 침묵하지 않는다 (원칙 5, F8) — 발화는 보존하고(원칙 7) 안내를 돌려준다.
+        // 보류만 재개 가능하고, 이슈 생성·백로그·거절 종결은 새 요청이 경로다.
+        const language = options.appendUtterance
+          ? this.languageOf(event)
+          : this.sessionLanguageOf(session.id, event);
+        if (options.appendUtterance) {
+          const utterance = store.appendUtterance({
+            sessionId: session.id,
+            authorType: 'requester',
+            ...(event.authorId !== undefined ? { authorId: event.authorId } : {}),
+            channel: event.channel,
+            originalText: event.text,
+            originalLanguage: language,
+          });
+          this.attachUploads(session.id, utterance.id, event);
+        }
+        await this.postAgentReply(session.id, event, MESSAGES[language].closedGuide, language);
+        store.recordSignal({
+          sessionId: session.id,
+          type: 'reply_after_closed',
+          payload: { terminalState: session.terminalState, channel: event.channel },
+          modelVersion: this.deps.modelVersion,
+          ...this.versionAxesOf(session),
+        });
+        return this.outcomeOf(session.id);
+      }
       store.updateSessionState(session.id, { status: 'clarifying', terminalState: null });
       store.recordSignal({
         sessionId: session.id,
@@ -1341,6 +1426,11 @@ export class IntakeRunner<A> {
       originalText: text,
       originalLanguage: this.teamLanguage,
     });
+    // 게이트가 이미 상정된 세션의 교정은 재상정이다 (F5) — 결정은 최신 문서에 대해 내려져야 한다.
+    // 종결·목업 세션의 교정은 상정하지 않는다: 교정은 상태를 되돌리지 않는다 (ADR-0016 결정 4).
+    if (session.status === 'documented' && store.currentGateItem(session.id)) {
+      this.submitToGate(session.id, this.versionAxesOf(session));
+    }
     return this.outcomeOf(session.id);
   }
 
@@ -1715,6 +1805,11 @@ export class IntakeRunner<A> {
     this.recordCompletion(sessionId, versionAxes);
     // UI 요청이면 목업 단계가 이어진다 (F4, #54) — 전이는 이 코드가 결정한다 (ADR-0001)
     await this.enterMockupStage(sessionId, event, versionAxes, version);
+    // 게이트 상정 (F5, #69) — 목업 단계로 들어갔으면 상정하지 않는다: §7 순서상 게이트는
+    // 목업 수렴(승인·에스컬레이션) 뒤다. 그 경로들이 각자 상정한다.
+    if (store.getSession(sessionId)?.status === 'documented') {
+      this.submitToGate(sessionId, versionAxes);
+    }
   }
 
   /**
@@ -1909,6 +2004,8 @@ export class IntakeRunner<A> {
         modelVersion: this.deps.modelVersion,
         ...versionAxes,
       });
+      // 「개발팀 검토로 넘길게요」의 실체가 게이트 상정이다 (F5) — 문안만 있고 상정이 없으면 거짓 회신이 된다
+      this.submitToGate(session.id, versionAxes);
       return this.outcomeOf(session.id);
     }
 
@@ -2098,7 +2195,187 @@ export class IntakeRunner<A> {
       ...versionAxes,
     });
     this.recordCompletion(session.id, versionAxes);
+    // 목업 수렴(승인)이 게이트의 전제였다 — 역주입 문서 vN+1로 상정한다 (F5, §7 순서)
+    this.submitToGate(session.id, versionAxes);
     return this.outcomeOf(session.id);
+  }
+
+  /**
+   * 게이트 상정 (F5, #69) — 최신 문서 버전으로 대기 항목을 세운다. 같은 버전 재상정은
+   * 건너뛴다(멱등). 조건부 여부는 문서의 오픈이슈(승격 슬롯) 보유로 판정한다 (F2c ②).
+   */
+  private submitToGate(sessionId: string, versionAxes: SignalVersionAxes): void {
+    const { store } = this.deps;
+    const doc = store.latestRequirementsDoc(sessionId);
+    if (!doc) return; // 문서 없는 상정은 없다
+    if (store.currentGateItem(sessionId)?.docVersion === doc.version) return;
+    const openIssues = (doc.content as RequirementsOutput).openIssues;
+    const isConditional = Array.isArray(openIssues) && openIssues.length > 0;
+    const item = store.submitGateItem({ sessionId, docVersion: doc.version, isConditional });
+    store.recordSignal({
+      sessionId,
+      type: 'gate_submitted',
+      payload: { gateItemId: item.id, docVersion: doc.version, isConditional },
+      modelVersion: this.deps.modelVersion,
+      ...versionAxes,
+    });
+  }
+
+  /**
+   * 게이트 결정 (F5·F6·F8, #69) — 승인/질문/백로그/거절. 이슈 생성은 이 메서드의 승인
+   * 분기에만 존재한다 (하드 제약: gate→issue가 유일한 경로, ARCHITECTURE.md §7).
+   * 모든 종결 분기는 회신이 종결을 앞선다 (원칙 5).
+   */
+  async decideGate(
+    event: IntakeEvent<A>,
+    input: {
+      gateItemId: string;
+      decision: GateDecision;
+      reasonTag?: string;
+      note?: string;
+      decidedBy?: string;
+    },
+  ): Promise<GateDecisionResult> {
+    const { store } = this.deps;
+    const session = store.findSessionByThreadKey(event.threadKey);
+    if (!session) return 'not_found';
+    const item = store.getGateItem(input.gateItemId);
+    if (!item || item.sessionId !== session.id) return 'not_found';
+    if (item.decision !== null) return 'already_decided';
+    // 결정은 최신 문서 버전의 대기 항목·documented 세션에서만 — 정정·재문서화·질문 복귀로
+    // 밀려난 항목의 결정은 낡은 문서에 대한 결정이다.
+    if (item.docVersion !== this.documentVersionOf(session.id)) return 'stale';
+    if (session.status !== 'documented') return 'stale';
+
+    const language = this.sessionLanguageOf(session.id, event);
+    const versionAxes = this.versionAxesOf(session);
+    const decisionBase = {
+      ...(input.note !== undefined ? { note: input.note } : {}),
+      ...(input.decidedBy !== undefined ? { decidedBy: input.decidedBy } : {}),
+    };
+
+    if (input.decision === 'approve') {
+      const connector = this.deps.issues;
+      if (!connector) {
+        throw new Error('이슈 커넥터가 구성되지 않았다 — 승인 경로를 열 수 없다 (F6)');
+      }
+      const doc = store.latestRequirementsDoc(session.id);
+      if (!doc) return 'stale';
+      const provenanceKey = provenanceKeyOf(session.id, item.docVersion);
+      const created = await connector.createIssue(
+        buildIssuePayload(doc.content as RequirementsOutput, {
+          docVersion: item.docVersion,
+          provenanceKey,
+        }),
+      );
+      store.decideGateItem(item.id, { decision: 'approve', ...decisionBase });
+      store.recordLinearIssue({
+        sessionId: session.id,
+        gateItemId: item.id,
+        linearIssueId: created.issueId,
+        identifier: created.identifier,
+        url: created.url,
+        provenanceKey,
+        connector: connector.kind,
+      });
+      store.recordSignal({
+        sessionId: session.id,
+        type: 'gate_decided',
+        payload: { decision: 'approve', docVersion: item.docVersion },
+        modelVersion: this.deps.modelVersion,
+        ...versionAxes,
+      });
+      store.recordSignal({
+        sessionId: session.id,
+        type: 'issue_created',
+        payload: {
+          docVersion: item.docVersion,
+          identifier: created.identifier,
+          connector: connector.kind,
+        },
+        modelVersion: this.deps.modelVersion,
+        ...versionAxes,
+      });
+      await this.postAgentReply(
+        session.id,
+        event,
+        MESSAGES[language].issueCreated(created.identifier),
+        language,
+      );
+      store.updateSessionState(session.id, { status: 'closed', terminalState: 'issue_created' });
+      return 'ok';
+    }
+
+    if (input.decision === 'question') {
+      const note = input.note?.trim();
+      if (!note) {
+        throw new Error('질문 결정에는 질문 본문(note)이 필요하다 — 빈 질문은 전달할 것이 없다');
+      }
+      store.decideGateItem(item.id, { decision: 'question', ...decisionBase, note });
+      // 개발자의 질문도 전사에 남는다 (원칙 7) — 요청자 회신의 근거 발화
+      store.appendUtterance({
+        sessionId: session.id,
+        authorType: 'approver',
+        ...(input.decidedBy !== undefined ? { authorId: input.decidedBy } : {}),
+        channel: event.channel,
+        originalText: note,
+        originalLanguage: detectRequesterLanguage(note),
+      });
+      await this.postAgentReply(
+        session.id,
+        event,
+        `${MESSAGES[language].gateQuestionIntro}\n${note}`,
+        language,
+      );
+      // 명확화 루프 복귀 (F5 질문 분기) — 다음 답변이 재판정을 거쳐 재문서화·재상정된다
+      store.updateSessionState(session.id, { status: 'clarifying' });
+      store.recordSignal({
+        sessionId: session.id,
+        type: 'gate_decided',
+        payload: { decision: 'question', docVersion: item.docVersion },
+        modelVersion: this.deps.modelVersion,
+        ...versionAxes,
+      });
+      return 'ok';
+    }
+
+    if (input.decision === 'reject') {
+      const reason = input.reasonTag as GateRejectReason | undefined;
+      if (!reason || !GATE_REJECT_REASONS.includes(reason)) {
+        throw new Error(
+          `거절 사유는 통제된 목록에서 골라야 한다: ${GATE_REJECT_REASONS.join(', ')}`,
+        );
+      }
+      store.decideGateItem(item.id, { decision: 'reject', reasonTag: reason, ...decisionBase });
+      // 거절 회신에는 사유와 이의 경로가 함께 실린다 (F5) — 침묵 거절은 제품 밖 우회를 만든다
+      await this.postAgentReply(
+        session.id,
+        event,
+        MESSAGES[language].gateRejected(GATE_REASON_LABELS[language][reason]),
+        language,
+      );
+      store.updateSessionState(session.id, { status: 'closed', terminalState: 'rejected' });
+      store.recordSignal({
+        sessionId: session.id,
+        type: 'gate_decided',
+        payload: { decision: 'reject', reasonTag: reason, docVersion: item.docVersion },
+        modelVersion: this.deps.modelVersion,
+        ...versionAxes,
+      });
+      return 'ok';
+    }
+
+    store.decideGateItem(item.id, { decision: 'backlog', ...decisionBase });
+    await this.postAgentReply(session.id, event, MESSAGES[language].gateBacklogged, language);
+    store.updateSessionState(session.id, { status: 'closed', terminalState: 'backlog' });
+    store.recordSignal({
+      sessionId: session.id,
+      type: 'gate_decided',
+      payload: { decision: 'backlog', docVersion: item.docVersion },
+      modelVersion: this.deps.modelVersion,
+      ...versionAxes,
+    });
+    return 'ok';
   }
 
   /**

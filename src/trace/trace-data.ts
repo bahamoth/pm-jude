@@ -22,6 +22,10 @@ export interface TraceSummary {
   usageTotals: { tokens: number; costUsd: number; calls: number };
   /** 목업 반복 현황 (F4 #54) — 반복·어노테이션 밀도는 명확화 수렴 품질의 신호다 (F11). */
   mockupCounts: Record<'versions' | 'annotations', number>;
+  /** 게이트 결정 분포 (F5 #69) — pending 포함. 반려·질문 비율은 문서 품질의 다운스트림 신호다. */
+  gateDecisionCounts: Record<string, number>;
+  /** 생성 이슈 수 (F6) — 페이크 이슈도 궤적으로 센다 (connector가 가른다). */
+  issueCount: number;
 }
 
 export interface TraceData {
@@ -116,6 +120,26 @@ export interface TraceData {
       elementRef: string | null;
       createdAt: string;
     }>;
+    /** 게이트 항목 궤적 (F5 #69) — 상정·결정·사유가 문서 버전 단위로 남는다. */
+    gateItems: Array<{
+      docVersion: number;
+      isConditional: boolean;
+      decision: string | null;
+      reasonTag: string | null;
+      note: string | null;
+      decidedBy: string | null;
+      submittedAt: string;
+      decidedAt: string | null;
+    }>;
+    /** 생성 이슈 (F6) — provenance가 세션↔이슈 귀속의 실체다 (§10). */
+    linearIssues: Array<{
+      docVersion: number | null;
+      identifier: string;
+      url: string;
+      provenanceKey: string;
+      connector: string;
+      createdAt: string;
+    }>;
   }>;
 }
 
@@ -145,6 +169,8 @@ export function buildTraceData(
     documentCount: 0,
     usageTotals: { tokens: 0, costUsd: 0, calls: 0 },
     mockupCounts: { versions: 0, annotations: 0 },
+    gateDecisionCounts: {},
+    issueCount: 0,
   };
 
   const sessions = exported.map(
@@ -158,6 +184,8 @@ export function buildTraceData(
       documents,
       mockups,
       mockupAnnotations,
+      gateItems,
+      linearIssues,
     }) => {
       count(summary.statusCounts, session.status);
       if (session.terminalState) count(summary.terminalCounts, session.terminalState);
@@ -176,6 +204,8 @@ export function buildTraceData(
       summary.usageTotals.calls += session.llmCallCount;
       summary.mockupCounts.versions += mockups.length;
       summary.mockupCounts.annotations += mockupAnnotations.length;
+      for (const item of gateItems) count(summary.gateDecisionCounts, item.decision ?? 'pending');
+      summary.issueCount += linearIssues.length;
 
       return {
         id: session.id,
@@ -226,6 +256,8 @@ export function buildTraceData(
         documents,
         mockups,
         mockupAnnotations,
+        gateItems,
+        linearIssues,
       };
     },
   );

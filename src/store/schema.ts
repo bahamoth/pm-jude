@@ -281,6 +281,58 @@ export const mockupAnnotation = sqliteTable(
   (table) => [index('mockup_annotation_session_idx').on(table.sessionId)],
 );
 
+/**
+ * 승인 게이트 항목 (F5, #69) — 문서 버전 하나에 대한 개발자 결정. 문서가 재게시되면 새 항목이
+ * 상정되고 이전 대기 항목은 최신 항목에 밀려 화면에서 빠진다(행은 남는다 — 이력).
+ * 라우팅·SLA 컬럼은 만들지 않는다 — 수치가 결정 대기(§12-5)이고, 코드가 쓰지 않는 컬럼은
+ * 스키마에 두지 않는다(data-model.md의 설계 컬럼은 그때 마이그레이션으로 늘린다).
+ */
+export const gateItem = sqliteTable(
+  'gate_item',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => session.id),
+    /** 상정된 문서 버전 — 문서 vN ↔ 게이트 항목 1:1 (재게시 = 재상정). */
+    docVersion: integer('doc_version').notNull(),
+    /** 미해결 오픈이슈(승격 슬롯) 동반 여부 — 조건부 상정 표시 (F2c ②, F5). */
+    isConditional: integer('is_conditional', { mode: 'boolean' }).notNull().default(false),
+    /** null = 대기. 값 집합과 전이는 코드 상태 머신의 것 (ADR-0001). */
+    decision: text('decision', { enum: ['approve', 'question', 'backlog', 'reject'] }),
+    /** 거절의 통제된 사유 태그 (F5) — F11 귀속. */
+    reasonTag: text('reason_tag'),
+    /** 질문 본문·자유 메모 — 질문 결정에는 필수다(빈 질문은 요청자에게 전달할 것이 없다). */
+    note: text('note'),
+    decidedBy: text('decided_by'),
+    submittedAt: text('submitted_at').notNull(),
+    decidedAt: text('decided_at'),
+  },
+  (table) => [unique().on(table.sessionId, table.docVersion)],
+);
+
+/**
+ * 생성된 이슈와 provenance (F6, #69) — 승인 경로만 이 행을 만든다 (하드 제약: gate→issue가
+ * 유일한 생성 경로). connector는 페이크 이슈가 실이슈로 오인되지 않게 남긴다.
+ */
+export const linearIssue = sqliteTable('linear_issue', {
+  id: text('id').primaryKey(),
+  sessionId: text('session_id')
+    .notNull()
+    .references(() => session.id),
+  gateItemId: text('gate_item_id')
+    .notNull()
+    .references(() => gateItem.id),
+  /** Linear 측 이슈 ID (페이크 커넥터는 fake-issue-<n>). */
+  linearIssueId: text('linear_issue_id').notNull(),
+  identifier: text('identifier').notNull(),
+  url: text('url').notNull(),
+  /** 이슈 본문에 남긴 기계 판독 귀속 값 — 우회 자동 집계(§10)의 전제. */
+  provenanceKey: text('provenance_key').notNull(),
+  connector: text('connector', { enum: ['linear', 'fake'] }).notNull(),
+  createdAt: text('created_at').notNull(),
+});
+
 export const signal = sqliteTable(
   'signal',
   {

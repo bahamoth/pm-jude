@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { ExtractorRegistry } from '../src/extract/registry';
 import { textExtractor } from '../src/extract/text';
 import type { BackendRequest, BackendResponse, LlmBackend } from '../src/gateway/backend';
+import { FakeIssueConnector } from '../src/connect/issue-connector';
 import { createDefaultRegistry } from '../src/prompts/catalog';
 import { DEFAULT_ATTACHMENT_LIMITS } from '../src/runner/core-runner';
 import { nonUiClassificationResponse, slot } from './slot-fixture';
@@ -157,6 +158,8 @@ async function startServer(
     registry: createDefaultRegistry(),
     modelVersion: 'claude-sonnet-5',
     teamLanguage: 'ko',
+    // 게이트 승인 경로 (F6, #69) — 웹 계약 테스트는 항상 페이크 커넥터로 돈다
+    issues: new FakeIssueConnector(),
     ...(options?.maxRounds !== undefined ? { maxRounds: options.maxRounds } : {}),
     ...(options?.maxUtteranceChars !== undefined
       ? { maxUtteranceChars: options.maxUtteranceChars }
@@ -1053,5 +1056,140 @@ describe('웹 어댑터 — 발화 길이 상한 (#58, ADR-0014)', () => {
     expect(body.code).toBe('utterance_rejected');
     expect(body.error).toMatch(/첨부|링크/);
     expect(store.exportSessions()).toHaveLength(0); // 세션 자체가 만들어지지 않는다
+  });
+});
+
+describe('웹 어댑터 — 승인 게이트 (F5·F6, #69)', () => {
+  /** 접수 → 답변 → 비 UI 문서 게시(documented)까지 관통 — 게이트 계약 테스트의 공통 준비. */
+  async function reachDocumented(baseUrl: string): Promise<string> {
+    const sessionId = await openClarifyingSession(baseUrl);
+    const roundId = await roundIdOf(baseUrl, sessionId);
+    await postReply(baseUrl, sessionId, '영업팀 매니저요. 수작업 집계를 없애고 싶어요.', roundId);
+    await waitFor(async () => {
+      const d = await json<{ session: { status: string }; processing: boolean }>(
+        await fetch(`${baseUrl}/api/sessions/${sessionId}`),
+      );
+      return !d.processing && d.session.status === 'documented' ? d : null;
+    });
+    return sessionId;
+  }
+
+  const gateResponses = () => [
+    clarificationResponse,
+    refinedCompletenessResponse,
+    requirementsResponse,
+    nonUiClassificationResponse,
+  ];
+
+  it('문서 게시가 게이트 목록에 실리고, 승인이 이슈·종결·세션 표시로 이어진다', async () => {
+    const { baseUrl } = await startServer(new ScriptedBackend(gateResponses()));
+    const sessionId = await reachDocumented(baseUrl);
+
+    // 세션 상세가 대기 게이트를 표시한다 — 요청자 화면의 「검토 대기」 근거
+    const detail = await json<{
+      gate: { id: string; decision: string | null; isConditional: boolean } | null;
+    }>(await fetch(`${baseUrl}/api/sessions/${sessionId}`));
+    expect(detail.gate).not.toBeNull();
+    expect(detail.gate!.decision).toBeNull();
+    expect(detail.gate!.isConditional).toBe(true); // data-source 승격 픽스처
+
+    const list = await json<{
+      pending: Array<{ id: string; sessionId: string; problem: string | null }>;
+      rejectReasons: string[];
+    }>(await fetch(`${baseUrl}/api/gate`));
+    const item = list.pending.find((entry) => entry.sessionId === sessionId);
+    expect(item).toBeDefined();
+    expect(item!.problem).toContain('수작업');
+    expect(list.rejectReasons).toContain('duplicate');
+
+    const decided = await fetch(`${baseUrl}/api/gate/${item!.id}/decision`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ decision: 'approve', decidedBy: 'dev-lee' }),
+    });
+    expect(decided.status).toBe(200);
+    const body = await json<{
+      outcome: string;
+      issue: { identifier: string; connector: string } | null;
+      session: { status: string; terminalState: string | null };
+    }>(decided);
+    expect(body.outcome).toBe('ok');
+    expect(body.issue?.identifier).toBe('FAKE-1');
+    expect(body.issue?.connector).toBe('fake');
+    expect(body.session.status).toBe('closed');
+    expect(body.session.terminalState).toBe('issue_created');
+
+    // 세션 상세에도 이슈·결정이 실린다 — 요청자 종결 화면의 근거
+    const after = await json<{
+      gate: { decision: string | null } | null;
+      issue: { identifier: string } | null;
+      session: { terminalState: string | null };
+    }>(await fetch(`${baseUrl}/api/sessions/${sessionId}`));
+    expect(after.gate?.decision).toBe('approve');
+    expect(after.issue?.identifier).toBe('FAKE-1');
+    expect(after.session.terminalState).toBe('issue_created');
+    // 결정된 항목은 대기 목록에서 빠진다
+    const listAfter = await json<{ pending: Array<{ id: string }> }>(
+      await fetch(`${baseUrl}/api/gate`),
+    );
+    expect(listAfter.pending.find((entry) => entry.id === item!.id)).toBeUndefined();
+  });
+
+  it('질문 결정은 note가 필수다 — 없으면 400, 있으면 세션이 명확화로 복귀한다', async () => {
+    const { baseUrl } = await startServer(new ScriptedBackend(gateResponses()));
+    const sessionId = await reachDocumented(baseUrl);
+    const list = await json<{ pending: Array<{ id: string; sessionId: string }> }>(
+      await fetch(`${baseUrl}/api/gate`),
+    );
+    const item = list.pending.find((entry) => entry.sessionId === sessionId)!;
+
+    const missing = await fetch(`${baseUrl}/api/gate/${item.id}/decision`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ decision: 'question' }),
+    });
+    expect(missing.status).toBe(400);
+
+    const ok = await fetch(`${baseUrl}/api/gate/${item.id}/decision`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ decision: 'question', note: '기존 CRM 리포트와 무엇이 다른가요?' }),
+    });
+    expect(ok.status).toBe(200);
+    const detail = await json<{ session: { status: string } }>(
+      await fetch(`${baseUrl}/api/sessions/${sessionId}`),
+    );
+    expect(detail.session.status).toBe('clarifying');
+  });
+
+  it('거절 사유 누락은 400, 결정된 항목의 재결정은 409 already_decided다', async () => {
+    const { baseUrl } = await startServer(new ScriptedBackend(gateResponses()));
+    const sessionId = await reachDocumented(baseUrl);
+    const list = await json<{ pending: Array<{ id: string; sessionId: string }> }>(
+      await fetch(`${baseUrl}/api/gate`),
+    );
+    const item = list.pending.find((entry) => entry.sessionId === sessionId)!;
+
+    const badReason = await fetch(`${baseUrl}/api/gate/${item.id}/decision`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ decision: 'reject' }),
+    });
+    expect(badReason.status).toBe(400);
+
+    const first = await fetch(`${baseUrl}/api/gate/${item.id}/decision`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ decision: 'backlog' }),
+    });
+    expect(first.status).toBe(200);
+
+    const again = await fetch(`${baseUrl}/api/gate/${item.id}/decision`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ decision: 'approve' }),
+    });
+    expect(again.status).toBe(409);
+    expect((await json<{ code: string }>(again)).code).toBe('already_decided');
   });
 });

@@ -132,6 +132,7 @@ document.getElementById('summary').innerHTML =
     'ok ' + s.attachmentCounts.ok + ' · failed ' + s.attachmentCounts.failed +
     ' · pending ' + s.attachmentCounts.pending, '총 ' + s.attachmentCounts.total + '건') +
   stat('문서', s.documentCount === 0 ? '—' : s.documentCount + '건', '영속된 버전 수 (#53)') +
+  stat('게이트', dist(s.gateDecisionCounts), s.issueCount === 0 ? '' : '이슈 ' + s.issueCount + '건 (F6)') +
   stat('LLM 사용량', s.usageTotals.calls === 0 ? '—' :
     (s.usageTotals.tokens / 1000).toFixed(1) + 'k 토큰',
     s.usageTotals.calls + '회 호출 · $' + s.usageTotals.costUsd.toFixed(2));
@@ -212,6 +213,30 @@ for (const sess of DATA.sessions) {
                 '<td class="mono">' + esc(an.elementRef ?? '—') + '</td>' +
                 '<td>' + esc(an.text) + '</td>' +
                 '<td class="mono">' + esc(an.createdAt.slice(11, 19)) + '</td></tr>').join('') +
+              '</table>'
+            : '') +
+          '</div>'
+        : '') +
+      (sess.gateItems.length
+        ? '<div><div class="sect">승인 게이트 (F5 #69)</div><table><tr><th>문서 vN</th><th>조건부</th><th>결정</th><th>사유</th><th>노트</th><th>결정자</th><th>상정</th><th>결정 시각</th></tr>' +
+          sess.gateItems.map((gi) =>
+            '<tr><td class="mono">v' + gi.docVersion + '</td>' +
+            '<td>' + (gi.isConditional ? '조건부' : '—') + '</td>' +
+            '<td><span class="badge ' + (gi.decision === 'approve' ? 'filled' : gi.decision == null ? '' : 'unfilled') + '">' + esc(gi.decision ?? 'pending') + '</span></td>' +
+            '<td class="mono">' + esc(gi.reasonTag ?? '—') + '</td>' +
+            '<td>' + esc(gi.note ?? '—') + '</td>' +
+            '<td class="mono">' + esc(gi.decidedBy ?? '—') + '</td>' +
+            '<td class="mono">' + esc(gi.submittedAt.slice(11, 19)) + '</td>' +
+            '<td class="mono">' + esc(gi.decidedAt == null ? '—' : gi.decidedAt.slice(11, 19)) + '</td></tr>').join('') +
+          '</table>' +
+          (sess.linearIssues.length
+            ? '<table><tr><th>이슈</th><th>문서 vN</th><th>커넥터</th><th>provenance</th><th>생성</th></tr>' +
+              sess.linearIssues.map((li) =>
+                '<tr><td class="mono">' + esc(li.identifier) + '</td>' +
+                '<td class="mono">' + (li.docVersion == null ? '—' : 'v' + li.docVersion) + '</td>' +
+                '<td><span class="badge ' + (li.connector === 'linear' ? 'filled' : '') + '">' + esc(li.connector) + '</span></td>' +
+                '<td class="mono">' + esc(li.provenanceKey) + '</td>' +
+                '<td class="mono">' + esc(li.createdAt.slice(11, 19)) + '</td></tr>').join('') +
               '</table>'
             : '') +
           '</div>'
