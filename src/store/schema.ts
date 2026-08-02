@@ -282,6 +282,27 @@ export const mockupAnnotation = sqliteTable(
 );
 
 /**
+ * 다이어그램 확인 상태 (F3 v2.0, #70 — ADR-0018 결정 3) — 슬롯 확인(slot_state)과 대칭.
+ * 재생성 다이어그램은 요청자가 그린 적 없는 해석이라 확인을 거쳐야 규범이 된다.
+ * 문서 재생성·해당 다이어그램 교정은 확인을 리셋한다 — 리셋 규칙은 코드(러너) 몫.
+ */
+export const diagramState = sqliteTable(
+  'diagram_state',
+  {
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => session.id),
+    /** 문서 content.diagrams[].id — 다이어그램 단위 확인의 좌표. */
+    diagramId: text('diagram_id').notNull(),
+    confirmedByRequester: integer('confirmed_by_requester', { mode: 'boolean' })
+      .notNull()
+      .default(false),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.sessionId, table.diagramId] })],
+);
+
+/**
  * 승인 게이트 항목 (F5, #69) — 문서 버전 하나에 대한 개발자 결정. 문서가 재게시되면 새 항목이
  * 상정되고 이전 대기 항목은 최신 항목에 밀려 화면에서 빠진다(행은 남는다 — 이력).
  * 라우팅·SLA 컬럼은 만들지 않는다 — 수치가 결정 대기(§12-5)이고, 코드가 쓰지 않는 컬럼은

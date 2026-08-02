@@ -133,6 +133,8 @@ document.getElementById('summary').innerHTML =
     ' · pending ' + s.attachmentCounts.pending, '총 ' + s.attachmentCounts.total + '건') +
   stat('문서', s.documentCount === 0 ? '—' : s.documentCount + '건', '영속된 버전 수 (#53)') +
   stat('게이트', dist(s.gateDecisionCounts), s.issueCount === 0 ? '' : '이슈 ' + s.issueCount + '건 (F6)') +
+  stat('다이어그램', s.diagramCounts.total === 0 ? '—' :
+    '확인 ' + s.diagramCounts.confirmed + ' / ' + s.diagramCounts.total, '규범 지위 (#70)') +
   stat('LLM 사용량', s.usageTotals.calls === 0 ? '—' :
     (s.usageTotals.tokens / 1000).toFixed(1) + 'k 토큰',
     s.usageTotals.calls + '회 호출 · $' + s.usageTotals.costUsd.toFixed(2));
@@ -216,6 +218,14 @@ for (const sess of DATA.sessions) {
               '</table>'
             : '') +
           '</div>'
+        : '') +
+      (sess.diagramStates.length
+        ? '<div><div class="sect">다이어그램 확인 (F3 v2.0 #70)</div><table><tr><th>diagram</th><th>확인</th><th>갱신</th></tr>' +
+          sess.diagramStates.map((ds) =>
+            '<tr><td class="mono">' + esc(ds.diagramId) + '</td>' +
+            '<td>' + (ds.confirmedByRequester ? '✓' : '확인 전 — 규범 아님') + '</td>' +
+            '<td class="mono">' + esc(ds.updatedAt.slice(11, 19)) + '</td></tr>').join('') +
+          '</table></div>'
         : '') +
       (sess.gateItems.length
         ? '<div><div class="sect">승인 게이트 (F5 #69)</div><table><tr><th>문서 vN</th><th>조건부</th><th>결정</th><th>사유</th><th>노트</th><th>결정자</th><th>상정</th><th>결정 시각</th></tr>' +

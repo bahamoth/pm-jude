@@ -99,6 +99,7 @@ const requirementsResponse = JSON.stringify({
   ],
   dataSources: [],
   openIssues: [],
+  diagrams: [],
 } satisfies RequirementsOutput);
 
 let store: SessionStore | undefined;

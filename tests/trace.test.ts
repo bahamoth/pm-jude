@@ -377,6 +377,28 @@ describe('trace-data — 저장소 export의 조형', () => {
     expect(html).toContain('FAKE-1');
   });
 
+  it('다이어그램 확인 상태가 요약·세션·HTML에 실린다 (F3 v2.0 #70, AGENTS.md 동반 지침)', async () => {
+    store = SessionStore.open(':memory:');
+    await seedSession(store, '승인 흐름 자동화 요청');
+    const exported = store.exportSessions()[0];
+    if (!exported) throw new Error('시드 세션 없음');
+    const sessionId = exported.session.id;
+    store.setDiagramState({ sessionId, diagramId: 'approval-flow', confirmedByRequester: true });
+    store.setDiagramState({ sessionId, diagramId: 'screen-layout', confirmedByRequester: false });
+
+    const data = buildTraceData(store.exportSessions(), store.listVersionRegistry(), GENERATED_AT);
+
+    expect(data.summary.diagramCounts).toMatchObject({ total: 2, confirmed: 1 });
+    expect(data.sessions[0]?.diagramStates).toMatchObject([
+      { diagramId: 'approval-flow', confirmedByRequester: true },
+      { diagramId: 'screen-layout', confirmedByRequester: false },
+    ]);
+
+    const html = renderTraceHtml(data);
+    expect(html).toContain('다이어그램 확인');
+    expect(html).toContain('규범 아님');
+  });
+
   it('빈 저장소 — 세션 0건, 평균 왕복 null', () => {
     store = SessionStore.open(':memory:');
     const data = buildTraceData(store.exportSessions(), store.listVersionRegistry(), GENERATED_AT);

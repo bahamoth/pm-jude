@@ -723,6 +723,11 @@ export function createWebServer(deps: WebServerDeps): Server {
       })(),
       roundBudget: runner.roundBudgetOf(sessionId),
       processing: inFlight.has(sessionId),
+      /** 다이어그램 확인 상태 (F3 v2.0, #70) — 확인 전 다이어그램은 규범 아님 표시의 근거. */
+      diagramStates: store.listDiagramStates(sessionId).map((state) => ({
+        diagramId: state.diagramId,
+        confirmedByRequester: state.confirmedByRequester,
+      })),
       /** 현재 게이트 항목 (F5, #69) — 요청자 화면의 「개발팀 검토 대기·결과」 표시 근거. */
       gate: (() => {
         const item = store.currentGateItem(sessionId);
@@ -742,9 +747,7 @@ export function createWebServer(deps: WebServerDeps): Server {
       /** 생성된 이슈 (F6) — 종결 화면의 근거. 페이크 이슈는 connector로 구분된다. */
       issue: (() => {
         const row = store.listLinearIssues(sessionId).at(-1);
-        return row
-          ? { identifier: row.identifier, url: row.url, connector: row.connector }
-          : null;
+        return row ? { identifier: row.identifier, url: row.url, connector: row.connector } : null;
       })(),
       session: {
         id: session.id,
@@ -976,8 +979,7 @@ export function createWebServer(deps: WebServerDeps): Server {
         .listUtterances(item.sessionId)
         .find((utterance) => utterance.authorType === 'requester');
       const content = store.latestRequirementsDoc(item.sessionId)?.content as
-        | { problem?: string; openIssues?: unknown[] }
-        | undefined;
+        { problem?: string; openIssues?: unknown[] } | undefined;
       return {
         id: item.id,
         sessionId: item.sessionId,
@@ -1024,10 +1026,7 @@ export function createWebServer(deps: WebServerDeps): Server {
       throw new BadRequest('질문 결정에는 질문 본문(note)이 필요하다');
     }
     const reasonTag = typeof body.reasonTag === 'string' ? body.reasonTag : '';
-    if (
-      decision === 'reject' &&
-      !GATE_REJECT_REASONS.includes(reasonTag as GateRejectReason)
-    ) {
+    if (decision === 'reject' && !GATE_REJECT_REASONS.includes(reasonTag as GateRejectReason)) {
       throw new BadRequest(`거절 사유는 다음 중 하나여야 한다: ${GATE_REJECT_REASONS.join(', ')}`);
     }
     if (inFlight.has(item.sessionId)) {
@@ -1216,6 +1215,34 @@ export function createWebServer(deps: WebServerDeps): Server {
           segments[4] === 'corrections'
         ) {
           await handleDocumentCorrection(req, res, sessionId);
+          return;
+        }
+        // 다이어그램 단위 확인 (F3 v2.0, #70) — LLM 없는 동기 처리. 정정은 문서 교정 경로.
+        if (
+          req.method === 'POST' &&
+          segments.length === 6 &&
+          segments[3] === 'diagrams' &&
+          segments[5] === 'confirmation'
+        ) {
+          const session = store.getSession(sessionId);
+          if (!session?.channelThreadKey) {
+            sendJson(res, 404, { error: '세션 없음' });
+            return;
+          }
+          const outcome = runner.confirmDiagram(
+            {
+              address: { sessionId },
+              threadKey: session.channelThreadKey,
+              channel: 'web',
+              text: '',
+            },
+            decodeURIComponent(segments[4] ?? ''),
+          );
+          if (!outcome) {
+            sendJson(res, 409, { error: '지금은 이 다이어그램을 확인할 수 없어요.' });
+            return;
+          }
+          sendJson(res, 200, { sessionId, confirmed: true });
           return;
         }
         if (req.method === 'POST' && segments.length === 5 && segments[3] === 'slots') {

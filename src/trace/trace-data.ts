@@ -26,6 +26,8 @@ export interface TraceSummary {
   gateDecisionCounts: Record<string, number>;
   /** 생성 이슈 수 (F6) — 페이크 이슈도 궤적으로 센다 (connector가 가른다). */
   issueCount: number;
+  /** 다이어그램 확인 현황 (F3 v2.0 #70) — 확인율이 낮으면 확인 UX 또는 재생성 품질의 신호다. */
+  diagramCounts: Record<'total' | 'confirmed', number>;
 }
 
 export interface TraceData {
@@ -90,6 +92,12 @@ export interface TraceData {
       /** 값이 첨부에서 왔는가 — 추출 결함과 프롬프트 결함을 가르는 판독 근거 (F13). */
       evidenceAttachmentId: string | null;
       openIssueAssignee: string | null;
+    }>;
+    /** 다이어그램 확인 상태 (F3 v2.0 #70) — 규범 지위의 궤적. */
+    diagramStates: Array<{
+      diagramId: string;
+      confirmedByRequester: boolean;
+      updatedAt: string;
     }>;
     signals: Array<{
       type: string;
@@ -171,6 +179,7 @@ export function buildTraceData(
     mockupCounts: { versions: 0, annotations: 0 },
     gateDecisionCounts: {},
     issueCount: 0,
+    diagramCounts: { total: 0, confirmed: 0 },
   };
 
   const sessions = exported.map(
@@ -180,6 +189,7 @@ export function buildTraceData(
       utterances,
       attachments,
       slotStates,
+      diagramStates,
       signals,
       documents,
       mockups,
@@ -206,6 +216,10 @@ export function buildTraceData(
       summary.mockupCounts.annotations += mockupAnnotations.length;
       for (const item of gateItems) count(summary.gateDecisionCounts, item.decision ?? 'pending');
       summary.issueCount += linearIssues.length;
+      summary.diagramCounts.total += diagramStates.length;
+      summary.diagramCounts.confirmed += diagramStates.filter(
+        (state) => state.confirmedByRequester,
+      ).length;
 
       return {
         id: session.id,
@@ -247,6 +261,11 @@ export function buildTraceData(
           confirmedByRequester: slot.confirmedByRequester,
           evidenceAttachmentId: slot.evidenceAttachmentId,
           openIssueAssignee: slot.openIssueAssignee,
+        })),
+        diagramStates: diagramStates.map((state) => ({
+          diagramId: state.diagramId,
+          confirmedByRequester: state.confirmedByRequester,
+          updatedAt: state.updatedAt,
         })),
         signals: signals.map((signal) => ({
           type: signal.type,

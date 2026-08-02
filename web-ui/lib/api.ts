@@ -100,6 +100,20 @@ export function sendReply(
   });
 }
 
+/**
+ * 다이어그램 단위 확인 (F3 v2.0, ADR-0018 결정 3 — #70). LLM 없는 동기 200 —
+ * 확인 없는 재생성 다이어그램은 규범이 아니므로, 이 호출이 규범 지위를 부여한다.
+ */
+export function confirmDiagram(
+  sessionId: string,
+  diagramId: string,
+): Promise<{ sessionId: string; confirmed: true }> {
+  return request(
+    `/api/sessions/${encodeURIComponent(sessionId)}/diagrams/${encodeURIComponent(diagramId)}/confirmation`,
+    { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
+  );
+}
+
 /** 맞아요(즉시 200) — LLM 호출이 없다. */
 export function confirmSlotOk(sessionId: string, slotKey: string): Promise<ReplyOutcome> {
   return request(

@@ -254,7 +254,11 @@ function GateItemCard({
               key={decision}
               size="sm"
               variant={
-                decision === 'approve' ? 'default' : decision === 'reject' ? 'destructive' : 'outline'
+                decision === 'approve'
+                  ? 'default'
+                  : decision === 'reject'
+                    ? 'destructive'
+                    : 'outline'
               }
               disabled={busy}
               onClick={() => setMode(mode === decision ? null : decision)}
@@ -342,7 +346,9 @@ function ItemSummary({ lang, item }: { lang: Lang; item: GatePendingItem }) {
         <Badge variant="outline" className="font-mono text-[11px]">
           {item.sessionId.slice(0, 8)}
         </Badge>
-        <Badge variant="secondary">{t(lang, 'gate.docVersion', { version: item.docVersion })}</Badge>
+        <Badge variant="secondary">
+          {t(lang, 'gate.docVersion', { version: item.docVersion })}
+        </Badge>
         {item.isConditional && (
           <Badge variant="outline" className="border-dashed">
             {t(lang, 'gate.conditional', { count: item.openIssueCount })}

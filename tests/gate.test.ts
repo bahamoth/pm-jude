@@ -86,7 +86,8 @@ function makeRunner(responses: string[], options?: { issues?: IssueConnector | n
   store = SessionStore.open(':memory:');
   const port = new FakePort();
   const backend = new ScriptedBackend(responses);
-  const issues = options?.issues === null ? undefined : (options?.issues ?? new CountingConnector());
+  const issues =
+    options?.issues === null ? undefined : (options?.issues ?? new CountingConnector());
   const runner = new IntakeRunner<string>({
     store,
     backend,

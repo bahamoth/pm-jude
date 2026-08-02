@@ -1,14 +1,14 @@
 import type { LlmBackend } from '../gateway/backend';
 import { LlmGateway, type UsageLogger } from '../gateway/gateway';
 import {
-  BACK_INJECTION_V0,
+  BACK_INJECTION_V1,
   CLARIFICATION_V3,
   COMPLETENESS_V1,
   CONDENSATION_V1,
   DOCUMENT_PATCH_V0,
   MOCKUP_V0,
   PROMOTION_V0,
-  REQUIREMENTS_V2,
+  REQUIREMENTS_V3,
   UI_CLASSIFICATION_V0,
 } from '../prompts/catalog';
 import type { ClarificationOutput } from '../prompts/clarification-v0';
@@ -18,7 +18,11 @@ import {
   runRuleLayer,
 } from '../prompts/completeness-v0';
 import { detectNotionUrls, parseNotionUrl, type NotionPageSource } from '../connect/notion';
-import { buildIssuePayload, provenanceKeyOf, type IssueConnector } from '../connect/issue-connector';
+import {
+  buildIssuePayload,
+  provenanceKeyOf,
+  type IssueConnector,
+} from '../connect/issue-connector';
 import {
   applyDocumentCorrections,
   readDocumentPath,
@@ -460,6 +464,16 @@ function formatDocument(
   lines.push('*데이터 소스*');
   if (content.dataSources.length === 0) lines.push('미확정 (오픈이슈 참조)');
   else lines.push(...content.dataSources.map((source) => `• ${source}`));
+  // 규범 다이어그램 (v2.0, ADR-0018 — #70). 레거시 문서(diagrams 부재)는 건너뛴다.
+  for (const diagram of content.diagrams ?? []) {
+    lines.push(
+      `*다이어그램* — [${diagram.id}] ${diagram.title} (${diagram.kind})` +
+        (diagram.sourceAttachmentRef ? ` — 출처: 첨부 ${diagram.sourceAttachmentRef}` : ''),
+    );
+    lines.push('```mermaid');
+    lines.push(diagram.mermaid);
+    lines.push('```');
+  }
   if (visualDirection) {
     // 요청자 확인을 거친 시각 언어의 기록 — 구현 수단 선택은 개발팀 재량 (F4 선정)
     lines.push(
@@ -1371,6 +1385,15 @@ export class IntakeRunner<A> {
     }
 
     const nextContent = applyDocumentCorrections(content, corrections);
+    // 다이어그램 교정은 확인을 리셋한다 (#70) — 고친 그림은 다시 확인받아야 규범이 된다
+    const touchedDiagramIds = corrections
+      .map((entry) => /^diagrams\[(\d+)\]/.exec(entry.path))
+      .filter((match): match is RegExpExecArray => match !== null)
+      .map((match) => (content.diagrams ?? [])[Number(match[1])]?.id)
+      .filter((id): id is string => id !== undefined);
+    if (touchedDiagramIds.length > 0) {
+      store.resetDiagramStates(session.id, touchedDiagramIds);
+    }
     const version = this.documentVersionOf(session.id) + 1;
     const doc = assembleRequirementsDocument({
       output: nextContent,
@@ -1474,6 +1497,30 @@ export class IntakeRunner<A> {
       ...this.versionAxesOf(session),
     });
     return this.processReply(event, { correction: true, appendUtterance: true });
+  }
+
+  /**
+   * 다이어그램 단위 확인 (F3 v2.0, #70 — ADR-0018 결정 3) — 슬롯 단위 확인과 같은 규율.
+   * 재생성 다이어그램은 요청자가 그린 적 없는 해석이라, 확인 전에는 규범이 아니다.
+   * 정정 경로는 별도다 — 문서 부분 교정(diagrams[i].mermaid 주소)이 받고, 교정은 확인을 리셋한다.
+   */
+  confirmDiagram(event: IntakeEvent<A>, diagramId: string): ReplyOutcome | null {
+    const { store } = this.deps;
+    const session = store.findSessionByThreadKey(event.threadKey);
+    if (!session || (session.status !== 'documented' && session.status !== 'mockup')) return null;
+    const content = store.latestRequirementsDoc(session.id)?.content as
+      RequirementsOutput | undefined;
+    const diagram = (content?.diagrams ?? []).find((entry) => entry.id === diagramId);
+    if (!diagram) return null;
+    store.setDiagramState({ sessionId: session.id, diagramId, confirmedByRequester: true });
+    store.recordSignal({
+      sessionId: session.id,
+      type: 'diagram_confirmed',
+      payload: { diagramId, docVersion: this.documentVersionOf(session.id) },
+      modelVersion: this.deps.modelVersion,
+      ...this.versionAxesOf(session),
+    });
+    return this.outcomeOf(session.id);
   }
 
   /**
@@ -1753,7 +1800,7 @@ export class IntakeRunner<A> {
     // 생성 출력은 소스 크기에 비례한다 — 장문 첨부·발화는 압축본으로 실린다 (#58 #60, ADR-0014)
     const generationView = this.generationConversation(sessionId, context);
     const result = await this.gateway.complete<RequirementsOutput>(
-      REQUIREMENTS_V2,
+      REQUIREMENTS_V3,
       {
         request: generationView.request,
         teamLanguage: this.teamLanguage,
@@ -1789,6 +1836,8 @@ export class IntakeRunner<A> {
     store.updateSessionState(sessionId, { status: 'documented' });
     // 구조체 영속 (#53) — 게시 텍스트는 전달 표면이고, 화면·역주입(F4)·골든셋의 정본은 이 행이다
     store.appendRequirementsDoc({ sessionId, version, content: doc.content });
+    // 재생성 문서의 다이어그램은 새 확인이 필요하다 (#70) — 슬롯 확인의 버전 규율과 같다 (G-11)
+    store.resetDiagramStates(sessionId);
     store.recordSignal({
       sessionId,
       type: 'document_delivered',
@@ -2127,7 +2176,7 @@ export class IntakeRunner<A> {
     };
 
     const result = await this.gateway.complete<BackInjectionOutput>(
-      BACK_INJECTION_V0,
+      BACK_INJECTION_V1,
       {
         request,
         teamLanguage: this.teamLanguage,
@@ -2175,6 +2224,8 @@ export class IntakeRunner<A> {
       content: { ...doc.content, visualDirection },
       backInjectedFrom: current.id,
     });
+    // 역주입 문서의 다이어그램도 새 확인이 필요하다 (#70) — 재생성과 같은 규율
+    store.resetDiagramStates(session.id);
     store.recordSignal({
       sessionId: session.id,
       type: 'mockup_approved',
@@ -2266,6 +2317,11 @@ export class IntakeRunner<A> {
         buildIssuePayload(doc.content as RequirementsOutput, {
           docVersion: item.docVersion,
           provenanceKey,
+          // 미확인 다이어그램은 이슈 본문에 「확인 전 — 규범 아님」으로 표기된다 (#70)
+          confirmedDiagramIds: store
+            .listDiagramStates(session.id)
+            .filter((state) => state.confirmedByRequester)
+            .map((state) => state.diagramId),
         }),
       );
       store.decideGateItem(item.id, { decision: 'approve', ...decisionBase });

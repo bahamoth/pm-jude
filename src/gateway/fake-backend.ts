@@ -1,12 +1,12 @@
 import type { PromptRegistry } from '../prompts/registry';
 import {
   ATTACHMENT_EXTRACTION_V0,
-  BACK_INJECTION_V0,
+  BACK_INJECTION_V1,
   CLARIFICATION_V3,
   COMPLETENESS_V1,
   MOCKUP_V0,
   PROMOTION_V0,
-  REQUIREMENTS_V2,
+  REQUIREMENTS_V3,
   UI_CLASSIFICATION_V0,
 } from '../prompts/catalog';
 import type { BackendRequest, BackendResponse, LlmBackend } from './backend';
@@ -22,11 +22,11 @@ export function createFakeBackend(registry: PromptRegistry): LlmBackend {
   const clarificationBody = registry.get(CLARIFICATION_V3).body;
   const completenessBody = registry.get(COMPLETENESS_V1).body;
   const promotionBody = registry.get(PROMOTION_V0).body;
-  const requirementsBody = registry.get(REQUIREMENTS_V2).body;
+  const requirementsBody = registry.get(REQUIREMENTS_V3).body;
   const extractionBody = registry.get(ATTACHMENT_EXTRACTION_V0).body;
   const uiClassificationBody = registry.get(UI_CLASSIFICATION_V0).body;
   const mockupBody = registry.get(MOCKUP_V0).body;
-  const backInjectionBody = registry.get(BACK_INJECTION_V0).body;
+  const backInjectionBody = registry.get(BACK_INJECTION_V1).body;
 
   const clarification = JSON.stringify({
     interpretations: ['관리자용 실적 대시보드', '영업사원 개인 실적 화면'],
@@ -169,6 +169,17 @@ export function createFakeBackend(registry: PromptRegistry): LlmBackend {
     ],
     dataSources: [],
     openIssues: [],
+    // 규범 다이어그램 (#70, ADR-0018) — 데모 경로에서 다이어그램 확인 UX가 관통되게 한다
+    diagrams: [
+      {
+        id: 'dashboard-screen',
+        title: '대시보드 화면 구성',
+        kind: 'screen',
+        mermaid:
+          'flowchart TB\n  filter[기간 필터] --> table[팀별 매출 표]\n  filter --> chart[월별 추이 그래프]',
+        sourceAttachmentRef: null,
+      },
+    ],
   });
 
   const extraction = JSON.stringify({
@@ -237,6 +248,17 @@ document.getElementById('p30').onclick=()=>render('p30');document.getElementById
     ],
     dataSources: [],
     openIssues: [],
+    // 역주입도 다이어그램을 보존한다 (#70, back-injection@0.2.0 작성 규칙 3)
+    diagrams: [
+      {
+        id: 'dashboard-screen',
+        title: '대시보드 화면 구성',
+        kind: 'screen',
+        mermaid:
+          'flowchart TB\n  filter[기간 필터] --> table[팀별 매출 표]\n  filter --> chart[월별 추이 그래프]\n  table --> empty[빈 상태 안내]',
+        sourceAttachmentRef: null,
+      },
+    ],
   });
 
   return {

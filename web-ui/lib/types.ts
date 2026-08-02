@@ -85,6 +85,22 @@ export interface UploadedFile {
   bytes: number;
 }
 
+/** 규범 다이어그램 (F3 v2.0, ADR-0018) — 문서 안에 실리는 재생성 다이어그램. */
+export interface DiagramView {
+  id: string;
+  title: string;
+  kind: 'flow' | 'state' | 'hierarchy' | 'screen';
+  mermaid: string;
+  /** 유래 첨부 참조 (A1 등) — 출처 표시의 근거. 대화 유래면 null. */
+  sourceAttachmentRef: string | null;
+}
+
+/** 다이어그램 단위 확인 상태 (ADR-0018 결정 3) — 확인 없는 재생성본은 규범이 아니다. */
+export interface DiagramStateView {
+  diagramId: string;
+  confirmedByRequester: boolean;
+}
+
 /** requirements 문서 구조체 — 서버 requirements_doc.content의 뷰 타입 (#53, data-model.md). */
 export interface DocumentContent {
   problem: string;
@@ -99,6 +115,8 @@ export interface DocumentContent {
   }>;
   dataSources: string[];
   openIssues: Array<{ slotKey: string; question: string; assignee: string | null }>;
+  /** 규범 다이어그램 (v2.0) — 레거시 문서에는 없다. */
+  diagrams?: DiagramView[];
 }
 
 /** 목업 요약 (F4 #54) — 세션 조회에 실린다. 상세는 목업 상태 조회로. */
@@ -224,6 +242,8 @@ export interface SessionDetail {
   gate: GateView | null;
   /** 생성된 이슈 (F6) — null이면 승인 전. */
   issue: IssueView | null;
+  /** 다이어그램 단위 확인 상태 (F3 v2.0, #70) — 문서의 diagrams와 id로 짝을 이룬다. */
+  diagramStates: DiagramStateView[];
 }
 
 export interface SessionSummary {

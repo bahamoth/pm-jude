@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   approveMockup,
+  confirmDiagram,
   confirmSlotOk,
   correctDocument,
   correctSlot,
@@ -39,7 +40,14 @@ import { closedCardKind, gateWaiting, rejectReasonKey } from '@/lib/gate';
 import { rememberSession } from '@/lib/local-sessions';
 import { t, sessionLang, useLang, type Lang } from '@/lib/i18n';
 import { judeState, type JudeState } from '@/lib/jude-geometry';
-import { fullyPromoted, isLastRound, journeyStep, mockupCardMode, roundFailed } from '@/lib/stage';
+import {
+  canConfirmDiagram,
+  fullyPromoted,
+  isLastRound,
+  journeyStep,
+  mockupCardMode,
+  roundFailed,
+} from '@/lib/stage';
 import { ApiError, type SessionDetail } from '@/lib/types';
 import { watchProcessing } from '@/lib/watch-processing';
 
@@ -206,6 +214,20 @@ export default function SessionPage() {
 
   const failed = roundFailed(pendingRound, processing || busy);
   /**
+   * 다이어그램 「맞아요」 (F3 v2.0, #70) — 동기 200, 감시 없이 재조회로 충분하다.
+   * 확인 창은 슬롯 확인과 같다(documented·mockup) — 백엔드 가드와 일치 (P-U1).
+   */
+  const onConfirmDiagram = canConfirmDiagram(session.status)
+    ? (diagramId: string) => {
+        setError(null);
+        void confirmDiagram(sessionId, diagramId)
+          .then(() => refetch())
+          .catch((e: unknown) =>
+            setError(e instanceof Error ? e.message : t(lang, 'session.confirmFailed')),
+          );
+      }
+    : undefined;
+  /**
    * 목업 카드 (#54 · #66 · #67) — 열려 있는 판이면 반복 패널, 닫힌 판이면 열람 + 고치기 진입점.
    *
    * 세션 상태로 가르지 않는다: 재개 구간은 `documented`에서 진행되므로(승인이 여정을 되돌리지
@@ -364,6 +386,8 @@ export default function SessionPage() {
             fullyPromoted={fullyPromoted(slotStates)}
             onCorrect={onCorrectDocument}
             submitting={busy || failed}
+            diagramStates={detail.diagramStates}
+            onConfirmDiagram={onConfirmDiagram}
           />
           <AttachmentList lang={lang} sessionId={sessionId} attachments={attachments} />
         </div>
@@ -390,6 +414,8 @@ export default function SessionPage() {
             fullyPromoted={fullyPromoted(slotStates)}
             onCorrect={onCorrectDocument}
             submitting={busy || failed}
+            diagramStates={detail.diagramStates}
+            onConfirmDiagram={onConfirmDiagram}
           />
           {/* 승인 뒤에도 화면을 다시 보고 다시 고칠 수 있다 (#66 · #67) */}
           {mockupCard}
@@ -432,6 +458,8 @@ export default function SessionPage() {
             fullyPromoted={fullyPromoted(slotStates)}
             onCorrect={onCorrectDocument}
             submitting={busy || failed}
+            diagramStates={detail.diagramStates}
+            onConfirmDiagram={onConfirmDiagram}
           />
           {mockupCard}
           <AttachmentList lang={lang} sessionId={sessionId} attachments={attachments} />

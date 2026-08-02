@@ -243,6 +243,19 @@ const ko = {
   'closed.rejectedBody':
     '개발팀 검토 결과예요 — 사유: {reason}. 이 결정에 이견이 있으면 팀 리드에게 재검토를 요청하실 수 있어요.',
 
+  // 규범 다이어그램 (F3 v2.0, ADR-0018 — #70) — 확인 없는 재생성본은 규범이 아니다
+  'diagram.kind.flow': '흐름',
+  'diagram.kind.state': '상태',
+  'diagram.kind.hierarchy': '계층',
+  'diagram.kind.screen': '화면 구성',
+  'diagram.confirmed': '확인됨 ✓',
+  'diagram.unconfirmed': '확인 전 — 참고용',
+  'diagram.unconfirmedNote':
+    '주신 자료를 보고 제가 다시 그린 그림이에요. 맞다고 확인해 주시면 문서의 일부로 확정돼요.',
+  'diagram.confirm': '맞아요',
+  'diagram.source': '출처: 첨부 {ref}',
+  'diagram.renderFailed': '그림으로 그리지 못했어요 — 원본 표기를 그대로 보여드릴게요.',
+
   // 거절 사유 짧은 표기 — 게이트 셀렉트와 종결 카드가 같이 쓴다
   'reason.priority': '우선순위',
   'reason.out_of_scope': '팀 범위 밖',
@@ -523,6 +536,19 @@ const en: Record<Key, string> = {
   'closed.rejectedBody':
     "That's the review outcome — reason: {reason}. If you disagree, you can ask the team lead for a second look.",
 
+  // Normative diagrams (F3 v2.0, ADR-0018 — #70)
+  'diagram.kind.flow': 'Flow',
+  'diagram.kind.state': 'State',
+  'diagram.kind.hierarchy': 'Hierarchy',
+  'diagram.kind.screen': 'Screen layout',
+  'diagram.confirmed': 'Confirmed ✓',
+  'diagram.unconfirmed': 'Not confirmed — reference only',
+  'diagram.unconfirmedNote':
+    "I redrew this from your material. Confirm it's right and it becomes part of the document.",
+  'diagram.confirm': "That's right",
+  'diagram.source': 'Source: attachment {ref}',
+  'diagram.renderFailed': "I couldn't draw this one — here's the original notation as it is.",
+
   // Short reject-reason labels — shared by the gate select and the closed card
   'reason.priority': 'Priority',
   'reason.out_of_scope': "Outside the team's scope",
@@ -532,8 +558,7 @@ const en: Record<Key, string> = {
 
   // Approval gate (F5 #69) — developer surface (/gate). Factual tone, not Jude's voice.
   'gate.title': 'Approval gate',
-  'gate.lede':
-    'Decide whether refined requests proceed. An issue is created only on approval.',
+  'gate.lede': 'Decide whether refined requests proceed. An issue is created only on approval.',
   'gate.empty': 'Nothing waiting for review.',
   'gate.loadFailed': "Couldn't load the queue",
   'gate.refresh': 'Refresh',
@@ -558,7 +583,8 @@ const en: Record<Key, string> = {
   'gate.questionNote':
     'The session returns to clarification and is resubmitted with a new document once answered.',
   'gate.questionCommit': 'Send question',
-  'gate.backlogNote': 'The requester is notified and the request closes as backlog — this cannot be undone.',
+  'gate.backlogNote':
+    'The requester is notified and the request closes as backlog — this cannot be undone.',
   'gate.backlogCommit': 'Send to backlog',
   'gate.rejectLabel': 'Rejection reason',
   'gate.rejectNote':

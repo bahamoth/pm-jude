@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canConfirmDiagram,
   fullyPromoted,
   isLastRound,
   journeyStep,
@@ -85,6 +86,16 @@ describe('문서 화면의 정직 표시 (G-11)', () => {
       ]),
     ).toBe(false);
     expect(fullyPromoted([])).toBe(false);
+  });
+});
+
+describe('다이어그램 확인 창 (#70)', () => {
+  it('슬롯 확인과 같은 창이다 — documented·mockup에서만 (백엔드 가드와 일치)', () => {
+    expect(canConfirmDiagram('documented')).toBe(true);
+    expect(canConfirmDiagram('mockup')).toBe(true);
+    expect(canConfirmDiagram('clarifying')).toBe(false);
+    expect(canConfirmDiagram('closed')).toBe(false);
+    expect(canConfirmDiagram('intake')).toBe(false);
   });
 });
 

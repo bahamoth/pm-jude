@@ -27,6 +27,7 @@ const doc: RequirementsOutput = {
   ],
   dataSources: ['CRM'],
   openIssues: [{ slotKey: 'auth', question: '권한 범위는?', assignee: null }],
+  diagrams: [],
 };
 
 describe('readDocumentPath', () => {

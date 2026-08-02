@@ -71,6 +71,13 @@
       "when": 1785637555294,
       "tag": "0009_gate-and-issue",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1785638730665,
+      "tag": "0010_diagram-state",
+      "breakpoints": true
     }
   ]
 }

@@ -492,6 +492,8 @@ export class SessionStore {
       createdAt: string;
     }>;
     slotStates: Array<typeof schema.slotState.$inferSelect>;
+    /** 다이어그램 확인 상태 (F3 v2.0, #70) — 규범 지위의 근거. */
+    diagramStates: Array<typeof schema.diagramState.$inferSelect>;
     signals: Array<Omit<typeof schema.signal.$inferSelect, 'id'>>;
     documents: Array<Omit<typeof schema.requirementsDoc.$inferSelect, 'id' | 'sessionId'>>;
     /**
@@ -587,6 +589,7 @@ export class SessionStore {
             ({ id: _id, authorId: _authorId, ...rest }) => rest,
           ),
           slotStates: this.listSlotStates(session.id),
+          diagramStates: this.listDiagramStates(session.id),
           signals: this.listSignals(session.id).map(({ id: _id, ...rest }) => rest),
           documents: this.listRequirementsDocs(session.id).map(
             ({ id: _id, sessionId: _sessionId, ...rest }) => rest,
@@ -806,6 +809,51 @@ export class SessionStore {
       elementRef: annotation.elementRef,
       createdAt: annotation.createdAt,
     }));
+  }
+
+  /**
+   * 다이어그램 확인 상태 기록 (F3 v2.0, #70) — 슬롯 확인과 대칭인 upsert.
+   * 확인 리셋(재생성·교정)도 같은 경로다 — confirmedByRequester: false로 다시 쓴다.
+   */
+  setDiagramState(input: {
+    sessionId: string;
+    diagramId: string;
+    confirmedByRequester: boolean;
+  }): void {
+    this.db
+      .insert(schema.diagramState)
+      .values({ ...input, updatedAt: now() })
+      .onConflictDoUpdate({
+        target: [schema.diagramState.sessionId, schema.diagramState.diagramId],
+        set: { confirmedByRequester: input.confirmedByRequester, updatedAt: now() },
+      })
+      .run();
+  }
+
+  listDiagramStates(sessionId: string): Array<typeof schema.diagramState.$inferSelect> {
+    return this.db
+      .select()
+      .from(schema.diagramState)
+      .where(eq(schema.diagramState.sessionId, sessionId))
+      .orderBy(schema.diagramState.diagramId)
+      .all();
+  }
+
+  /**
+   * 다이어그램 확인 리셋 (#70) — 문서 재생성은 전체, 부분 교정은 지목된 id만.
+   * 새 문서에는 새 확인이 필요하다 — 슬롯 확인의 버전 규율과 같다 (G-11).
+   */
+  resetDiagramStates(sessionId: string, diagramIds?: string[]): void {
+    const rows = this.listDiagramStates(sessionId);
+    for (const row of rows) {
+      if (diagramIds && !diagramIds.includes(row.diagramId)) continue;
+      if (!row.confirmedByRequester) continue;
+      this.setDiagramState({
+        sessionId,
+        diagramId: row.diagramId,
+        confirmedByRequester: false,
+      });
+    }
   }
 
   /**

@@ -114,12 +114,28 @@ export function buildIssuePayload(
     scope: { inScope: string[]; outOfScope: string[] };
     stories: Array<{
       story: string;
-      acceptanceCriteria: Array<{ ears: string; gwt: { given: string; when: string; then: string } }>;
+      acceptanceCriteria: Array<{
+        ears: string;
+        gwt: { given: string; when: string; then: string };
+      }>;
     }>;
     dataSources: string[];
     openIssues: Array<{ slotKey: string; question: string; assignee: string | null }>;
+    /** 규범 다이어그램 (v2.0, #70) — 레거시 문서는 부재. */
+    diagrams?: Array<{
+      id: string;
+      title: string;
+      kind: string;
+      mermaid: string;
+      sourceAttachmentRef: string | null;
+    }>;
   },
-  meta: { docVersion: number; provenanceKey: string },
+  meta: {
+    docVersion: number;
+    provenanceKey: string;
+    /** 요청자 확인이 끝난 다이어그램 id — 미확인은 규범이 아니라 표기된다 (F3 수용기준). */
+    confirmedDiagramIds?: string[];
+  },
 ): { title: string; description: string } {
   const firstSentence = content.problem.split(/(?<=[.!?。])\s/)[0] ?? content.problem;
   const title = firstSentence.length > 80 ? `${firstSentence.slice(0, 79)}…` : firstSentence;
@@ -152,6 +168,23 @@ export function buildIssuePayload(
   lines.push('', '## 데이터 소스');
   if (content.dataSources.length === 0) lines.push('- 미확정 (오픈이슈 참조)');
   else lines.push(...content.dataSources.map((source) => `- ${source}`));
+  const diagrams = content.diagrams ?? [];
+  if (diagrams.length) {
+    lines.push('', '## 규범 다이어그램');
+    const confirmed = new Set(meta.confirmedDiagramIds ?? []);
+    for (const diagram of diagrams) {
+      const marks = [
+        diagram.kind,
+        diagram.sourceAttachmentRef ? `출처: 첨부 ${diagram.sourceAttachmentRef}` : null,
+        // 확인 없는 재생성 다이어그램은 규범으로 실리지 않는다 (F3 v2.0 수용기준, ADR-0018 결정 3)
+        confirmed.has(diagram.id) ? '요청자 확인됨' : '⚠ 확인 전 — 참고용, 규범 아님',
+      ].filter(Boolean);
+      lines.push(`### ${diagram.title} (${marks.join(' · ')})`);
+      lines.push('```mermaid');
+      lines.push(diagram.mermaid);
+      lines.push('```');
+    }
+  }
   if (content.openIssues.length) {
     lines.push('', '## 오픈이슈 (요청자가 답할 수 없어 승격됨 — 담당자 확인 필요)');
     for (const issue of content.openIssues) {

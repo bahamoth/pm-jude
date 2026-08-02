@@ -94,6 +94,14 @@ export function mockupCardMode(
   return mockup.convergence === 'iterating' ? 'panel' : 'archive';
 }
 
+/**
+ * 다이어그램 확인 가능 상태 (#70) — 슬롯 확인과 같은 창이다: documented·mockup에서만.
+ * 백엔드 가드와 일치해야 한다 — 화면이 열어 둔 버튼이 409로 끝나면 안 된다 (P-U1).
+ */
+export function canConfirmDiagram(status: SessionStatus): boolean {
+  return status === 'documented' || status === 'mockup';
+}
+
 /** 전면 승격 문서 (#28 S-5) — 채워진 슬롯 없이 전부 개발팀 확인으로 넘어간 경우. */
 export function fullyPromoted(slots: readonly SlotView[]): boolean {
   return (

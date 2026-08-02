@@ -132,6 +132,54 @@ describe('저장 구조체 렌더 (#53) — 역파싱 없이 API의 content로 �
     expect(lines).toContainEqual({ kind: 'bullet', text: 'CRM', path: 'dataSources[0]' });
   });
 
+  it('규범 다이어그램은 제목·mermaid 줄이 각각 교정 주소를 갖는다 (F3 v2.0, #70)', () => {
+    const lines = documentLinesFromContent(
+      {
+        ...content,
+        diagrams: [
+          {
+            id: 'dashboard-screen',
+            title: '대시보드 화면 구성',
+            kind: 'screen',
+            mermaid: 'flowchart TB\n  A[필터] --> B[차트]',
+            sourceAttachmentRef: 'A1',
+          },
+        ],
+      },
+      { version: 1, transcriptCount: 4 },
+    );
+
+    expect(lines).toContainEqual({ kind: 'section', label: '규범 다이어그램', text: '' });
+    expect(lines).toContainEqual({
+      kind: 'diagramTitle',
+      text: '대시보드 화면 구성',
+      diagramId: 'dashboard-screen',
+      diagramKind: 'screen',
+      sourceAttachmentRef: 'A1',
+      path: 'diagrams[0].title',
+    });
+    expect(lines).toContainEqual({
+      kind: 'diagram',
+      text: 'flowchart TB\n  A[필터] --> B[차트]',
+      diagramId: 'dashboard-screen',
+      path: 'diagrams[0].mermaid',
+    });
+  });
+
+  it('다이어그램이 없거나 필드 자체가 없으면(레거시) 섹션을 만들지 않는다', () => {
+    const withEmpty = documentLinesFromContent(
+      { ...content, diagrams: [] },
+      { version: 1, transcriptCount: 4 },
+    );
+    const legacy = documentLinesFromContent(content, { version: 1, transcriptCount: 4 });
+    for (const lines of [withEmpty, legacy]) {
+      expect(
+        lines.some((line) => line.kind === 'section' && line.label === '규범 다이어그램'),
+      ).toBe(false);
+      expect(lines.some((line) => line.kind === 'diagram')).toBe(false);
+    }
+  });
+
   it('레거시 텍스트 파서 경로는 주소를 만들지 않는다 — 부분 교정 불가가 정직한 상태다', () => {
     const lines = parseDocumentText(sample);
 

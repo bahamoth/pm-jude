@@ -65,4 +65,5 @@ export const requirementsResponse = JSON.stringify({
   ],
   dataSources: [],
   openIssues: [],
+  diagrams: [],
 } satisfies RequirementsOutput);

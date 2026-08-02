@@ -22,6 +22,15 @@ export type DocLine = (
   | { kind: 'gwt'; text: string }
   | { kind: 'note'; text: string }
   | { kind: 'text'; text: string }
+  // 규범 다이어그램 (F3 v2.0, ADR-0018 — #70). 제목과 mermaid 본문이 각각 교정 주소를 갖는다.
+  | {
+      kind: 'diagramTitle';
+      text: string;
+      diagramId: string;
+      diagramKind: 'flow' | 'state' | 'hierarchy' | 'screen';
+      sourceAttachmentRef: string | null;
+    }
+  | { kind: 'diagram'; text: string; diagramId: string }
 ) & { path?: DocPath; label?: string };
 
 /**
@@ -70,6 +79,27 @@ export function documentLinesFromContent(
   } else {
     content.dataSources.forEach((source, i) => {
       lines.push({ kind: 'bullet', text: source, path: `dataSources[${String(i)}]` });
+    });
+  }
+  // 규범 다이어그램 (v2.0, ADR-0018) — 제목·mermaid 본문이 각각 교정 대상이다.
+  // 확인 배지·버튼은 표시 계층 몫: 확인 상태는 문서가 아니라 세션(diagramStates)이 든다.
+  if (content.diagrams?.length) {
+    lines.push({ kind: 'section', label: '규범 다이어그램', text: '' });
+    content.diagrams.forEach((diagram, i) => {
+      lines.push({
+        kind: 'diagramTitle',
+        text: diagram.title,
+        diagramId: diagram.id,
+        diagramKind: diagram.kind,
+        sourceAttachmentRef: diagram.sourceAttachmentRef,
+        path: `diagrams[${String(i)}].title`,
+      });
+      lines.push({
+        kind: 'diagram',
+        text: diagram.mermaid,
+        diagramId: diagram.id,
+        path: `diagrams[${String(i)}].mermaid`,
+      });
     });
   }
   if (content.openIssues.length) {
