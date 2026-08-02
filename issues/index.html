@@ -1904,6 +1904,64 @@
         "body": "종결 — PR #50 랜딩(rebase, main 582d56b). 수용기준 전 항목 반영.\n\n**수용기준 대조**\n- ADR-0018(규범 다이어그램)·ADR-0019(이터레이션 상호작용 모델·패턴 레지스트리) 신설 ✓\n- document-info: v2.0 개정 항목 + v1.9 소급 항목(#63 태그 댕글 해소) ✓\n- F2a 외부 지식 커넥터 / F3 규범 다이어그램 / F4 상호작용 모델·패턴 레지스트리 / F5 판단 재료 패키지 / F15 사후 검증 신설 / EN 요약 갱신 ✓\n- system §7: 사후 검증 전이 + 코어 구성요소 3종(커넥터 레지스트리·패턴 레지스트리·사후 검증 스케줄러) ✓\n- scope-and-milestones §9: Phase 1 규범 다이어그램 동반 + v2.0 신규 항목의 우선순위 유보 절 신설 ✓\n- user-stories: US-4 갱신(앵커 코멘트·갤러리)·US-12 신설 ✓\n- pending-decisions §12: 23(사후 검증 수치)·24(커넥터 범위·권한)·25(패턴 초기 셋) ✓\n- PRD.md 목차 F1–F15·US-1~US-12 ✓\n- 추가: CONTEXT.md 정본 출처 v2.0 + 신규 용어 8종, §13 용어집 6항(T1 동반 갱신 규율) ✓\n\n**후속**: §9 v2.0 우선순위에 따라 루프 완결(F5→F6→F7/F8) + 규범 다이어그램(F3) 구현이 다음 지시 대상."
       }
     ]
+  },
+  {
+    "id": 69,
+    "title": "루프 완결 — F5 승인 게이트 → F6 이슈 생성 → F8 종결 회신 (§9 v2.0 우선순위)",
+    "state": "open",
+    "labels": [
+      "feature",
+      "F5",
+      "F6",
+      "F8",
+      "ready-for-agent"
+    ],
+    "type": "task",
+    "assignee": "claude",
+    "parent": null,
+    "blockedBy": [],
+    "created": "2026-08-02",
+    "updated": "2026-08-02",
+    "body": "## 배경\n\nPRD v2.0 §9 우선순위 결정(#68): 구현 우선은 생애주기 루프 완결. 현재 `documented`가 실질 종착이다 — deliverDocument(core-runner.ts:1635) 이후 상태 전이가 없고, 게이트·이슈·종결 회신은 미구현. 도그푸딩에서 제품이 「문서 생성기」로 체감된 1차 원인.\n\n정본: ARCHITECTURE.md:84(목표 상태 머신 — \"승인 없는 이슈 생성 불가, gate→issue가 유일한 경로\" / \"종결 상태 전이 시 회신 발송 없이는 세션 종료 불가\"), docs/data-model.md:120-148(gate_item·linear_issue 설계 컬럼), docs/prd/functional-requirements.md F5·F6·F8.\n\n## 수용기준\n\n- 문서 게시(및 목업 역주입 vN+1) 시 게이트 상정 — gate_item pending 생성, 승격 슬롯 보유 시 조건부 상정 표시(F2c의 `conditional` 신호 재사용)\n- 게이트 표면(web-ui `/gate`)에서 승인/질문/백로그/거절 4버튼 — 거절은 통제된 사유 목록(우선순위/스코프 밖/중복/기술적 불가/정보 부족), 질문은 노트 필수\n- **승인 시에만 이슈 생성** — 커넥터 호출이 승인 경로 안에만 존재(코드 강제), provenance 부착(세션 ID·문서 버전)\n- LINEAR_API_KEY 부재·페이크 모드에서는 페이크 커넥터가 결정론적 이슈를 반환 — 루프 전체가 로컬에서 완주 가능(커넥터 인터페이스 격리, fetchFn 주입 — linear-archive.ts 선례)\n- **회신이 종결을 앞선다(원칙 5)**: issue_created/backlog/rejected 회신(요청자 언어) 발송 후 terminalState 기록 + closed 전이. 거절 회신에 이의 경로 안내 포함\n- 질문 결정은 세션을 clarifying으로 되돌리고 질문을 요청자에게 게시 — 재문서화 시 새 게이트 항목으로 재상정\n- 종결 후 요청자 답변에 침묵하지 않는다 — 안내 회신 + 신호(reply_after_documented 선례)\n- 게이트 상정·결정·이슈 생성이 F11 신호로 귀속되고 트레이스 뷰어에 렌더(AGENTS.md 상시 지침 — exportSessions·buildTraceData·render-html·tests/trace.test.ts 4곳 세트)\n- 문서 부분 교정(ADR-0016)·목업 재개(ADR-0017)는 게이트 결정 후에도 열려 있다 — 상태 가드 침범 금지\n- 코어·웹 라우트·web-ui(lib) 테스트 신설, 기존 346 그린\n\n## 범위 외\n\n라우팅·SLA·리마인더(§12-5 수치 미정 — 단일 승인자 로컬 PoC), 중복 병합(F2a 중복 후보 파이프라인 부재 — F8의 duplicate_merge는 스키마 값만 예약), F7 역보고(#71), 백로그 재부상(§12-14).",
+    "comments": []
+  },
+  {
+    "id": 70,
+    "title": "F3 규범 다이어그램 — ADR-0018 구현 (mermaid 섹션·다이어그램 단위 확인·문서 뷰 렌더)",
+    "state": "open",
+    "labels": [
+      "feature",
+      "F3",
+      "ready-for-agent"
+    ],
+    "type": "task",
+    "assignee": "claude",
+    "parent": null,
+    "blockedBy": [],
+    "created": "2026-08-02",
+    "updated": "2026-08-02",
+    "body": "## 배경\n\nPRD v2.0 §9: 루프 완결의 동반 항목. ADR-0018 — 「흡수=문장화」 폐기, 시각 구조가 본질인 확정 사항은 재생성 다이어그램(mermaid)으로 문서 안에 규범으로 실리고, 다이어그램 단위 확인을 거친다.\n\n정본: docs/adr/0018-diagram-as-normative-content.md, docs/prd/functional-requirements.md F3 v2.0 수용기준.\n\n## 수용기준\n\n- requirementsOutputSchema(src/prompts/requirements-v0.ts:9)에 `diagrams`(mermaid 텍스트·종류·출처) 추가 — 새 프롬프트 semver 등록(구 버전 등록 유지, catalog.ts 관례), v0/v1/v2 공유 스키마 호환(기존 문서는 diagrams 부재 허용)\n- 시각 구조 확정 사항이 있을 때만 다이어그램 생성 — 강제 생성 금지, 없으면 빈 배열\n- 다이어그램 단위 확인: 요청자 언어 확인 UI(슬롯 단위 확인과 같은 규율), 확인 전 재생성 다이어그램은 규범 아님이 표시됨(F3 수용기준: 확인 없이 규범으로 실리지 않음)\n- 첨부 유래 다이어그램에 출처 표시(F2c 슬롯 출처와 대칭)\n- web-ui 문서 뷰에 mermaid 렌더 — 벤더 자산 사용(docs/assets/mermaid.min.js 선례), 외부 CDN 금지\n- 다이어그램 정정은 문서 부분 교정 경로(ADR-0016, document/path.ts 주소 문법 확장) — 교정 시 해당 다이어그램 확인 리셋\n- 페이크 백엔드(fake-backend.ts) requirements 고정 출력 갱신 — 데모 경로에서 다이어그램 1개 이상 노출\n- back-injection·document-patch 프롬프트의 문서 구조 서술 동반 갱신\n- 트레이스에 다이어그램 수·확인 상태 반영, 테스트 그린\n\n## 범위 외\n\n이미지(래스터) 재생성 — ADR-0018 결정 2가 텍스트 표기만 규범으로 인정. 다이어그램 전용 편집 UI — 정정은 텍스트 피드백 경로.",
+    "comments": []
+  },
+  {
+    "id": 71,
+    "title": "F7 진행 역보고 — 수신 방식(웹훅 vs 폴링)·Linear 프로비저닝 결정 대기",
+    "state": "open",
+    "labels": [
+      "feature",
+      "F7",
+      "needs-info"
+    ],
+    "type": "task",
+    "assignee": null,
+    "parent": null,
+    "blockedBy": [
+      69
+    ],
+    "created": "2026-08-02",
+    "updated": "2026-08-02",
+    "body": "## 배경\n\n루프의 마지막 구간 — 이슈 상태 변경을 요청자에게 회신(F7). PRD 스펙은 Linear 웹훅 기반(폴링 지양)이지만, 웹훅은 공개 엔드포인트가 필요해 로컬 PoC에서 수신 불가.\n\n## 결정 필요 (운영자)\n\n1. 수신 방식: 웹훅(터널/배포 필요) vs 폴링(PRD 지양이나 로컬 가능) vs Phase 1로 유보\n2. Linear 워크스페이스 프로비저닝 — 실제 팀/이슈로 검증할 것인지(ADR-0007이 경고한 운영자 의존 블로커)\n3. F15 사후 검증은 F7의 완료 통보가 전제라 함께 유보 — §12-23(사후 검증 수치)과 연계\n\n#69의 페이크 커넥터 경로에서는 상태 변경 이벤트가 없으므로, 역보고 검증 자체가 실 Linear 연결 또는 시뮬레이션 훅을 요구한다.",
+    "comments": []
   }
 ]
 </script>
