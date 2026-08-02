@@ -2,7 +2,7 @@
 
 비개발자 스테이크홀더의 모호한 요청을 인테이크하고, 개발자가 곧바로 구현에 착수할 수 있는 완결된 요구사항으로 정제하는 AI PM 인테이크 레이어. 이 문서는 프로젝트 전체가 따르는 정본 용어집이다 — 이슈 제목, 코드 식별자, 문서, 커밋 메시지에서 아래 용어를 그대로 쓴다.
 
-정본 출처: PRD v1.8. 개요·원칙은 [PRD.md](PRD.md)에, 나머지 섹션은 [docs/prd/](docs/prd/)에 분할되어 있다(목차: PRD.md). 용어 충돌 시 이 문서가 우선하며, PRD 개정 시 이 문서를 함께 갱신한다. 정의만으로 부족한 용어에는 원문 위치를 병기한다.
+정본 출처: PRD v2.0. 개요·원칙은 [PRD.md](PRD.md)에, 나머지 섹션은 [docs/prd/](docs/prd/)에 분할되어 있다(목차: PRD.md). 용어 충돌 시 이 문서가 우선하며, PRD 개정 시 이 문서를 함께 갱신한다. 정의만으로 부족한 용어에는 원문 위치를 병기한다.
 
 > **EN** — PM Jude is an AI intake layer: it takes a non-developer stakeholder's vague request and refines it into requirements a developer can build from. This file is the project's canonical glossary — use these terms verbatim in issue titles, code identifiers, documents and commit messages. Each entry gives the Korean definition first and the English one after it; the two are equally binding. Where a term is contested, this file wins over the PRD, and revising the PRD means revising this file in the same change.
 >
@@ -18,9 +18,15 @@
 _Avoid_: 접수 처리, 요청 등록 / triage, submission, ticketing
 
 **컨텍스트 그라운딩(Context Grounding)**:
-질문 생성 전에 기존 이슈·과거 문서·종결 세션·게이트 결정 이력을 검색해 요청을 조직 맥락 위에 놓는 것. 시스템에서 유일하게 LLM 자율 툴콜이 허용되는 지점.
-**EN** — Searching existing issues, past documents, closed sessions and gate decision history *before* generating questions, so the request sits on top of what the organisation already knows. The only place in the system where the model is allowed an autonomous tool-call loop, and even there only search tools and a call ceiling.
+질문 생성 전에 기존 이슈·과거 문서·종결 세션·게이트 결정 이력·외부 지식 소스(v2.0)를 검색해 요청을 조직 맥락 위에 놓는 것. 시스템에서 유일하게 LLM 자율 툴콜이 허용되는 지점.
+**EN** — Searching existing issues, past documents, closed sessions, gate decision history and external knowledge sources (v2.0) *before* generating questions, so the request sits on top of what the organisation already knows. The only place in the system where the model is allowed an autonomous tool-call loop, and even there only search tools and a call ceiling.
 _Avoid_: RAG, 사전 검색 / RAG, pre-search, retrieval
+
+**외부 지식 커넥터(External Knowledge Connector)**:
+조직이 다른 도구로 이미 생산 중인 지식 — 조직 지식 베이스(Obsidian vault)와 회의 전사·요약(Fireflies) — 을 컨텍스트 그라운딩의 읽기 전용 검색 소스로 연결하는 커넥터. 원칙은 「연결하되 생산하지 않는다」 — PM Jude는 지식 축적 파이프라인을 직접 만들지 않는다. 검색 결과에는 출처(문서·회의·일시)가 기록된다.
+**EN** — A read-only connector that plugs knowledge the organisation already produces elsewhere — the Obsidian-vault knowledge base and Fireflies meeting transcripts/summaries — into context grounding as search sources. The rule is *connect, don't produce*: PM Jude builds no knowledge-accumulation pipeline of its own. Every search result records its provenance (document, meeting, date).
+_Avoid_: 지식 수집, 통합 검색 / knowledge ingestion, federated search
+원문: [§5 F2a](docs/prd/functional-requirements.md)
 
 **명확화 루프(Clarification Loop)**:
 표적 질문과 답변의 반복으로 요청의 모호성을 해소하는 대화 과정. 수행 주체는 LLM이다.
@@ -31,6 +37,18 @@ _Avoid_: 인터뷰, 질의응답 / interview, Q&A, survey
 개발자가 승인/질문/백로그/거절 4버튼으로 결정하는 단계. 승인 시에만 Linear 이슈가 생성되며, 이 제약은 코드로 강제된다.
 **EN** — The stage where a developer decides with four buttons: approve, ask, backlog, reject. A Linear issue is created on approval and never otherwise, and that constraint is enforced in code rather than requested in a prompt.
 _Avoid_: 리뷰, 검수 / review, sign-off, QA
+
+**판단 재료 패키지(Decision-material Package)**:
+게이트 화면에 집적되는 결정 재료 — 중복 후보, 요청자 목록·누적 요청 수, 같은 영역의 과거 게이트 결정 이력, 재부상 이력(v2.0). 전부 기수집 데이터의 집적이며, 우선순위 판정·추천 순서는 제시하지 않는다 — 재료까지가 제품의 경계이고 결정은 사람 몫이다(§8).
+**EN** — The decision material gathered onto the gate screen: duplicate candidates, the requester list and accumulated request count, past gate decisions in the same area, resurfacing history (v2.0). All of it is already-collected data, and no priority verdict or recommended ordering is shown — materials are where the product stops; the decision belongs to a human (§8).
+_Avoid_: 우선순위 추천, 스코어링 / priority recommendation, scoring
+원문: [§5 F5](docs/prd/functional-requirements.md)
+
+**사후 검증(Post-release Verification)**:
+이슈 완료 통보 후 N일 뒤 요청자에게 원 요청의 문제 문장을 인용해 「문제가 해소되었는가」를 묻는 단계(F15, v2.0). 해소 / 미해소·부분 해소 / 무응답의 3분기이며, 미해소 서술은 후속 요청 세션의 초기 발화가 된다. 완결성 점수·게이트 통과가 선행 지표라면 이것이 종착 지표다.
+**EN** — N days after the completion notice, asking the requester — quoting the problem statement from their original request — whether the problem is actually solved (F15, v2.0). Three branches: solved / not-or-partially solved / no response; a not-solved account seeds a follow-up session. Completeness scores and gate passage are leading indicators; this is the terminal one.
+_Avoid_: 만족도 조사, CSAT / satisfaction survey, CSAT
+원문: [§5 F15](docs/prd/functional-requirements.md)
 
 **역보고(Progress Report-back)**:
 Linear 상태 변경을 요청자의 언어·시간대에 맞춰 알리는 것. 요청자가 N명이면 각자에게 팬아웃된다.
@@ -160,8 +178,8 @@ _Avoid_: 반영, 동기화 / sync, apply
 **EN** — The conversation as it happened, in the requester's own language. Retained always, not optionally, and attached to the Linear issue.
 
 **첨부 자료(Attachment)**:
-요청자가 발화에 붙여 올린 파일. 명확화 입력이며 추출 텍스트가 슬롯을 채우는 근거가 된다. 원본은 불변 보존되고, 문서에서의 지위는 원문 전사와 같다 — 확정된 것은 문서 문장으로 흡수되고 파일 자체는 참고용으로 동봉된다.
-**EN** — A file the requester attaches to an utterance. It is clarification input: its extracted text can fill a slot. The uploaded original is preserved immutably, and in the requirements document it holds the same position as the original transcript — whatever it settles becomes prose in the document, and the file travels as reference material rather than as the basis for implementation.
+요청자가 발화에 붙여 올린 파일. 명확화 입력이며 추출 텍스트가 슬롯을 채우는 근거가 된다. 원본은 불변 보존되고, 문서에서의 지위는 원문 전사와 같다 — 확정된 것은 문서 문장 또는 규범 다이어그램(v2.0)으로 흡수되고 파일 자체는 참고용으로 동봉된다.
+**EN** — A file the requester attaches to an utterance. It is clarification input: its extracted text can fill a slot. The uploaded original is preserved immutably, and in the requirements document it holds the same position as the original transcript — whatever it settles becomes prose or a normative diagram (v2.0) in the document, and the file travels as reference material rather than as the basis for implementation.
 _Avoid_: 파일, 업로드, 자료(단독) / file, upload, document (bare)
 원문: [ADR-0011](docs/adr/0011-attachment-as-clarification-input.md)
 
@@ -169,10 +187,36 @@ _Avoid_: 파일, 업로드, 자료(단독) / file, upload, document (bare)
 요청자 확인을 산문 번역본이 아니라 구조화 슬롯 값 단위로, 요청자 언어로 수행하는 것. 번역 무결성 장치.
 **EN** — Confirming with the requester on structured slot values in their own language, rather than on a prose translation. A guard on translation integrity: translation is a lossy transform performed by a probabilistic component, and neither side can verify it.
 
+**규범 다이어그램(Normative Diagram)**:
+시각 구조가 정보의 본질인 확정 사항(흐름·상태·계층·화면 구성)을 문장 대신 담는, requirements 문서 안의 재생성 다이어그램(텍스트 표기, mermaid 우선; v2.0, ADR-0018). 요청자의 다이어그램 단위 확인(슬롯 단위 확인과 같은 규율)을 거쳐야 규범이 되고, 출처가 표시된다. 원본 첨부는 참고용 지위 그대로다.
+**EN** — A regenerated diagram (text notation, mermaid first) inside the requirements document, carrying settled content whose essence is visual structure — flows, states, hierarchies, screen topology — instead of prose (v2.0, ADR-0018). It becomes normative only after diagram-level confirmation with the requester (same discipline as slot-level confirmation) and carries its provenance. Original attachments stay reference-only.
+_Avoid_: 삽화, 참고 그림 / illustration, reference figure
+원문: [ADR-0018](docs/adr/0018-diagram-as-normative-content.md)
+
 **목업(Mockup)**:
-UI 요청에 한해 생성되는 요구 확인용 중간충실도 인터랙티브 HTML 화면. 레이아웃 반복 단계는 그레이스케일이고, 수렴 후 디자인 시스템 선정 단계에서만 테마 변형이 입혀진다(v1.7). 승인 후에도 코멘트로 개선 반복을 재개할 수 있다 — 승인은 한 반복 구간의 끝이고, 재개는 문서·완주를 되돌리지 않는다(v1.8, ADR-0017). 구현 결과물·코드 기준이 아니며, 코드 형태로는 개발팀에 노출되지 않는다.
-**EN** — A medium-fidelity interactive HTML screen, generated for UI requests only, to confirm what was asked for. Grayscale during layout iteration; theme variants appear only in the design-system selection stage after convergence (v1.7). Approval closes an iteration segment, not the screen: a later comment reopens revision without rewinding the document or the completion signal (v1.8, ADR-0017). Not a deliverable and not an implementation reference; it is never handed to the development team as code.
+UI 요청에 한해 생성되는 요구 확인용 중간충실도 인터랙티브 HTML 화면. 레이아웃 반복 단계는 그레이스케일이고, 수렴 후 디자인 시스템 선정 단계에서만 테마 변형이 입혀진다(v1.7). 승인 후에도 코멘트로 개선 반복을 재개할 수 있다 — 승인은 한 반복 구간의 끝이고, 재개는 문서·완주를 되돌리지 않는다(v1.8, ADR-0017). 반복은 앵커 코멘트·부분 패치·구조 분기 갤러리로 진행한다(v2.0, ADR-0019). 구현 결과물·코드 기준이 아니며, 코드 형태로는 개발팀에 노출되지 않는다.
+**EN** — A medium-fidelity interactive HTML screen, generated for UI requests only, to confirm what was asked for. Grayscale during layout iteration; theme variants appear only in the design-system selection stage after convergence (v1.7). Approval closes an iteration segment, not the screen: a later comment reopens revision without rewinding the document or the completion signal (v1.8, ADR-0017). Iteration runs on anchored comments, partial patches and structure-fork galleries (v2.0, ADR-0019). Not a deliverable and not an implementation reference; it is never handed to the development team as code.
 _Avoid_: 프로토타입, 시안, 와이어프레임 / prototype, comp, wireframe
+
+**앵커 코멘트(Anchored Comment)**:
+요청자가 목업 요소를 클릭해 그 자리에 남기는 코멘트. 요소 셀렉터·영역과 함께 기록되어 다음 판 생성에 실린다 — 고칠 곳을 말로 특정하는 비용을 없앤다(v2.0, ADR-0019). ADR-0017의 재개 코멘트가 앵커를 얻은 것이며 별도의 새 행동이 아니다.
+**EN** — A comment the requester leaves *on* a mockup element by clicking it, recorded with the element's selector and region and fed into the next revision — eliminating the cost of describing *where* in words (v2.0, ADR-0019). It is the ADR-0017 reopen-comment gaining an anchor, not a new action.
+_Avoid_: 핀 코멘트, 마커 / pin, marker
+
+**부분 패치(Partial Patch)**:
+앵커된 코멘트를 해당 요소 단위의 재생성으로 처리하는 것. 전체 재생성은 구조 변경 요청에 한정하며, 요소 특정 실패는 전체 재생성으로 폴백하고 신호로 기록된다(v2.0, ADR-0019).
+**EN** — Handling an anchored comment by regenerating only the anchored element. Full regeneration is reserved for structural change; when the element cannot be resolved, the system falls back to full regeneration and records the signal (v2.0, ADR-0019).
+_Avoid_: 핫픽스, 인크리멘털 렌더링 / hotfix, incremental rendering
+
+**구조 분기 갤러리(Structure-fork Gallery)**:
+구조적 분기(리스트-상세 vs 테이블 vs 카드 등)에서 서술 대신 변형 2~3안을 같은 데이터로 제시해 1택하게 하는 것. 테마 선정과 같은 정신 — 선택이 서술을 이긴다. 「개발팀이 정하는 게 좋겠다」 위임 경로를 포함한다(v2.0, ADR-0019).
+**EN** — At a structural fork (list-detail vs table vs cards…), showing two or three variants over the same data and letting the requester pick one instead of describing what they want. Same spirit as theme selection — choosing beats describing — and it includes the "let the team decide" delegation path (v2.0, ADR-0019).
+_Avoid_: A/B 테스트, 시안 비교 / A/B test, comp review
+
+**패턴 레지스트리(Pattern Registry)**:
+공개 UI 패턴 분류를 F4 제약에 맞게 번안한 구조층 스켈레톤의 레지스트리(내장 + 외부 등록) — 테마 레지스트리의 구조층 대칭물(v2.0, ADR-0019). 역할은 부분 패치의 구조 예측 가능성, 갤러리 변형 공급, 초회 품질 분산 감소다. 「한방 제안」의 수단이 아니다 — 초회 정확도는 명확화 품질에 의존한다.
+**EN** — A registry (built-in + external registration) of structure-layer skeletons adapted from public UI-pattern taxonomies to F4's constraints — the structure-layer counterpart of the theme registry (v2.0, ADR-0019). Its roles: structural predictability for partial patches, variant supply for galleries, and lower first-shot variance. It is not a one-shot-proposal device — first-shot accuracy depends on clarification quality.
+_Avoid_: 템플릿 모음, 컴포넌트 라이브러리 / template collection, component library
 
 **디자인 시스템 선정(Design System Selection)**:
 레이아웃이 수렴한 목업에 테마 레지스트리의 후보를 테마 변형으로 입혀 제시하고, 요청자가 1택하거나 개발팀에 위임하는 목업 반복의 마지막 단계. 선정 없이 승인은 없다.

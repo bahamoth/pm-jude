@@ -1,6 +1,6 @@
 ## 6. 비기능 요구사항
 
-> **EN** — PRD §6 and §7 — non-functional requirements (mockup hosting defence in depth, multilingual and timezone handling, evaluation-data privacy, thin model neutrality, volume-fitted cost guardrails, observability) and the high-level system composition that ARCHITECTURE.md expands on.
+> **EN** — PRD §6 and §7 — non-functional requirements (mockup hosting defence in depth, multilingual and timezone handling, evaluation-data privacy, thin model neutrality, volume-fitted cost guardrails, observability) and the high-level system composition that ARCHITECTURE.md expands on. v2.0 adds one state-machine branch (post-release verification, F15) and three core components: the read-only external-knowledge connector registry, the pattern registry, and the post-release verification scheduler.
 
 - **보안 — 목업 호스팅 다층 방어**: ① 샌드박스 usercontent 도메인 분리 ② 만료 서명 URL(HMAC-SHA256) ③ CSP `sandbox` + `default-src 'none'` + 외부 네트워크 차단 ④ 뷰어 iframe `sandbox="allow-scripts"`(allow-same-origin 배제) + postMessage origin 검증 ⑤ Slack 전송 시 `unfurl_links:false`/`unfurl_media:false` ⑥ Linear 웹훅 서명·타임스탬프 검증.
 - **다국어·시차**: 대화는 요청자 언어 / 문서는 팀 표준 언어 / **원문 전사 상시 보존** / 요청자 확인은 슬롯 단위·요청자 언어(원칙 7) / 알림·리마인더는 수신자 시간대 인지 / 게이트는 비동기 기본이되 SLA를 갖는다.
@@ -18,7 +18,7 @@
 
 **오케스트레이션 명세** *(원칙 2의 구현 경계)*
 
-상태 머신의 전이(v1.4 기준 전체 경로):
+상태 머신의 전이(v2.0 기준 전체 경로 — v1.4 대비 추가는 사후 검증(F15) 갈래뿐):
 
 ```
 인테이크
@@ -34,16 +34,21 @@
   ↓
 승인 게이트(F5) ─[SLA 초과]→ 자동 [백로그] → 회신
   ├─[승인]→ 이슈 생성(F6, provenance 부착) → 추적/역보고(F7)
+  │                                             ↓ [완료 통보 +N일]
+  │                                           사후 검증(F15)
+  │                                             ├─[해소]→ 최종 종결
+  │                                             ├─[미해소]→ 후속 세션 생성(원 세션·이슈 연결)
+  │                                             └─[무응답]→ 리마인더 1회 → 무응답 종결
   ├─[질문]→ 명확화 루프로 복귀
   ├─[백로그]→ 회신 + 재부상 대기
   └─[거절]→ 사유 선택 + 이의 경로 안내 → 회신
 ```
 
-- LLM은 단계 안의 **구조화된 호출 핵심 5종 + 보조 2종**으로만 존재: ① 표적 질문 생성 ② 완결성 의미 채점(슬롯 3상태 판정 포함) ③ requirements/tasks 생성 ④ 목업 HTML 생성 ⑤ (L2 이후) 품질 채점. 보조 2종 *(v1.4 추가)*: 목업 어노테이션의 역주입 문장화, 스펙 변경 의미 판정(F7).
+- LLM은 단계 안의 **구조화된 호출 핵심 5종 + 보조 2종**으로만 존재: ① 표적 질문 생성 ② 완결성 의미 채점(슬롯 3상태 판정 포함) ③ requirements/tasks 생성(**규범 다이어그램 포함** — v2.0, ADR-0018) ④ 목업 HTML 생성(**요소 단위 부분 패치 변형 포함** — v2.0, ADR-0019) ⑤ (L2 이후) 품질 채점. 보조 2종 *(v1.4 추가)*: 목업 어노테이션의 역주입 문장화, 스펙 변경 의미 판정(F7). 사후 검증(F15)의 확인 발화는 템플릿 회신이며 LLM 호출을 추가하지 않는다 — 미해소 서술의 처리는 후속 세션의 기존 호출 ①이 맡는다.
 - LLM 자율 툴콜이 허용되는 유일한 지점: F2a 컨텍스트 검색(검색 도구만 노출, 호출 상한).
 - **하드 제약은 코드로 강제**: 승인 없는 이슈 생성 불가 / 룰 층 미통과 시 게이트 진입 불가(승격 경로 제외) / 목업 코드 비전달 / **회귀 미통과 프롬프트·스키마 버전 로드 불가**(F12) / **종결 상태 전이 시 회신 발송 없이는 세션 종료 불가**(원칙 5).
 
-**채널 비의존 코어**: 인테이크 API / 명확화 엔진(검색기 + 질문 생성 + 2층 판정 + 승격 판정) / 컨텍스트 검색기(Linear·문서 인덱스·**종결 세션 인덱스**) / 문서 생성기 / 요청 분류기(UI 여부) / 목업 서비스(+ **역주입기**) / 게이트·워크플로 상태 머신(+ **라우터·SLA 스케줄러**) / Linear 커넥터 / 세션·버전 저장소 / 알림 서비스(언어·시간대 인지, N요청자 팬아웃, 채널 폴백).
+**채널 비의존 코어**: 인테이크 API / 명확화 엔진(검색기 + 질문 생성 + 2층 판정 + 승격 판정) / 컨텍스트 검색기(Linear·문서 인덱스·**종결 세션 인덱스**·**외부 지식 커넥터 레지스트리(읽기 전용, v2.0 — Obsidian vault·Fireflies)**) / 문서 생성기 / 요청 분류기(UI 여부) / 목업 서비스(+ **역주입기**·**패턴 레지스트리(v2.0)**) / 게이트·워크플로 상태 머신(+ **라우터·SLA 스케줄러·사후 검증 스케줄러(v2.0)**) / Linear 커넥터 / 세션·버전 저장소 / 알림 서비스(언어·시간대 인지, N요청자 팬아웃, 채널 폴백).
 
 **평가·개선 서브시스템**: 신호 수집기(F11) / **우회 스캐너**(provenance 없는 이슈 집계) / 채택된 평가 도구(트레이싱·프롬프트 레지스트리·회귀 실행) / 판독 워크벤치(전수 리뷰 큐·라벨 저장·개선안 승인 흐름·카나리 관리·**슬롯 매핑 현황**).
 
